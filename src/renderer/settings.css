@@ -1,0 +1,372 @@
+/* Import base theme variables */
+:root {
+  --transition-speed: 0.3s;
+  --border-radius: 8px;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  --font-family-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Dark theme (default) */
+.theme-dark {
+  --bg-root: #0f172a;
+  --fg-text: #e5e7eb;
+  --panel-bg: #111827;
+  --border: #1f2937;
+  --accent: #22c55e;
+  --accent-text: #0f172a;
+  --label-color: #93c5fd;
+  --enc-color: #86efac;
+  --hover-bg: #1f2937;
+  --button-bg: #374151;
+  --button-hover: #4b5563;
+  --input-bg: #1f2937;
+  --input-border: #374151;
+}
+
+/* Light theme */
+.theme-light {
+  --bg-root: #f8fafc;
+  --fg-text: #0f172a;
+  --panel-bg: #ffffff;
+  --border: #e2e8f0;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --label-color: #1d4ed8;
+  --enc-color: #059669;
+  --hover-bg: #f1f5f9;
+  --button-bg: #f1f5f9;
+  --button-hover: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+}
+
+/* Glass theme */
+.theme-glass {
+  --bg-root: #1e293b;
+  --fg-text: #f1f5f9;
+  --panel-bg: rgba(51, 65, 85, 0.8);
+  --border: #475569;
+  --accent: #06b6d4;
+  --accent-text: #0f172a;
+  --label-color: #38bdf8;
+  --enc-color: #10b981;
+  --hover-bg: rgba(71, 85, 105, 0.5);
+  --button-bg: rgba(71, 85, 105, 0.6);
+  --button-hover: rgba(71, 85, 105, 0.8);
+  --input-bg: rgba(30, 41, 59, 0.8);
+  --input-border: #475569;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-root);
+  color: var(--fg-text);
+  height: 100vh;
+  overflow-y: auto;
+  transition: background-color var(--transition-speed), color var(--transition-speed);
+}
+
+.settings-container {
+  max-width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-header {
+  padding: 24px;
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+
+.settings-header h1 {
+  font-family: var(--font-family-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--label-color);
+  margin-bottom: 8px;
+}
+
+.settings-header p {
+  color: var(--fg-text);
+  opacity: 0.8;
+  font-size: 14px;
+}
+
+.settings-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.setting-group {
+  margin-bottom: 24px;
+}
+
+.setting-group label {
+  display: block;
+  font-weight: 600;
+  color: var(--label-color);
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.setting-group input,
+.setting-group select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background-color: var(--input-bg);
+  color: var(--fg-text);
+  font-family: var(--font-family);
+  font-size: 14px;
+  transition: border-color var(--transition-speed), background-color var(--transition-speed);
+  outline: none;
+}
+
+.setting-group input:focus,
+.setting-group select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.setting-group input[type="password"] {
+  font-family: monospace;
+  letter-spacing: 2px;
+}
+
+.setting-group input[type="password"]:focus {
+  letter-spacing: 1px;
+}
+
+.setting-group input::placeholder {
+  color: var(--fg-text);
+  opacity: 0.5;
+}
+
+.setting-group small {
+  display: block;
+  margin-top: 6px;
+  color: var(--fg-text);
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.setting-group small a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.setting-group small a:hover {
+  text-decoration: underline;
+}
+
+.api-key-group {
+  display: flex;
+  gap: 8px;
+}
+
+.api-key-group input {
+  flex: 1;
+}
+
+.api-key-group button {
+  padding: 12px;
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+.shortcuts-info {
+  background-color: var(--hover-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.shortcut-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.shortcut-item:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+  padding-bottom: 12px;
+}
+
+.shortcut-key {
+  font-family: monospace;
+  background-color: var(--button-bg);
+  color: var(--fg-text);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shortcut-desc {
+  color: var(--fg-text);
+  opacity: 0.8;
+  font-size: 13px;
+}
+
+.settings-footer {
+  padding: 24px;
+  background-color: var(--panel-bg);
+  border-top: 1px solid var(--border);
+}
+
+.button-group {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all var(--transition-speed);
+  min-width: 80px;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background-color: var(--button-bg);
+  color: var(--fg-text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background-color: var(--button-hover);
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.status-message {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 80%;
+  text-align: center;
+  z-index: 1000;
+  transition: all var(--transition-speed);
+}
+
+.status-message.success {
+  background-color: #059669;
+  color: white;
+}
+
+.status-message.error {
+  background-color: #dc2626;
+  color: white;
+}
+
+.status-message.info {
+  background-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { 
+    opacity: 0; 
+    transform: translateX(-50%) translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateX(-50%) translateY(0); 
+  }
+}
+
+/* Loading state for buttons */
+.btn.loading {
+  position: relative;
+  color: transparent;
+}
+
+.btn.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .settings-header {
+    padding: 16px;
+  }
+  
+  .settings-content {
+    padding: 16px;
+  }
+  
+  .settings-footer {
+    padding: 16px;
+  }
+  
+  .button-group {
+    flex-direction: column;
+  }
+  
+  .shortcut-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+}

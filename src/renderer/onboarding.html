@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - Hintify SnapAssist AI</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="onboarding.css">
+</head>
+<body class="theme-dark">
+    <div class="onboarding-container">
+        <!-- Header -->
+        <div class="onboarding-header">
+            <img id="onboarding-logo" src="" alt="Hintify SnapAssist AI" class="onboarding-logo">
+            <h1>Welcome to Hintify SnapAssist AI</h1>
+            <p>Let's set up your AI-powered study companion</p>
+        </div>
+
+        <!-- Progress indicator -->
+        <div class="progress-container">
+            <div class="progress-steps">
+                <div class="step active" id="step-1">
+                    <div class="step-number">1</div>
+                    <div class="step-label">Dependencies</div>
+                </div>
+                <div class="step" id="step-2">
+                    <div class="step-number">2</div>
+                    <div class="step-label">Permissions</div>
+                </div>
+                <div class="step" id="step-3">
+                    <div class="step-number">3</div>
+                    <div class="step-label">AI Provider</div>
+                </div>
+                <div class="step" id="step-4">
+                    <div class="step-number">4</div>
+                    <div class="step-label">Configuration</div>
+                </div>
+                <div class="step" id="step-5">
+                    <div class="step-number">5</div>
+                    <div class="step-label">Complete</div>
+                </div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+        </div>
+
+        <!-- Content area -->
+        <div class="onboarding-content">
+            <!-- Step 1: Dependencies Check -->
+            <div class="setup-step active" id="setup-step-1">
+                <h2>🔧 System Dependencies</h2>
+                <p>Let's check and install the required dependencies for SnapAssist AI to work properly.</p>
+                
+                <div class="dependency-list">
+                    <!-- Tesseract OCR Check -->
+                    <div class="dependency-item" id="tesseract-check">
+                        <div class="dependency-header">
+                            <div class="dependency-icon">
+                                <img id="ocr-icon" src="" alt="OCR" style="width:28px;height:28px;object-fit:contain;" />
+                            </div>
+                            <div class="dependency-info">
+                                <h3>Tesseract OCR</h3>
+                                <p>Required for text extraction from images</p>
+                            </div>
+                            <div class="dependency-status" id="tesseract-status">
+                                <div class="status-checking">Checking...</div>
+                            </div>
+                        </div>
+                        <div class="dependency-details" id="tesseract-details" style="display: none;">
+                            <div class="install-instructions" id="tesseract-instructions"></div>
+                            <button class="btn btn-primary" id="tesseract-install-btn" style="display: none;">Install Tesseract</button>
+                            <button class="btn btn-secondary" id="tesseract-recheck-btn" style="display: none;">Check Again</button>
+                        </div>
+                    </div>
+
+                    <!-- Homebrew Check (macOS) -->
+                    <div class="dependency-item" id="homebrew-check" style="display: none;">
+                        <div class="dependency-header">
+                            <div class="dependency-icon">🍺</div>
+                            <div class="dependency-info">
+                                <h3>Homebrew</h3>
+                                <p>Package manager for easy installation</p>
+                            </div>
+                            <div class="dependency-status" id="homebrew-status">
+                                <div class="status-checking">Checking...</div>
+                            </div>
+                        </div>
+                        <div class="dependency-details" id="homebrew-details" style="display: none;">
+                            <div class="install-instructions" id="homebrew-instructions"></div>
+                            <button class="btn btn-primary" id="homebrew-install-btn" style="display: none;">Install Homebrew</button>
+                            <button class="btn btn-secondary" id="homebrew-recheck-btn" style="display: none;">Check Again</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-actions">
+                    <button class="btn btn-secondary" id="skip-dependencies">Skip for Now</button>
+                    <button class="btn btn-primary" id="continue-dependencies" disabled>Continue</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Permissions -->
+            <div class="setup-step" id="setup-step-2">
+                <h2>🔐 App Permissions</h2>
+                <p>SnapAssist AI needs certain permissions to capture screenshots and access your clipboard.</p>
+                
+                <div class="permission-list">
+                    <!-- Screen Recording Permission -->
+                    <div class="permission-item" id="screen-permission">
+                        <div class="permission-header">
+                            <div class="permission-icon">📺</div>
+                            <div class="permission-info">
+                                <h3>Screen Recording</h3>
+                                <p>Required to capture screenshots for analysis</p>
+                            </div>
+                            <div class="permission-status" id="screen-status">
+                                <div class="status-checking">Checking...</div>
+                            </div>
+                        </div>
+                        <div class="permission-details" id="screen-details" style="display: none;">
+                            <p>This permission allows SnapAssist AI to capture screenshots when you use the capture feature.</p>
+                            <button class="btn btn-primary" id="screen-permission-btn">Grant Permission</button>
+                        </div>
+                    </div>
+
+                    <!-- Accessibility Permission (macOS) -->
+                    <div class="permission-item" id="accessibility-permission" style="display: none;">
+                        <div class="permission-header">
+                            <div class="permission-icon">♿</div>
+                            <div class="permission-info">
+                                <h3>Accessibility</h3>
+                                <p>Required for global hotkeys and clipboard access</p>
+                            </div>
+                            <div class="permission-status" id="accessibility-status">
+                                <div class="status-checking">Checking...</div>
+                            </div>
+                        </div>
+                        <div class="permission-details" id="accessibility-details" style="display: none;">
+                            <p>This permission enables global keyboard shortcuts and clipboard monitoring.</p>
+                            <button class="btn btn-primary" id="accessibility-permission-btn">Grant Permission</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step-actions">
+                    <button class="btn btn-secondary" id="back-to-dependencies">Back</button>
+                    <button class="btn btn-primary" id="continue-permissions">Continue</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Configuration -->
+                    <!-- Step 3: AI Provider Selection -->
+        <div class="step-content" id="step-3-content" style="display: none;">
+            <h2>Choose Your AI Provider</h2>
+            <p>Select the AI service you'd like to use with Hintify:</p>
+            
+            <div class="provider-options">
+                <div class="provider-option" data-provider="gemini">
+                    <div class="provider-header">
+                        <h3>Google Gemini (Recommended)</h3>
+                        <span class="provider-badge cloud">Cloud</span>
+                    </div>
+                    <p>Fast, reliable AI responses with Google's Gemini model. Requires internet connection and API key.</p>
+                    <div class="provider-features">
+                        <span>✓ Fast responses</span>
+                        <span>✓ Always up-to-date</span>
+                        <span>✓ No local setup</span>
+                    </div>
+                    <button id="setup-gemini-btn" class="btn btn-secondary setup-gemini-btn">Set Up Gemini</button>
+                </div>
+                
+                <div class="provider-option" data-provider="ollama">
+                    <div class="provider-header">
+                        <h3>Ollama (Local)</h3>
+                        <span class="provider-badge local">Local</span>
+                    </div>
+                    <p>Run AI models locally on your computer. No internet required, but needs more setup.</p>
+                    <div class="provider-features">
+                        <span>✓ Privacy focused</span>
+                        <span>✓ Works offline</span>
+                        <span>✓ No API costs</span>
+                    </div>
+                    <button id="setup-ollama-btn" class="btn btn-secondary setup-ollama-btn">Set Up Ollama</button>
+                </div>
+            </div>
+            
+            <div class="step-actions">
+                <button class="btn btn-secondary" id="back-provider">Back</button>
+                <button class="btn btn-primary" id="continue-config" disabled>Continue</button>
+            </div>
+        </div>
+
+    <!-- Step 4: Configuration -->
+    <div class="step-content" id="step-4-content" style="display: none;">
+            <h2>Configure Your Settings</h2>
+            <p>Customize Hintify to work the way you want:</p>
+            
+            <div class="config-group">
+                <h3>AI Provider Settings</h3>
+                <div class="config-item" id="gemini-config" style="display: none;">
+                    <label for="gemini-api-key">Gemini API Key:</label>
+                    <div class="input-group">
+                        <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key" autocomplete="off" spellcheck="false">
+                        <button class="btn btn-secondary" id="paste-api-key" title="Paste from clipboard">📋</button>
+                        <button class="btn btn-secondary" id="toggle-api-key-visibility" title="Toggle visibility">👁</button>
+                        <button class="btn btn-secondary" id="test-gemini">Test</button>
+                    </div>
+                    <div class="help-text">
+                        Get your API key from <a href="#" id="open-gemini-studio">Google AI Studio</a>
+                        <br>
+                        <em>Tip: Copy your API key, then click the 📋 button to paste it</em>
+                    </div>
+                </div>
+                
+                <div class="config-item" id="ollama-config" style="display: none;">
+                    <label for="ollama-model">Ollama Model:</label>
+                    <select id="ollama-model">
+                        <option value="llama2">Llama 2</option>
+                        <option value="codellama">Code Llama</option>
+                        <option value="mistral">Mistral</option>
+                    </select>
+                    <div class="help-text">
+                        Make sure Ollama is running and the model is downloaded
+                    </div>
+                </div>
+            </div>
+            
+            <div class="config-group">
+                <h3>App Preferences</h3>
+                <div class="config-item">
+                    <label>
+                        <input type="checkbox" id="auto-start" checked>
+                        Start Hintify automatically when I log in
+                    </label>
+                </div>
+                
+                <div class="config-item">
+                    <label>
+                        <input type="checkbox" id="show-notifications" checked>
+                        Show desktop notifications
+                    </label>
+                </div>
+            </div>
+            
+            <div class="step-actions">
+                <button class="btn btn-secondary" id="back-config">Back</button>
+                <button class="btn btn-primary" id="finish-setup">Finish Setup</button>
+            </div>
+        </div>
+
+    <!-- Step 5: Complete -->
+    <div class="step-content" id="step-5-content" style="display: none;">
+            <h2>🎉 Setup Complete!</h2>
+            <p>Hintify SnapAssist AI is now ready to help you with your studies.</p>
+            
+            <div class="completion-summary">
+                <h3>What's Next?</h3>
+                <ul>
+                    <li>Use <strong>Cmd+Shift+H</strong> (Mac) or <strong>Ctrl+Shift+H</strong> (Windows) to capture screenshots</li>
+                    <li>Copy an image to clipboard and press <strong>Cmd/Ctrl+Shift+V</strong> to process it</li>
+                    <li>Click the capture button in the main window</li>
+                    <li>AI will analyze your questions and provide helpful hints</li>
+                </ul>
+            </div>
+
+            <div class="step-actions">
+                <button class="btn btn-primary btn-large" id="start-app">Start Using Hintify SnapAssist AI</button>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <script src="onboarding.js"></script>
+</body>
+</html>

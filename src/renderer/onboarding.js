@@ -1,0 +1,703 @@
+const { ipcRenderer, shell } = require('electron');
+const { spawn } = require('child_process');
+const Store = require('electron-store');
+const axios = require('axios');
+const os = require('os');
+const path = require('path');
+
+// Initialize store
+const store = new Store();
+
+// Global state
+let currentStep = 1;
+let setupProgress = {
+    dependencies: {
+        tesseract: false,
+        homebrew: false
+    },
+    permissions: {
+        screen: false,
+        accessibility: false
+    },
+    configuration: {
+        provider: 'gemini',
+        model: 'gemini-2.0-flash',
+        theme: 'dark',
+        apiKey: ''
+    }
+};
+
+// Platform detection
+const platform = process.platform;
+const isMac = platform === 'darwin';
+const isWindows = platform === 'win32';
+const isLinux = platform === 'linux';
+
+// Initialize onboarding
+function initializeOnboarding() {
+    // Set default theme
+    document.body.className = 'theme-dark';
+    
+    // Load app logo
+    loadOnboardingLogo();
+    
+    // Show platform-specific elements
+    setupPlatformElements();
+    
+    // Start dependency checks
+    checkAllDependencies();
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Show first step
+    goToStep(1);
+}
+
+// Load onboarding logo
+function loadOnboardingLogo() {
+    try {
+        const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
+        const basePath = isDev ? '../../assets/' : (process.resourcesPath + '/assets/');
+        
+        const logo = document.getElementById('onboarding-logo');
+        if (logo) {
+            logo.src = path.join(basePath, 'logo_m.png');
+        }
+        const ocr = document.getElementById('ocr-icon');
+        if (ocr) {
+            ocr.src = path.join(basePath, 'ocr-64.png');
+        }
+    } catch (error) {
+        console.error('Error loading onboarding logo:', error);
+        const logo = document.getElementById('onboarding-logo');
+        if (logo) logo.src = '../../assets/logo_m.png';
+        const ocr = document.getElementById('ocr-icon');
+        if (ocr) ocr.src = '../../assets/ocr-64.png';
+    }
+}
+
+// Setup platform-specific elements
+function setupPlatformElements() {
+    const homebrewCheck = document.getElementById('homebrew-check');
+    const accessibilityPermission = document.getElementById('accessibility-permission');
+    
+    if (isMac) {
+        if (homebrewCheck) homebrewCheck.style.display = 'block';
+        if (accessibilityPermission) accessibilityPermission.style.display = 'block';
+    }
+}
+
+// Check all dependencies
+async function checkAllDependencies() {
+    await checkTesseract();
+    if (isMac) {
+        await checkHomebrew();
+    }
+    updateDependenciesStep();
+}
+
+// Update dependencies step status
+function updateDependenciesStep() {
+    const continueBtn = document.getElementById('continue-dependencies');
+    const tesseract = setupProgress.dependencies.tesseract;
+    
+    // Enable continue button if Tesseract is satisfied or user wants to skip
+    if (tesseract) {
+        continueBtn.disabled = false;
+    }
+}
+
+// Check Tesseract OCR
+async function checkTesseract() {
+    const statusEl = document.getElementById('tesseract-status');
+    const detailsEl = document.getElementById('tesseract-details');
+    const instructionsEl = document.getElementById('tesseract-instructions');
+    const installBtn = document.getElementById('tesseract-install-btn');
+    const recheckBtn = document.getElementById('tesseract-recheck-btn');
+    const item = document.getElementById('tesseract-check');
+    
+    let isInstalled = await checkTesseractInstalled();
+    // Treat built-in Tesseract.js as satisfying OCR requirement
+    if (!isInstalled) {
+        try {
+            require('tesseract.js');
+            isInstalled = true;
+        } catch (e) {
+            console.debug('Bundled OCR not available:', e?.message || e);
+        }
+    }
+    
+    if (isInstalled) {
+        statusEl.innerHTML = '<div class="status-success">✓ Available</div>';
+        item.classList.add('success');
+        setupProgress.dependencies.tesseract = true;
+    } else {
+        statusEl.innerHTML = '<div class="status-error">✗ Not Installed</div>';
+        instructionsEl.innerHTML = getTesseractInstallInstructions();
+        if (installBtn) installBtn.style.display = 'inline-block';
+        detailsEl.style.display = 'block';
+        item.classList.add('error');
+    }
+    
+    if (recheckBtn) {
+        recheckBtn.onclick = () => checkTesseract();
+    }
+    
+    if (installBtn) {
+        installBtn.onclick = () => installTesseract();
+    }
+}
+
+// Check if Tesseract is installed
+function checkTesseractInstalled() {
+    return new Promise((resolve) => {
+        const process = spawn('tesseract', ['--version'], { stdio: 'pipe' });
+        
+        process.on('close', (code) => {
+            resolve(code === 0);
+        });
+        
+        process.on('error', () => {
+            resolve(false);
+        });
+    });
+}
+
+// Get Tesseract install instructions
+function getTesseractInstallInstructions() {
+    if (isMac) {
+        return `
+            <p><strong>Using Homebrew (recommended):</strong></p>
+            <code>brew install tesseract</code>
+            <p><strong>Using MacPorts:</strong></p>
+            <code>sudo port install tesseract</code>
+        `;
+    } else if (isWindows) {
+        return `
+            <p><strong>Option 1: Using Chocolatey</strong></p>
+            <code>choco install tesseract</code>
+            <p><strong>Option 2: Manual Download</strong></p>
+            <p>Download from <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank">UB Mannheim Tesseract</a></p>
+        `;
+    } else {
+        return `
+            <p><strong>Ubuntu/Debian:</strong></p>
+            <code>sudo apt-get install tesseract-ocr</code>
+            <p><strong>CentOS/RHEL:</strong></p>
+            <code>sudo yum install tesseract</code>
+            <p><strong>Arch Linux:</strong></p>
+            <code>sudo pacman -S tesseract</code>
+        `;
+    }
+}
+
+// Install Tesseract
+async function installTesseract() {
+    if (isMac) {
+        // Try to install via Homebrew if available
+        try {
+            if (await checkHomebrew()) {
+                runTerminalCommand('brew install tesseract');
+            } else {
+                shell.openExternal('https://github.com/tesseract-ocr/tesseract');
+            }
+        } catch (e) {
+            console.error('Error checking Homebrew:', e);
+            shell.openExternal('https://github.com/tesseract-ocr/tesseract');
+        }
+    } else if (isWindows) {
+        shell.openExternal('https://github.com/UB-Mannheim/tesseract/wiki');
+    } else {
+        // Open documentation for Linux
+        shell.openExternal('https://github.com/tesseract-ocr/tesseract');
+    }
+}
+
+// Check Homebrew (macOS only)
+async function checkHomebrew() {
+    if (!isMac) return false;
+    
+    const statusEl = document.getElementById('homebrew-status');
+    const detailsEl = document.getElementById('homebrew-details');
+    const instructionsEl = document.getElementById('homebrew-instructions');
+    const installBtn = document.getElementById('homebrew-install-btn');
+    const recheckBtn = document.getElementById('homebrew-recheck-btn');
+    const item = document.getElementById('homebrew-check');
+    
+    const isInstalled = await checkHomebrewInstalled();
+    
+    if (isInstalled) {
+        statusEl.innerHTML = '<div class="status-success">✓ Installed</div>';
+        item.classList.add('success');
+        setupProgress.dependencies.homebrew = true;
+        return true;
+    } else {
+        statusEl.innerHTML = '<div class="status-warning">⚠ Not Installed</div>';
+        instructionsEl.innerHTML = `
+            <p>Homebrew makes it easy to install dependencies like Tesseract and Ollama:</p>
+            <code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</code>
+        `;
+        installBtn.style.display = 'inline-block';
+        detailsEl.style.display = 'block';
+        item.classList.add('error');
+    }
+    
+    if (recheckBtn) {
+        recheckBtn.onclick = () => checkHomebrew();
+    }
+    
+    if (installBtn) {
+        installBtn.onclick = () => installHomebrew();
+    }
+    
+    return false;
+}
+
+// Check if Homebrew is installed
+function checkHomebrewInstalled() {
+    return new Promise((resolve) => {
+        const process = spawn('which', ['brew'], { stdio: 'pipe' });
+        
+        process.on('close', (code) => {
+            resolve(code === 0);
+        });
+        
+        process.on('error', () => {
+            resolve(false);
+        });
+    });
+}
+
+// Install Homebrew
+function installHomebrew() {
+    shell.openExternal('https://brew.sh');
+}
+
+// Run terminal command (macOS/Linux)
+function runTerminalCommand(command) {
+    if (isMac) {
+        const script = `tell application "Terminal" to do script "${command}"`;
+        spawn('osascript', ['-e', script]);
+    } else if (isLinux) {
+        spawn('gnome-terminal', ['--', 'bash', '-c', command + '; read -p "Press Enter to continue..."']);
+    }
+}
+
+// Check permissions (Step 2)
+async function checkPermissions() {
+    if (isMac) {
+        await checkScreenRecordingPermission();
+        await checkAccessibilityPermission();
+    } else {
+        // For Windows/Linux, permissions are generally handled differently
+        document.getElementById('screen-status').innerHTML = '<div class="status-success">✓ Available</div>';
+        document.getElementById('screen-permission').classList.add('success');
+        setupProgress.permissions.screen = true;
+    }
+}
+
+// Check screen recording permission (macOS)
+async function checkScreenRecordingPermission() {
+    const statusEl = document.getElementById('screen-status');
+    const detailsEl = document.getElementById('screen-details');
+    const permissionBtn = document.getElementById('screen-permission-btn');
+    const item = document.getElementById('screen-permission');
+    
+    // This is a simplified check - in a real app, you'd use native APIs
+    statusEl.innerHTML = '<div class="status-warning">⚠ Needs Permission</div>';
+    detailsEl.style.display = 'block';
+    item.classList.add('error');
+    
+    if (permissionBtn) {
+        permissionBtn.onclick = () => requestScreenPermission();
+    }
+}
+
+// Check accessibility permission (macOS)
+async function checkAccessibilityPermission() {
+    const statusEl = document.getElementById('accessibility-status');
+    const detailsEl = document.getElementById('accessibility-details');
+    const permissionBtn = document.getElementById('accessibility-permission-btn');
+    const item = document.getElementById('accessibility-permission');
+    
+    // This is a simplified check - in a real app, you'd use native APIs
+    statusEl.innerHTML = '<div class="status-warning">⚠ Needs Permission</div>';
+    detailsEl.style.display = 'block';
+    item.classList.add('error');
+    
+    if (permissionBtn) {
+        permissionBtn.onclick = () => requestAccessibilityPermission();
+    }
+}
+
+// Request screen recording permission
+function requestScreenPermission() {
+    if (isMac) {
+        // Open System Preferences to Privacy settings
+        spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture']);
+        
+        // Update UI to show instruction
+        document.getElementById('screen-details').innerHTML = `
+            <p>Please follow these steps:</p>
+            <ol>
+                <li>In System Preferences, go to Security & Privacy</li>
+                <li>Click the Privacy tab</li>
+                <li>Select "Screen Recording" from the left sidebar</li>
+                <li>Check the box next to "SnapAssist AI"</li>
+                <li>Restart the app if prompted</li>
+            </ol>
+            <button class="btn btn-secondary" onclick="checkScreenRecordingPermission()">I've granted permission</button>
+        `;
+    }
+}
+
+// Request accessibility permission
+function requestAccessibilityPermission() {
+    if (isMac) {
+        // Open System Preferences to Accessibility settings
+        spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility']);
+        
+        // Update UI to show instruction
+        document.getElementById('accessibility-details').innerHTML = `
+            <p>Please follow these steps:</p>
+            <ol>
+                <li>In System Preferences, go to Security & Privacy</li>
+                <li>Click the Privacy tab</li>
+                <li>Select "Accessibility" from the left sidebar</li>
+                <li>Check the box next to "SnapAssist AI"</li>
+                <li>Enter your password if prompted</li>
+            </ol>
+            <button class="btn btn-secondary" onclick="checkAccessibilityPermission()">I've granted permission</button>
+        `;
+    }
+}
+
+// Setup event listeners
+function setupEventListeners() {
+    // Navigation buttons - Step 1 to 2
+    document.getElementById('continue-dependencies')?.addEventListener('click', () => goToStep(2));
+    document.getElementById('skip-dependencies')?.addEventListener('click', () => goToStep(2));
+    
+    // Navigation buttons - Step 2 to 3
+    document.getElementById('back-to-dependencies')?.addEventListener('click', () => goToStep(1));
+    document.getElementById('continue-permissions')?.addEventListener('click', () => goToStep(3));
+    
+    // Navigation buttons - Step 3 to 4
+    document.getElementById('back-provider')?.addEventListener('click', () => goToStep(2));
+    document.getElementById('continue-config')?.addEventListener('click', () => goToStep(4));
+    
+    // Navigation buttons - Step 4 to 5
+    document.getElementById('back-config')?.addEventListener('click', () => goToStep(3));
+    document.getElementById('finish-setup')?.addEventListener('click', () => goToStep(5));
+    
+    // Final step
+    document.getElementById('start-app')?.addEventListener('click', () => finishSetup());
+    
+    // Dependency item clicks
+    document.querySelectorAll('.dependency-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const details = header.parentNode.querySelector('.dependency-details');
+            if (details) {
+                details.style.display = details.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+    });
+    
+    // Permission item clicks
+    document.querySelectorAll('.permission-header').forEach(header => {
+        header.addEventListener('click', () => {
+            const details = header.parentNode.querySelector('.permission-details');
+            if (details) {
+                details.style.display = details.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+    });
+}
+
+// Go to specific step
+function goToStep(step) {
+    // Hide legacy and new containers
+    document.querySelectorAll('.setup-step').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.step-content').forEach(el => (el.style.display = 'none'));
+
+    // Show target for steps 1-2 (legacy blocks)
+    if (step === 1 || step === 2) {
+        const block = document.getElementById(`setup-step-${step}`);
+        if (block) block.classList.add('active');
+    } else {
+        // Show target for steps 3-5 (new blocks)
+        const content = document.getElementById(`step-${step}-content`);
+        if (content) content.style.display = 'block';
+    }
+
+    currentStep = step;
+    updateProgress();
+
+    // Step-specific logic
+    if (step === 2) {
+        checkPermissions();
+    } else if (step === 3) {
+        setupProviderSelection();
+    } else if (step === 4) {
+        setupConfiguration();
+    }
+}
+
+// Update progress indicator
+function updateProgress() {
+    // Update step indicators
+    for (let i = 1; i <= 5; i++) {
+        const stepEl = document.getElementById(`step-${i}`);
+        if (stepEl) {
+            stepEl.classList.remove('active', 'completed');
+            if (i < currentStep) {
+                stepEl.classList.add('completed');
+            } else if (i === currentStep) {
+                stepEl.classList.add('active');
+            }
+        }
+    }
+    
+    // Update progress bar
+    const progressFill = document.getElementById('progress-fill');
+    if (progressFill) {
+        const progress = ((currentStep - 1) / 4) * 100;
+        progressFill.style.width = `${progress}%`;
+    }
+}
+
+// Setup provider selection
+function setupProviderSelection() {
+    const providerOptions = document.querySelectorAll('.provider-option');
+    const continueBtn = document.getElementById('continue-config');
+    
+    // Reset selection then preselect Gemini by default
+    providerOptions.forEach(option => option.classList.remove('selected'));
+    const defaultOption = document.querySelector('.provider-option[data-provider="gemini"]');
+    if (defaultOption) {
+        defaultOption.classList.add('selected');
+        setupProgress.configuration.provider = 'gemini';
+        if (continueBtn) continueBtn.disabled = false;
+    } else if (continueBtn) {
+        continueBtn.disabled = true;
+    }
+    
+    // Handle provider selection
+    providerOptions.forEach(option => {
+        option.onclick = () => {
+            // Remove previous selection
+            providerOptions.forEach(opt => opt.classList.remove('selected'));
+
+            // Select this option
+            option.classList.add('selected');
+
+            // Update setup progress
+            const provider = option.dataset.provider;
+            setupProgress.configuration.provider = provider;
+
+            // Enable continue button
+            if (continueBtn) continueBtn.disabled = false;
+        };
+    });
+    
+    // Setup provider-specific buttons
+    const geminiBtn = document.getElementById('setup-gemini-btn');
+    if (geminiBtn) {
+        geminiBtn.onclick = (e) => {
+            e.stopPropagation();
+            shell.openExternal('https://aistudio.google.com/app/apikey');
+        };
+    }
+    const ollamaBtn = document.getElementById('setup-ollama-btn');
+    if (ollamaBtn) {
+        ollamaBtn.onclick = (e) => {
+            e.stopPropagation();
+            shell.openExternal('https://ollama.ai/download');
+        };
+    }
+}
+
+// Setup configuration
+function setupConfiguration() {
+    const provider = setupProgress.configuration.provider;
+    const geminiConfig = document.getElementById('gemini-config');
+    const ollamaConfig = document.getElementById('ollama-config');
+    
+    // Show appropriate config section
+    if (provider === 'gemini') {
+        geminiConfig.style.display = 'block';
+        ollamaConfig.style.display = 'none';
+        
+        // Setup Gemini API key testing
+        const testBtn = document.getElementById('test-gemini');
+        const apiKeyInput = document.getElementById('gemini-api-key');
+        const pasteBtn = document.getElementById('paste-api-key');
+        const toggleBtn = document.getElementById('toggle-api-key-visibility');
+        
+        // Paste from clipboard functionality
+        if (pasteBtn) {
+            pasteBtn.addEventListener('click', async () => {
+                try {
+                    const { clipboard } = require('electron');
+                    const text = clipboard.readText();
+                    if (text && apiKeyInput) {
+                        apiKeyInput.value = text.trim();
+                        apiKeyInput.focus();
+                        setupProgress.configuration.apiKey = text.trim();
+                        
+                        // Show success feedback
+                        pasteBtn.textContent = '✅';
+                        setTimeout(() => {
+                            pasteBtn.textContent = '📋';
+                        }, 1000);
+                    } else {
+                        // Show error feedback
+                        pasteBtn.textContent = '❌';
+                        setTimeout(() => {
+                            pasteBtn.textContent = '📋';
+                        }, 1000);
+                    }
+                } catch (error) {
+                    console.error('Failed to paste from clipboard:', error);
+                    pasteBtn.textContent = '❌';
+                    setTimeout(() => {
+                        pasteBtn.textContent = '📋';
+                    }, 1000);
+                }
+            });
+        }
+        
+        // Toggle API key visibility
+        if (toggleBtn && apiKeyInput) {
+            toggleBtn.addEventListener('click', () => {
+                if (apiKeyInput.type === 'password') {
+                    apiKeyInput.type = 'text';
+                    toggleBtn.textContent = '🙈';
+                    toggleBtn.title = 'Hide API key';
+                } else {
+                    apiKeyInput.type = 'password';
+                    toggleBtn.textContent = '👁';
+                    toggleBtn.title = 'Show API key';
+                }
+            });
+        }
+        
+        testBtn.addEventListener('click', async () => {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                alert('Please enter an API key first');
+                return;
+            }
+            
+            testBtn.textContent = 'Testing...';
+            testBtn.disabled = true;
+            
+            try {
+                // Test API key with a simple request
+                const response = await axios.post(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+                    {
+                        contents: [{
+                            parts: [{ text: 'Hello' }]
+                        }]
+                    }
+                );
+                
+                if (response.status === 200) {
+                    setupProgress.configuration.apiKey = apiKey;
+                    alert('API key is valid!');
+                } else {
+                    throw new Error('Invalid response');
+                }
+            } catch (error) {
+                console.error('Gemini API key test failed:', error);
+                alert('API key test failed. Please check your key.');
+            } finally {
+                testBtn.textContent = 'Test';
+                testBtn.disabled = false;
+            }
+        });
+        
+        // Auto-save API key on change
+        apiKeyInput.addEventListener('change', () => {
+            setupProgress.configuration.apiKey = apiKeyInput.value.trim();
+        });
+        
+        // Auto-save API key on input (real-time)
+        apiKeyInput.addEventListener('input', () => {
+            setupProgress.configuration.apiKey = apiKeyInput.value.trim();
+        });
+        
+        // Enable keyboard shortcuts for API key field
+        apiKeyInput.addEventListener('keydown', (e) => {
+            // Allow Cmd+V / Ctrl+V for pasting
+            if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+                e.stopPropagation();
+                // Let the default paste behavior work
+                setTimeout(() => {
+                    setupProgress.configuration.apiKey = apiKeyInput.value.trim();
+                }, 10);
+            }
+        });
+        
+    } else if (provider === 'ollama') {
+        geminiConfig.style.display = 'none';
+        ollamaConfig.style.display = 'block';
+        
+        // Setup Ollama model selection
+        const modelSelect = document.getElementById('ollama-model');
+        modelSelect.addEventListener('change', () => {
+            setupProgress.configuration.model = modelSelect.value;
+        });
+    }
+    
+    // Open external links
+    document.getElementById('open-gemini-studio').addEventListener('click', (e) => {
+        e.preventDefault();
+        shell.openExternal('https://aistudio.google.com/app/apikey');
+    });
+}
+
+// Finish setup
+function finishSetup() {
+    // Save configuration
+    const config = {
+        provider: setupProgress.configuration.provider,
+        theme: setupProgress.configuration.theme,
+        onboarding_completed: true
+    };
+    
+    if (setupProgress.configuration.provider === 'gemini') {
+        config.gemini_model = 'gemini-2.0-flash';
+        if (setupProgress.configuration.apiKey) {
+            config.gemini_api_key = setupProgress.configuration.apiKey;
+        }
+    } else {
+        config.ollama_model = 'granite3.2-vision:2b';
+    }
+    
+    // Save to store
+    Object.keys(config).forEach(key => {
+        store.set(key, config[key]);
+    });
+    
+    // Send completion message to main process
+    ipcRenderer.send('onboarding-completed', config);
+    
+    // Close onboarding window
+    window.close();
+}
+
+// Initialize when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    initializeOnboarding();
+});
+
+// Export functions for potential use
+module.exports = {
+    checkTesseract,
+    checkHomebrew,
+    goToStep,
+    finishSetup
+};

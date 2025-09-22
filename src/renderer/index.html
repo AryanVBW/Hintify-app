@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hintify SnapAssist AI</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+    <div class="main-container">
+        <!-- Top bar with logo and controls -->
+        <div class="topbar">
+            <div class="title-section">
+                <img id="app-logo" src="" alt="Hintify SnapAssist AI" class="app-logo">
+                <h1 class="app-title">Hintify SnapAssist AI</h1>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="capture-btn" class="btn btn-primary" title="Capture Screenshot">
+                    <img id="capture-icon" src="" alt="Capture" class="btn-icon">
+                </button>
+                <button id="settings-btn" class="btn btn-secondary" title="Settings">
+                    <img id="settings-icon" src="" alt="Settings" class="btn-icon">
+                </button>
+                <!-- Authentication button - hidden when authenticated -->
+                <button id="auth-btn" class="btn btn-auth hidden" title="Sign In">
+                    <span class="btn-text">Sign In</span>
+                </button>
+                <!-- User info - hidden when not authenticated -->
+                <div id="user-info" class="user-info hidden">
+                    <img id="user-avatar" src="" alt="User" class="user-avatar">
+                    <span id="user-name" class="user-name">User</span>
+                    <div id="user-menu" class="user-menu">
+                        <button id="user-menu-btn" class="user-menu-btn" title="User Menu">▼</button>
+                        <div id="user-dropdown" class="user-dropdown hidden">
+                            <button id="transfer-data-btn" class="dropdown-item">
+                                <span class="dropdown-icon">🚀</span>
+                                Transfer to Portal
+                            </button>
+                            <button id="export-json-btn" class="dropdown-item">
+                                <span class="dropdown-icon">📄</span>
+                                Export as JSON
+                            </button>
+                            <button id="export-csv-btn" class="dropdown-item">
+                                <span class="dropdown-icon">📊</span>
+                                Export as CSV
+                            </button>
+                            <button id="view-history-btn" class="dropdown-item">
+                                <span class="dropdown-icon">📅</span>
+                                View History
+                            </button>
+                            <div class="dropdown-separator"></div>
+                            <button id="logout-btn" class="dropdown-item logout">
+                                <span class="dropdown-icon">🚪</span>
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main content area -->
+        <div class="content-area">
+            <div class="text-container">
+                <div id="hints-display" class="hints-display">
+                    <div class="welcome-message">
+                        <h2>Welcome to Hintify SnapAssist AI</h2>
+                        <p>Your AI-powered study companion for instant hints and guidance.</p>
+                        <div class="instructions">
+                            <h3>Quick Start:</h3>
+                            <ul>
+                                <li>📸 Click <strong>Capture</strong> button to take a screenshot</li>
+                                <li>📋 Copy an image and press <strong>Cmd/Ctrl+Shift+V</strong></li>
+                                <li>⌨️ Use global hotkey <strong>Cmd+Shift+H</strong> (Mac) or <strong>Ctrl+Shift+H</strong> (Windows)</li>
+                                <li>🤖 AI analyzes your questions and provides helpful hints</li>
+                            </ul>
+                            <div class="setup-reminder">
+                                <p><strong>First time?</strong> Make sure you've completed the setup process. If you skipped it, go to the app menu and select <strong>"Run Setup Again"</strong>.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status bar -->
+        <div class="status-bar">
+            <div class="status-section">
+                <span id="status-text">Ready</span>
+            </div>
+            <div class="provider-section">
+                <span id="provider-text">Provider: Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p id="loading-text">Processing image...</p>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Question & Answer History</h3>
+                <button id="close-history-modal" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="history-content" class="history-content">
+                    <div class="loading-message">Loading history...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
