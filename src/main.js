@@ -243,6 +243,17 @@ ipcMain.handle('get-user-history', async (event, limit = 50) => {
   }
 });
 
+// Sync account data
+ipcMain.handle('sync-account-data', async () => {
+  try {
+    const result = await authService.syncAccountData();
+    return { success: true, result };
+  } catch (error) {
+    console.error('Failed to sync account data:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Log activity
 ipcMain.handle('log-activity', async (event, featureName, action, details) => {
   try {

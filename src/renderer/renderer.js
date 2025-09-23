@@ -78,26 +78,30 @@ function checkAuthStatus() {
 // Update authentication UI
 function updateAuthUI(isAuthenticated, userData = null) {
   const authBtn = document.getElementById('auth-btn');
-  const userInfoDiv = document.getElementById('user-info');
+  const userAccountSection = document.getElementById('user-account-section');
   const userAvatar = document.getElementById('user-avatar');
   const userName = document.getElementById('user-name');
+  const accountEmail = document.getElementById('account-email');
+  const syncStatus = document.getElementById('sync-status');
+  const syncIndicator = syncStatus?.querySelector('.sync-indicator');
+  const syncText = syncStatus?.querySelector('.sync-text');
   
-  console.log('🎨 Updating auth UI:', { isAuthenticated, userData });
+  console.log('🎨 Updating enhanced auth UI:', { isAuthenticated, userData });
   
   if (isAuthenticated && userData) {
-    // Show user info, hide sign-in button
+    // Show user account section, hide sign-in button
     if (authBtn) {
       authBtn.classList.add('hidden');
       console.log('🚫 Sign-in button hidden');
     }
-    if (userInfoDiv) {
-      userInfoDiv.classList.remove('hidden');
-      console.log('✅ User info div shown');
+    if (userAccountSection) {
+      userAccountSection.classList.remove('hidden');
+      console.log('✅ User account section shown');
     }
     
     // Update user avatar with better error handling
     if (userAvatar) {
-      const imageUrl = userData.imageUrl || userData.avatar || userData.picture;
+      const imageUrl = userData.image_url || userData.imageUrl || userData.avatar || userData.picture;
       if (imageUrl) {
         userAvatar.src = imageUrl;
         userAvatar.onerror = (e) => {
@@ -115,7 +119,7 @@ function updateAuthUI(isAuthenticated, userData = null) {
     if (userName) {
       const displayName = userData.name || 
                          userData.fullName ||
-                         (userData.firstName && userData.lastName ? `${userData.firstName} ${userData.lastName}` : '') ||
+                         (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
                          userData.firstName ||
                          userData.displayName ||
                          userData.username ||
@@ -123,21 +127,53 @@ function updateAuthUI(isAuthenticated, userData = null) {
                          'User';
       
       userName.textContent = displayName;
-      userName.title = userData.email || displayName; // Show email on hover
       
-      console.log('📝 User name set:', displayName, '(email:', userData.email, ')');
+      console.log('📝 User name set:', displayName);
     }
     
-    console.log('✅ User authenticated UI updated successfully');
+    // Update account email
+    if (accountEmail && userData.email) {
+      accountEmail.textContent = userData.email;
+      console.log('📧 Account email set:', userData.email);
+    }
+    
+    // Update sync status
+    if (syncIndicator && syncText) {
+      const syncStatusData = userData.sync_status || 'active';
+      
+      // Reset classes
+      syncIndicator.classList.remove('active', 'error');
+      
+      switch (syncStatusData) {
+        case 'active':
+          syncIndicator.classList.add('active');
+          syncText.textContent = 'Synced';
+          break;
+        case 'syncing':
+          syncIndicator.classList.add('active');
+          syncText.textContent = 'Syncing...';
+          break;
+        case 'error':
+          syncIndicator.classList.add('error');
+          syncText.textContent = 'Sync Error';
+          break;
+        default:
+          syncText.textContent = 'Unknown';
+      }
+      
+      console.log('🔄 Sync status updated:', syncStatusData);
+    }
+    
+    console.log('✅ Enhanced user authentication UI updated successfully');
   } else {
-    // Show sign-in button, hide user info
+    // Show sign-in button, hide user account section
     if (authBtn) {
       authBtn.classList.remove('hidden');
       console.log('✅ Sign-in button shown');
     }
-    if (userInfoDiv) {
-      userInfoDiv.classList.add('hidden');
-      console.log('🚫 User info div hidden');
+    if (userAccountSection) {
+      userAccountSection.classList.add('hidden');
+      console.log('🚫 User account section hidden');
     }
     
     console.log('❌ User not authenticated - sign-in UI shown');
@@ -152,7 +188,7 @@ function handleSignIn() {
   const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
   const websiteUrl = isDev 
     ? 'http://localhost:3000/auth-success?source=app'
-    : 'https://hintify.vercel.app/auth-success?source=app';
+    : 'https://hintify-h4q78ezmn-aryanvbws-projects.vercel.app/auth-success?source=app';
   
   console.log('Opening website URL:', websiteUrl, '(dev mode:', isDev, ')');
   
@@ -1124,8 +1160,43 @@ function setupEventListeners() {
     authBtn.addEventListener('click', handleSignIn);
   }
   
-  if (userInfoDiv) {
-    userInfoDiv.addEventListener('click', handleLogout);
+  // Setup account menu and modals
+  setupAccountMenu();
+  setupModals();
+  
+  // Account section event listeners
+  const viewProfileBtn = document.getElementById('view-profile-btn');
+  if (viewProfileBtn) {
+    viewProfileBtn.addEventListener('click', () => {
+      document.getElementById('account-dropdown').classList.add('hidden');
+      showProfileModal();
+    });
+  }
+  
+  const accountSettingsBtn = document.getElementById('account-settings-btn');
+  if (accountSettingsBtn) {
+    accountSettingsBtn.addEventListener('click', () => {
+      document.getElementById('account-dropdown').classList.add('hidden');
+      showAccountSettingsModal();
+    });
+  }
+  
+  const syncDataBtn = document.getElementById('sync-data-btn');
+  if (syncDataBtn) {
+    syncDataBtn.addEventListener('click', () => {
+      document.getElementById('account-dropdown').classList.add('hidden');
+      handleSyncData();
+    });
+  }
+  
+  const forceSyncBtn = document.getElementById('force-sync-btn');
+  if (forceSyncBtn) {
+    forceSyncBtn.addEventListener('click', handleSyncData);
+  }
+  
+  const clearLocalDataBtn = document.getElementById('clear-local-data-btn');
+  if (clearLocalDataBtn) {
+    clearLocalDataBtn.addEventListener('click', handleClearLocalData);
   }
   
   // User menu functionality
@@ -1300,6 +1371,185 @@ function setupEventListeners() {
       triggerCapture();
     }
   });
+}
+
+// Handle account menu dropdown
+function setupAccountMenu() {
+  const accountMenuBtn = document.getElementById('account-menu-btn');
+  const accountDropdown = document.getElementById('account-dropdown');
+  
+  if (accountMenuBtn && accountDropdown) {
+    accountMenuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      accountDropdown.classList.toggle('hidden');
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+      accountDropdown.classList.add('hidden');
+    });
+    
+    accountDropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+}
+
+// Handle profile modal
+function showProfileModal() {
+  const modal = document.getElementById('profile-modal');
+  if (!modal || !userInfo) return;
+  
+  // Update profile modal with user data
+  const profileAvatar = document.getElementById('profile-avatar');
+  const profileName = document.getElementById('profile-name');
+  const profileEmail = document.getElementById('profile-email');
+  const emailVerifiedBadge = document.getElementById('email-verified-badge');
+  const syncStatusBadge = document.getElementById('sync-status-badge');
+  const profileProvider = document.getElementById('profile-provider');
+  const profileCreated = document.getElementById('profile-created');
+  const profileLastSignin = document.getElementById('profile-last-signin');
+  const profileSyncStatus = document.getElementById('profile-sync-status');
+  
+  if (profileAvatar) {
+    profileAvatar.src = userInfo.image_url || userInfo.imageUrl || '../../assets/logo_m.png';
+  }
+  if (profileName) {
+    profileName.textContent = userInfo.name || userInfo.email || 'User';
+  }
+  if (profileEmail) {
+    profileEmail.textContent = userInfo.email || 'No email available';
+  }
+  if (emailVerifiedBadge) {
+    if (userInfo.email_verified) {
+      emailVerifiedBadge.classList.remove('hidden');
+    } else {
+      emailVerifiedBadge.classList.add('hidden');
+    }
+  }
+  if (syncStatusBadge) {
+    const status = userInfo.sync_status || 'active';
+    syncStatusBadge.className = `badge ${status}`;
+    syncStatusBadge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+  }
+  if (profileProvider) {
+    profileProvider.textContent = userInfo.provider || 'Unknown';
+  }
+  if (profileCreated && userInfo.account_created_at) {
+    profileCreated.textContent = new Date(userInfo.account_created_at).toLocaleDateString();
+  }
+  if (profileLastSignin && userInfo.last_sign_in_at) {
+    profileLastSignin.textContent = new Date(userInfo.last_sign_in_at).toLocaleDateString();
+  }
+  if (profileSyncStatus) {
+    profileSyncStatus.textContent = userInfo.sync_status || 'Active';
+  }
+  
+  modal.classList.remove('hidden');
+  console.log('👤 Profile modal opened');
+}
+
+// Handle account settings modal
+function showAccountSettingsModal() {
+  const modal = document.getElementById('account-settings-modal');
+  if (!modal || !userInfo) return;
+  
+  modal.classList.remove('hidden');
+  console.log('⚙️ Account settings modal opened');
+}
+
+// Close modal helper
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+// Setup modal close handlers
+function setupModals() {
+  // Profile modal
+  const closeProfileBtn = document.getElementById('close-profile-modal');
+  if (closeProfileBtn) {
+    closeProfileBtn.addEventListener('click', () => closeModal('profile-modal'));
+  }
+  
+  // Account settings modal  
+  const closeAccountSettingsBtn = document.getElementById('close-account-settings-modal');
+  if (closeAccountSettingsBtn) {
+    closeAccountSettingsBtn.addEventListener('click', () => closeModal('account-settings-modal'));
+  }
+  
+  // Close modals when clicking outside
+  ['profile-modal', 'account-settings-modal'].forEach(modalId => {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal(modalId);
+        }
+      });
+    }
+  });
+}
+
+// Handle sync data manually
+async function handleSyncData() {
+  if (!userInfo) {
+    alert('Please sign in first to sync your data.');
+    return;
+  }
+  
+  try {
+    showLoading(true, 'Syncing account data...');
+    
+    // Call the sync function through IPC
+    const result = await ipcRenderer.invoke('sync-account-data');
+    
+    showLoading(false);
+    
+    if (result.success) {
+      alert('Account data synced successfully!');
+      // Update the sync status in UI
+      updateAuthUI(true, userInfo);
+    } else {
+      alert(`Sync failed: ${result.error}`);
+    }
+  } catch (error) {
+    showLoading(false);
+    console.error('Sync error:', error);
+    alert('Failed to sync data. Please try again later.');
+  }
+}
+
+// Handle clear local data
+async function handleClearLocalData() {
+  if (!userInfo) return;
+  
+  const confirmed = confirm(
+    'Are you sure you want to clear all local data? This action cannot be undone. Your data in the Portal will remain safe.'
+  );
+  
+  if (!confirmed) return;
+  
+  try {
+    showLoading(true, 'Clearing local data...');
+    
+    // Sign out user (which clears data)
+    await ipcRenderer.send('user-logged-out');
+    
+    showLoading(false);
+    
+    // Reset UI
+    userInfo = null;
+    updateAuthUI(false);
+    
+    alert('Local data cleared successfully. Please sign in again.');
+  } catch (error) {
+    showLoading(false);
+    console.error('Clear data error:', error);
+    alert('Failed to clear data. Please try again.');
+  }
 }
 
 // Display authentication message in main area

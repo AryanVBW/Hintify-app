@@ -202,7 +202,203 @@ body {
   transform: translateY(-1px);
 }
 
-/* User info display */
+/* User Account Section */
+.user-account-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background-color: var(--button-bg);
+  border-radius: 8px;
+  -webkit-app-region: no-drag;
+  transition: all var(--transition-speed);
+  min-width: 220px;
+}
+
+.user-account-section:hover {
+  background-color: var(--button-hover);
+}
+
+.account-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  object-fit: cover;
+}
+
+.account-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  color: var(--fg-text);
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-email {
+  color: var(--fg-text);
+  font-size: 11px;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sync-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--fg-text);
+  opacity: 0.4;
+}
+
+.sync-indicator.active {
+  background-color: var(--accent);
+  opacity: 1;
+  animation: pulse 2s infinite;
+}
+
+.sync-indicator.error {
+  background-color: #ef4444;
+  opacity: 1;
+}
+
+.sync-text {
+  color: var(--fg-text);
+  font-size: 10px;
+  opacity: 0.6;
+  font-weight: 500;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--fg-text);
+  opacity: 0.6;
+  cursor: pointer;
+  transition: all var(--transition-speed);
+  border-radius: 4px;
+}
+
+.account-menu-btn:hover {
+  opacity: 1;
+  background-color: var(--hover-bg);
+}
+
+.menu-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.account-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  min-width: 220px;
+  overflow: hidden;
+}
+
+.dropdown-section {
+  padding: 8px 0;
+}
+
+.dropdown-section:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.dropdown-header {
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-text);
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: var(--fg-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-speed);
+}
+
+.dropdown-item:hover {
+  background-color: var(--hover-bg);
+}
+
+.dropdown-item.logout {
+  color: #ef4444;
+}
+
+.dropdown-item.logout:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.dropdown-icon {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+}
+
+.dropdown-separator {
+  height: 1px;
+  background-color: var(--border);
+  margin: 4px 0;
+}
+
+/* User info display (legacy - can be removed if not used) */
 .user-info {
   display: flex;
   align-items: center;
@@ -217,23 +413,6 @@ body {
 
 .user-info:hover {
   background-color: var(--button-hover);
-}
-
-.user-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-}
-
-.user-name {
-  color: var(--fg-text);
-  font-size: 14px;
-  font-weight: 500;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Hidden class */
@@ -803,4 +982,226 @@ body {
   .instructions {
     padding: 16px;
   }
+}
+
+/* Profile and Account Settings Modals */
+.profile-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.profile-section {
+  padding: 16px 0;
+}
+
+.profile-section:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-section h5 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--label-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.profile-avatar-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  object-fit: cover;
+}
+
+.profile-basic-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--fg-text);
+}
+
+.profile-basic-info p {
+  margin: 0 0 8px 0;
+  color: var(--fg-text);
+  opacity: 0.8;
+  font-size: 14px;
+}
+
+.profile-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge.verified {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge.synced {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.badge.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.profile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.detail-label {
+  font-weight: 500;
+  color: var(--fg-text);
+  opacity: 0.8;
+  font-size: 13px;
+}
+
+.detail-value {
+  font-weight: 600;
+  color: var(--fg-text);
+  font-size: 13px;
+}
+
+/* Account Settings */
+.account-settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-section {
+  padding: 16px 0;
+}
+
+.settings-section:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-section h5 {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--label-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+}
+
+.setting-label {
+  font-weight: 500;
+  color: var(--fg-text);
+  font-size: 14px;
+}
+
+.setting-control {
+  position: relative;
+  display: inline-block;
+}
+
+.setting-control input[type="checkbox"] {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--button-bg);
+  transition: 0.4s;
+  border-radius: 12px;
+  width: 44px;
+  height: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+  background-color: var(--accent);
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+.setting-select {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--input-bg);
+  color: var(--fg-text);
+  font-size: 13px;
+  min-width: 120px;
+}
+
+.setting-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-warning {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.btn-warning:hover {
+  background-color: #d97706;
+}
+
+.btn .btn-icon {
+  margin-right: 6px;
 }

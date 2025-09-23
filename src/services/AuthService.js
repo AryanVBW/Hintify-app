@@ -12,9 +12,9 @@ class AuthService {
   // Process authentication from deep link or auth window
   async processAuthentication(authData) {
     try {
-      console.log('🔐 Processing authentication:', authData);
+      console.log('🔐 Processing comprehensive authentication from website transfer:', authData);
 
-      // Extract user information
+      // Extract comprehensive user information from transferred data
       const userData = {
         stack_user_id: authData.userId || authData.id,
         email: authData.email,
@@ -22,56 +22,98 @@ class AuthService {
         first_name: authData.firstName,
         last_name: authData.lastName,
         username: authData.username,
-        image_url: authData.imageUrl,
-        provider: authData.provider || 'unknown'
+        image_url: authData.imageUrl || authData.profileImageUrl,
+        provider: authData.provider || 'unknown',
+        auth_method: authData.authMethod || 'deep_link',
+        session_id: authData.sessionId,
+        source: authData.source || 'unknown',
+        account_created_at: authData.accountCreatedAt ? new Date(authData.accountCreatedAt) : null,
+        last_sign_in_at: authData.lastSignInAt ? new Date(authData.lastSignInAt) : null,
+        email_verified: authData.emailVerified === 'true',
+        user_preferences: authData.userPreferences ? JSON.parse(authData.userPreferences) : null,
+        transferred_at: new Date().toISOString()
       };
 
-      // Validate required fields
+      // Validate required fields with enhanced checks
       if (!userData.email && !userData.stack_user_id) {
         throw new Error('Missing required authentication data: email or user ID');
       }
 
-      // Create or update user in database
+      // Log the comprehensive transfer
+      console.log('📊 Account transfer details:', {
+        userId: userData.stack_user_id,
+        email: userData.email,
+        provider: userData.provider,
+        authMethod: userData.auth_method,
+        source: userData.source,
+        hasPreferences: !!userData.user_preferences,
+        emailVerified: userData.email_verified,
+        accountAge: userData.account_created_at ? 
+          Math.floor((Date.now() - new Date(userData.account_created_at).getTime()) / (1000 * 60 * 60 * 24)) + ' days' : 'unknown'
+      });
+
+      // Create or update user in database with enhanced data
       const userId = await this.dbService.createOrUpdateUser(userData);
       
-      // Start new app session
+      // Start new app session with transfer context
       const deviceInfo = this.getDeviceInfo();
       const appVersion = this.getAppVersion();
       const sessionId = await this.dbService.startAppSession(userId, deviceInfo, appVersion);
 
-      // Store current user and session
-      this.currentUser = { ...userData, id: userId };
-      this.currentSession = { id: sessionId, userId, startTime: new Date() };
+      // Store current user and session with additional metadata
+      this.currentUser = { 
+        ...userData, 
+        id: userId,
+        app_session_id: sessionId,
+        sync_status: 'active',
+        last_sync: new Date().toISOString()
+      };
+      this.currentSession = { 
+        id: sessionId, 
+        userId, 
+        startTime: new Date(),
+        transferSource: userData.source,
+        authMethod: userData.auth_method
+      };
 
-      // Log authentication event
+      // Log authentication event with transfer details
       await this.dbService.logUsage(
         userId, 
         sessionId, 
         'authentication', 
-        'login', 
-        { provider: userData.provider, method: 'deep_link' }
+        'auto_login', 
+        { 
+          provider: userData.provider,
+          method: userData.auth_method,
+          source: userData.source,
+          transfer_session: userData.session_id,
+          email_verified: userData.email_verified
+        }
       );
 
-      console.log('✅ Authentication processed successfully:', {
+      console.log('✅ Account transfer and authentication completed successfully:', {
         userId,
         sessionId,
-        email: userData.email
+        email: userData.email,
+        syncStatus: 'active'
       });
 
-      // Trigger initial data transfer to Portal for new/returning users
+      // Trigger initial data sync for transferred account
       setTimeout(async () => {
         try {
-          console.log('🚀 Triggering initial data transfer to Portal...');
-          await this.transferDataToPortal();
+          console.log('🚀 Initiating account data synchronization...');
+          await this.syncAccountData();
         } catch (error) {
-          console.log('⚠️ Initial Portal transfer failed (will retry later):', error.message);
+          console.log('⚠️ Account sync will retry later:', error.message);
         }
-      }, 5000); // Wait 5 seconds to ensure everything is properly initialized
+      }, 3000); // Wait 3 seconds to ensure everything is properly initialized
 
       return {
         success: true,
         user: this.currentUser,
-        session: this.currentSession
+        session: this.currentSession,
+        transferCompleted: true,
+        syncStatus: 'active'
       };
 
     } catch (error) {
@@ -194,7 +236,73 @@ class AuthService {
     }
   }
 
-  // Transfer user data to Portal
+  // Sync account data after transfer
+  async syncAccountData() {
+    if (!this.currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      console.log('🔄 Starting account data synchronization...');
+      
+      // Log sync activity
+      await this.logActivity('account_sync', 'initiated', {
+        transferSource: this.currentSession?.transferSource,
+        authMethod: this.currentSession?.authMethod
+      });
+
+      // Update user sync status
+      this.currentUser.sync_status = 'syncing';
+      this.currentUser.last_sync = new Date().toISOString();
+
+      // Perform comprehensive data sync
+      const syncResult = await this.portalService.transferUserDataToPortal(
+        this.currentUser.id,
+        'account_sync'
+      );
+
+      // Update sync status based on result
+      this.currentUser.sync_status = syncResult.success ? 'active' : 'error';
+      this.currentUser.last_sync = new Date().toISOString();
+
+      // Log completion
+      await this.logActivity('account_sync', 'completed', {
+        success: syncResult.success,
+        syncStatus: this.currentUser.sync_status
+      });
+
+      console.log('✅ Account data synchronization completed:', {
+        success: syncResult.success,
+        syncStatus: this.currentUser.sync_status
+      });
+
+      return syncResult;
+
+    } catch (error) {
+      // Update sync status to error
+      if (this.currentUser) {
+        this.currentUser.sync_status = 'error';
+        this.currentUser.last_sync = new Date().toISOString();
+      }
+
+      // Log failure
+      await this.logActivity('account_sync', 'failed', {
+        error: error.message
+      });
+      
+      throw error;
+    }
+  }
+
+  // Get account sync status
+  getAccountSyncStatus() {
+    return {
+      status: this.currentUser?.sync_status || 'unknown',
+      lastSync: this.currentUser?.last_sync,
+      transferSource: this.currentSession?.transferSource,
+      authMethod: this.currentSession?.authMethod
+    };
+  }
   async transferDataToPortal() {
     if (!this.currentUser) {
       throw new Error('User not authenticated');

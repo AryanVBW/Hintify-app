@@ -26,29 +26,65 @@
                 <button id="auth-btn" class="btn btn-auth hidden" title="Sign In">
                     <span class="btn-text">Sign In</span>
                 </button>
-                <!-- User info - hidden when not authenticated -->
-                <div id="user-info" class="user-info hidden">
-                    <img id="user-avatar" src="" alt="User" class="user-avatar">
-                    <span id="user-name" class="user-name">User</span>
-                    <div id="user-menu" class="user-menu">
-                        <button id="user-menu-btn" class="user-menu-btn" title="User Menu">▼</button>
-                        <div id="user-dropdown" class="user-dropdown hidden">
-                            <button id="transfer-data-btn" class="dropdown-item">
-                                <span class="dropdown-icon">🚀</span>
-                                Transfer to Portal
-                            </button>
-                            <button id="export-json-btn" class="dropdown-item">
-                                <span class="dropdown-icon">📄</span>
-                                Export as JSON
-                            </button>
-                            <button id="export-csv-btn" class="dropdown-item">
-                                <span class="dropdown-icon">📊</span>
-                                Export as CSV
-                            </button>
-                            <button id="view-history-btn" class="dropdown-item">
-                                <span class="dropdown-icon">📅</span>
-                                View History
-                            </button>
+                <!-- User Account Section - hidden when not authenticated -->
+                <div id="user-account-section" class="user-account-section hidden">
+                    <div class="account-profile">
+                        <img id="user-avatar" src="" alt="User" class="user-avatar">
+                        <div class="account-details">
+                            <span id="user-name" class="user-name">User</span>
+                            <span id="account-email" class="account-email">user@example.com</span>
+                            <div id="sync-status" class="sync-status">
+                                <span class="sync-indicator active"></span>
+                                <span class="sync-text">Synced</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="account-menu">
+                        <button id="account-menu-btn" class="account-menu-btn" title="Account Menu">
+                            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="1"/>
+                                <circle cx="12" cy="5" r="1"/>
+                                <circle cx="12" cy="19" r="1"/>
+                            </svg>
+                        </button>
+                        <div id="account-dropdown" class="account-dropdown hidden">
+                            <div class="dropdown-section">
+                                <h4 class="dropdown-header">Account</h4>
+                                <button id="view-profile-btn" class="dropdown-item">
+                                    <span class="dropdown-icon">👤</span>
+                                    Profile Details
+                                </button>
+                                <button id="account-settings-btn" class="dropdown-item">
+                                    <span class="dropdown-icon">⚙️</span>
+                                    Account Settings
+                                </button>
+                            </div>
+                            <div class="dropdown-section">
+                                <h4 class="dropdown-header">Data</h4>
+                                <button id="sync-data-btn" class="dropdown-item">
+                                    <span class="dropdown-icon">🔄</span>
+                                    Sync Data
+                                </button>
+                                <button id="transfer-data-btn" class="dropdown-item">
+                                    <span class="dropdown-icon">🚀</span>
+                                    Transfer to Portal
+                                </button>
+                                <button id="view-history-btn" class="dropdown-item">
+                                    <span class="dropdown-icon">📅</span>
+                                    View History
+                                </button>
+                            </div>
+                            <div class="dropdown-section">
+                                <h4 class="dropdown-header">Export</h4>
+                                <button id="export-json-btn" class="dropdown-item">
+                                    <span class="dropdown-icon">📄</span>
+                                    Export as JSON
+                                </button>
+                                <button id="export-csv-btn" class="dropdown-item">
+                                    <span class="dropdown-icon">📊</span>
+                                    Export as CSV
+                                </button>
+                            </div>
                             <div class="dropdown-separator"></div>
                             <button id="logout-btn" class="dropdown-item logout">
                                 <span class="dropdown-icon">🚪</span>
@@ -113,6 +149,117 @@
             <div class="modal-body">
                 <div id="history-content" class="history-content">
                     <div class="loading-message">Loading history...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Details Modal -->
+    <div id="profile-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Profile Details</h3>
+                <button id="close-profile-modal" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="profile-content" class="profile-content">
+                    <div class="profile-section">
+                        <div class="profile-avatar-section">
+                            <img id="profile-avatar" src="" alt="Profile" class="profile-avatar">
+                            <div class="profile-basic-info">
+                                <h4 id="profile-name">User Name</h4>
+                                <p id="profile-email">user@example.com</p>
+                                <div class="profile-badges">
+                                    <span id="email-verified-badge" class="badge verified hidden">✓ Verified</span>
+                                    <span id="sync-status-badge" class="badge synced">Synced</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="profile-section">
+                        <h5>Account Information</h5>
+                        <div class="profile-details">
+                            <div class="detail-item">
+                                <span class="detail-label">Provider:</span>
+                                <span id="profile-provider" class="detail-value">Unknown</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Account Created:</span>
+                                <span id="profile-created" class="detail-value">Unknown</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Last Sign In:</span>
+                                <span id="profile-last-signin" class="detail-value">Unknown</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Sync Status:</span>
+                                <span id="profile-sync-status" class="detail-value">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Settings Modal -->
+    <div id="account-settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Account Settings</h3>
+                <button id="close-account-settings-modal" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="account-settings-content" class="account-settings-content">
+                    <div class="settings-section">
+                        <h5>Data Synchronization</h5>
+                        <div class="setting-item">
+                            <label class="setting-label">Auto-sync data to Portal:</label>
+                            <div class="setting-control">
+                                <input type="checkbox" id="auto-sync-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </div>
+                        </div>
+                        <div class="setting-item">
+                            <label class="setting-label">Sync frequency:</label>
+                            <select id="sync-frequency" class="setting-select">
+                                <option value="realtime">Real-time</option>
+                                <option value="hourly">Hourly</option>
+                                <option value="daily" selected>Daily</option>
+                                <option value="weekly">Weekly</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h5>Privacy Settings</h5>
+                        <div class="setting-item">
+                            <label class="setting-label">Share usage analytics:</label>
+                            <div class="setting-control">
+                                <input type="checkbox" id="analytics-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </div>
+                        </div>
+                        <div class="setting-item">
+                            <label class="setting-label">Include personal data in exports:</label>
+                            <div class="setting-control">
+                                <input type="checkbox" id="personal-data-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="settings-section">
+                        <h5>Account Actions</h5>
+                        <div class="setting-actions">
+                            <button id="force-sync-btn" class="btn btn-secondary">
+                                <span class="btn-icon">🔄</span>
+                                Force Sync Now
+                            </button>
+                            <button id="clear-local-data-btn" class="btn btn-warning">
+                                <span class="btn-icon">🗑️</span>
+                                Clear Local Data
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

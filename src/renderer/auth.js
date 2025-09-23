@@ -48,7 +48,7 @@ function handleSignIn() {
     const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
     const websiteUrl = isDev 
         ? 'http://localhost:3000/auth-success?source=app'
-        : 'https://hintify.vercel.app/auth-success?source=app';
+        : 'https://hintify-h4q78ezmn-aryanvbws-projects.vercel.app/auth-success?source=app';
     
     console.log('Opening website URL:', websiteUrl, '(dev mode:', isDev, ')');
     
