@@ -1,0 +1,15 @@
+/* Ripple Grid container: full-bleed background behind content */
+#ripple-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0; /* Content containers should use z-index >= 1 */
+  pointer-events: none; /* UI remains interactive */
+  overflow: hidden;
+}
+
+#ripple-grid canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+

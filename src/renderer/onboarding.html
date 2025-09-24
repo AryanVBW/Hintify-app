@@ -6,8 +6,11 @@
     <title>Setup - Hintify SnapAssist AI</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="onboarding.css">
+    <link rel="stylesheet" href="ripple-grid.css">
 </head>
 <body class="theme-dark">
+    <!-- Ripple Grid Background -->
+    <div id="ripple-grid"></div>
     <div class="onboarding-container">
         <!-- Header -->
         <div class="onboarding-header">
@@ -47,6 +50,20 @@
 
         <!-- Content area -->
         <div class="onboarding-content">
+            <!-- Navigation arrows -->
+            <div class="onboarding-navigation">
+                <button id="nav-arrow-left" class="nav-arrow nav-arrow-left hidden" title="Previous Step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="m15 18-6-6 6-6"/>
+                    </svg>
+                </button>
+                <button id="nav-arrow-right" class="nav-arrow nav-arrow-right" title="Next Step">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="m9 18 6-6-6-6"/>
+                    </svg>
+                </button>
+            </div>
+
             <!-- Step 1: Dependencies Check -->
             <div class="setup-step active" id="setup-step-1">
                 <h2>🔧 System Dependencies</h2>
@@ -271,6 +288,24 @@
         </div>
     </div>
 
+    <script src="ripple-grid.js"></script>
     <script src="onboarding.js"></script>
+    <script>
+      // Initialize Ripple Grid once DOM is ready
+      document.addEventListener('DOMContentLoaded', function() {
+        if (window.initRippleGrid) {
+          window.__rippleGrid = window.initRippleGrid({
+            enableRainbow: false,
+            gridColor: '#ffffff',
+            rippleIntensity: 0.05,
+            gridSize: 10.0,
+            gridThickness: 15.0,
+            mouseInteraction: true,
+            mouseInteractionRadius: 1.2,
+            opacity: 0.8
+          });
+        }
+      });
+    </script>
 </body>
 </html>

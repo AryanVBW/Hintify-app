@@ -23,7 +23,7 @@
                     <img id="settings-icon" src="" alt="Settings" class="btn-icon">
                 </button>
                 <!-- Authentication button - hidden when authenticated -->
-                <button id="auth-btn" class="btn btn-auth hidden" title="Sign In">
+                <button id="auth-btn" class="btn btn-auth hidden" title="Sign In" aria-label="Sign In to Hintify">
                     <span class="btn-text">Sign In</span>
                 </button>
                 <!-- User Account Section - hidden when not authenticated -->
@@ -40,8 +40,8 @@
                         </div>
                     </div>
                     <div class="account-menu">
-                        <button id="account-menu-btn" class="account-menu-btn" title="Account Menu">
-                            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <button id="account-menu-btn" class="account-menu-btn" title="Account Menu" aria-label="Open account menu">
+                            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
                                 <circle cx="12" cy="12" r="1"/>
                                 <circle cx="12" cy="5" r="1"/>
                                 <circle cx="12" cy="19" r="1"/>
@@ -214,14 +214,14 @@
                     <div class="settings-section">
                         <h5>Data Synchronization</h5>
                         <div class="setting-item">
-                            <label class="setting-label">Auto-sync data to Portal:</label>
+                            <label class="setting-label" for="auto-sync-toggle">Auto-sync data to Portal:</label>
                             <div class="setting-control">
                                 <input type="checkbox" id="auto-sync-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </div>
                         </div>
                         <div class="setting-item">
-                            <label class="setting-label">Sync frequency:</label>
+                            <label class="setting-label" for="sync-frequency">Sync frequency:</label>
                             <select id="sync-frequency" class="setting-select">
                                 <option value="realtime">Real-time</option>
                                 <option value="hourly">Hourly</option>
@@ -233,14 +233,14 @@
                     <div class="settings-section">
                         <h5>Privacy Settings</h5>
                         <div class="setting-item">
-                            <label class="setting-label">Share usage analytics:</label>
+                            <label class="setting-label" for="analytics-toggle">Share usage analytics:</label>
                             <div class="setting-control">
                                 <input type="checkbox" id="analytics-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </div>
                         </div>
                         <div class="setting-item">
-                            <label class="setting-label">Include personal data in exports:</label>
+                            <label class="setting-label" for="personal-data-toggle">Include personal data in exports:</label>
                             <div class="setting-control">
                                 <input type="checkbox" id="personal-data-toggle" checked>
                                 <span class="toggle-slider"></span>

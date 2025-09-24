@@ -59,7 +59,7 @@ function loadOnboardingLogo() {
     try {
         const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
         const basePath = isDev ? '../../assets/' : (process.resourcesPath + '/assets/');
-        
+
         const logo = document.getElementById('onboarding-logo');
         if (logo) {
             logo.src = path.join(basePath, 'logo_m.png');
@@ -74,6 +74,41 @@ function loadOnboardingLogo() {
         if (logo) logo.src = '../../assets/logo_m.png';
         const ocr = document.getElementById('ocr-icon');
         if (ocr) ocr.src = '../../assets/ocr-64.png';
+    }
+}
+
+// Get logo path for permission instructions
+function getLogoPath() {
+    try {
+        const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
+        const basePath = isDev ? '../../assets/' : (process.resourcesPath + '/assets/');
+        return path.join(basePath, 'logo_m.png');
+    } catch (error) {
+        console.error('Error getting logo path:', error);
+        return '../../assets/logo_m.png';
+    }
+}
+
+// Show permission feedback
+function showPermissionFeedback(permissionType, status) {
+    const statusEl = document.getElementById(`${permissionType}-status`);
+    if (!statusEl) return;
+
+    switch (status) {
+        case 'opening':
+            statusEl.innerHTML = '<div class="status-checking">Opening System Preferences...</div>';
+            break;
+        case 'granted':
+            statusEl.innerHTML = '<div class="status-success">✓ Permission Granted</div>';
+            break;
+        case 'denied':
+            statusEl.innerHTML = '<div class="status-error">✗ Permission Denied</div>';
+            break;
+        case 'checking':
+            statusEl.innerHTML = '<div class="status-checking">Checking...</div>';
+            break;
+        default:
+            statusEl.innerHTML = '<div class="status-warning">⚠ Needs Permission</div>';
     }
 }
 
@@ -297,100 +332,240 @@ async function checkPermissions() {
     }
 }
 
-// Check screen recording permission (macOS)
+// Check screen recording permission (macOS) with enhanced feedback
 async function checkScreenRecordingPermission() {
-    const statusEl = document.getElementById('screen-status');
     const detailsEl = document.getElementById('screen-details');
     const permissionBtn = document.getElementById('screen-permission-btn');
     const item = document.getElementById('screen-permission');
-    
-    // This is a simplified check - in a real app, you'd use native APIs
-    statusEl.innerHTML = '<div class="status-warning">⚠ Needs Permission</div>';
-    detailsEl.style.display = 'block';
-    item.classList.add('error');
-    
-    if (permissionBtn) {
-        permissionBtn.onclick = () => requestScreenPermission();
-    }
+
+    // Show checking status
+    showPermissionFeedback('screen', 'checking');
+
+    // Simulate permission check (in a real app, you'd use native APIs)
+    setTimeout(() => {
+        try {
+            // For demo purposes, we'll assume permission is needed
+            // In a real implementation, you would check actual system permissions
+            const hasPermission = false; // This would be the actual check result
+
+            if (hasPermission) {
+                showPermissionFeedback('screen', 'granted');
+                item.classList.remove('error');
+                item.classList.add('success');
+                detailsEl.style.display = 'none';
+                setupProgress.permissions.screen = true;
+            } else {
+                showPermissionFeedback('screen', 'warning');
+                detailsEl.style.display = 'block';
+                item.classList.remove('success');
+                item.classList.add('error');
+                setupProgress.permissions.screen = false;
+
+                if (permissionBtn) {
+                    permissionBtn.onclick = () => requestScreenPermission();
+                }
+            }
+
+            updatePermissionsStep();
+        } catch (error) {
+            console.error('Error checking screen recording permission:', error);
+            showPermissionFeedback('screen', 'error');
+        }
+    }, 1000);
 }
 
-// Check accessibility permission (macOS)
+// Check accessibility permission (macOS) with enhanced feedback
 async function checkAccessibilityPermission() {
-    const statusEl = document.getElementById('accessibility-status');
     const detailsEl = document.getElementById('accessibility-details');
     const permissionBtn = document.getElementById('accessibility-permission-btn');
     const item = document.getElementById('accessibility-permission');
-    
-    // This is a simplified check - in a real app, you'd use native APIs
-    statusEl.innerHTML = '<div class="status-warning">⚠ Needs Permission</div>';
-    detailsEl.style.display = 'block';
-    item.classList.add('error');
-    
-    if (permissionBtn) {
-        permissionBtn.onclick = () => requestAccessibilityPermission();
-    }
+
+    // Show checking status
+    showPermissionFeedback('accessibility', 'checking');
+
+    // Simulate permission check (in a real app, you'd use native APIs)
+    setTimeout(() => {
+        try {
+            // For demo purposes, we'll assume permission is needed
+            // In a real implementation, you would check actual system permissions
+            const hasPermission = false; // This would be the actual check result
+
+            if (hasPermission) {
+                showPermissionFeedback('accessibility', 'granted');
+                item.classList.remove('error');
+                item.classList.add('success');
+                detailsEl.style.display = 'none';
+                setupProgress.permissions.accessibility = true;
+            } else {
+                showPermissionFeedback('accessibility', 'warning');
+                detailsEl.style.display = 'block';
+                item.classList.remove('success');
+                item.classList.add('error');
+                setupProgress.permissions.accessibility = false;
+
+                if (permissionBtn) {
+                    permissionBtn.onclick = () => requestAccessibilityPermission();
+                }
+            }
+
+            updatePermissionsStep();
+        } catch (error) {
+            console.error('Error checking accessibility permission:', error);
+            showPermissionFeedback('accessibility', 'error');
+        }
+    }, 1200);
 }
 
-// Request screen recording permission
+// Request screen recording permission with enhanced UI
 function requestScreenPermission() {
     if (isMac) {
         // Open System Preferences to Privacy settings
         spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture']);
-        
-        // Update UI to show instruction
+
+        // Update UI to show enhanced instruction with app logo
+        const logoPath = getLogoPath();
         document.getElementById('screen-details').innerHTML = `
-            <p>Please follow these steps:</p>
-            <ol>
-                <li>In System Preferences, go to Security & Privacy</li>
-                <li>Click the Privacy tab</li>
-                <li>Select "Screen Recording" from the left sidebar</li>
-                <li>Check the box next to "SnapAssist AI"</li>
-                <li>Restart the app if prompted</li>
-            </ol>
-            <button class="btn btn-secondary" onclick="checkScreenRecordingPermission()">I've granted permission</button>
+            <div class="permission-instruction-card">
+                <div class="permission-instruction-header">
+                    <img src="${logoPath}" alt="Hintify SnapAssist AI" class="permission-app-logo">
+                    <h4>Grant Screen Recording Permission</h4>
+                </div>
+                <div class="permission-steps">
+                    <div class="step-item">
+                        <span class="step-number">1</span>
+                        <span class="step-text">System Preferences will open automatically</span>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-number">2</span>
+                        <span class="step-text">Navigate to <strong>Privacy & Security</strong> → <strong>Screen Recording</strong></span>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-number">3</span>
+                        <span class="step-text">Find and check the box next to <strong>"Hintify SnapAssist AI"</strong></span>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-number">4</span>
+                        <span class="step-text">Enter your password if prompted</span>
+                    </div>
+                </div>
+                <div class="permission-actions">
+                    <button class="btn btn-primary" onclick="checkScreenRecordingPermission()">
+                        <span>✓</span> I've granted permission
+                    </button>
+                    <button class="btn btn-secondary" onclick="requestScreenPermission()">
+                        <span>🔄</span> Open System Preferences again
+                    </button>
+                </div>
+            </div>
         `;
+
+        // Add visual feedback
+        showPermissionFeedback('screen', 'opening');
     }
 }
 
-// Request accessibility permission
+// Request accessibility permission with enhanced UI
 function requestAccessibilityPermission() {
     if (isMac) {
         // Open System Preferences to Accessibility settings
         spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility']);
-        
-        // Update UI to show instruction
+
+        // Update UI to show enhanced instruction with app logo
+        const logoPath = getLogoPath();
         document.getElementById('accessibility-details').innerHTML = `
-            <p>Please follow these steps:</p>
-            <ol>
-                <li>In System Preferences, go to Security & Privacy</li>
-                <li>Click the Privacy tab</li>
-                <li>Select "Accessibility" from the left sidebar</li>
-                <li>Check the box next to "SnapAssist AI"</li>
-                <li>Enter your password if prompted</li>
-            </ol>
-            <button class="btn btn-secondary" onclick="checkAccessibilityPermission()">I've granted permission</button>
+            <div class="permission-instruction-card">
+                <div class="permission-instruction-header">
+                    <img src="${logoPath}" alt="Hintify SnapAssist AI" class="permission-app-logo">
+                    <h4>Grant Accessibility Permission</h4>
+                </div>
+                <div class="permission-steps">
+                    <div class="step-item">
+                        <span class="step-number">1</span>
+                        <span class="step-text">System Preferences will open automatically</span>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-number">2</span>
+                        <span class="step-text">Navigate to <strong>Privacy & Security</strong> → <strong>Accessibility</strong></span>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-number">3</span>
+                        <span class="step-text">Find and check the box next to <strong>"Hintify SnapAssist AI"</strong></span>
+                    </div>
+                    <div class="step-item">
+                        <span class="step-number">4</span>
+                        <span class="step-text">Enter your password when prompted</span>
+                    </div>
+                </div>
+                <div class="permission-actions">
+                    <button class="btn btn-primary" onclick="checkAccessibilityPermission()">
+                        <span>✓</span> I've granted permission
+                    </button>
+                    <button class="btn btn-secondary" onclick="requestAccessibilityPermission()">
+                        <span>🔄</span> Open System Preferences again
+                    </button>
+                </div>
+            </div>
         `;
+
+        // Add visual feedback
+        showPermissionFeedback('accessibility', 'opening');
+    }
+}
+
+// Update permissions step status
+function updatePermissionsStep() {
+    const continueBtn = document.getElementById('continue-permissions');
+    if (!continueBtn) return;
+
+    // Check if all required permissions are granted
+    const allPermissionsGranted = isMac ?
+        (setupProgress.permissions.screen && setupProgress.permissions.accessibility) :
+        setupProgress.permissions.screen;
+
+    if (allPermissionsGranted) {
+        continueBtn.disabled = false;
+        continueBtn.textContent = '✓ Continue to AI Provider';
+        continueBtn.classList.add('btn-success');
+    } else {
+        continueBtn.disabled = false; // Allow users to continue even without permissions
+        continueBtn.textContent = 'Continue (Skip Permissions)';
+        continueBtn.classList.remove('btn-success');
     }
 }
 
 // Setup event listeners
 function setupEventListeners() {
+    // Navigation arrows
+    document.getElementById('nav-arrow-left')?.addEventListener('click', () => {
+        const currentStep = getCurrentStep();
+        if (currentStep > 1) {
+            goToStep(currentStep - 1);
+        }
+    });
+
+    document.getElementById('nav-arrow-right')?.addEventListener('click', () => {
+        const currentStep = getCurrentStep();
+        if (currentStep < 5) {
+            goToStep(currentStep + 1);
+        }
+    });
+
     // Navigation buttons - Step 1 to 2
     document.getElementById('continue-dependencies')?.addEventListener('click', () => goToStep(2));
     document.getElementById('skip-dependencies')?.addEventListener('click', () => goToStep(2));
-    
+
     // Navigation buttons - Step 2 to 3
     document.getElementById('back-to-dependencies')?.addEventListener('click', () => goToStep(1));
     document.getElementById('continue-permissions')?.addEventListener('click', () => goToStep(3));
-    
+
     // Navigation buttons - Step 3 to 4
     document.getElementById('back-provider')?.addEventListener('click', () => goToStep(2));
     document.getElementById('continue-config')?.addEventListener('click', () => goToStep(4));
-    
+
     // Navigation buttons - Step 4 to 5
     document.getElementById('back-config')?.addEventListener('click', () => goToStep(3));
     document.getElementById('finish-setup')?.addEventListener('click', () => goToStep(5));
-    
+
     // Final step
     document.getElementById('start-app')?.addEventListener('click', () => finishSetup());
     
@@ -433,6 +608,7 @@ function goToStep(step) {
 
     currentStep = step;
     updateProgress();
+    updateNavigationArrows(step);
 
     // Step-specific logic
     if (step === 2) {
@@ -441,6 +617,33 @@ function goToStep(step) {
         setupProviderSelection();
     } else if (step === 4) {
         setupConfiguration();
+    }
+}
+
+// Get current step number
+function getCurrentStep() {
+    return currentStep;
+}
+
+// Update navigation arrows visibility
+function updateNavigationArrows(step) {
+    const leftArrow = document.getElementById('nav-arrow-left');
+    const rightArrow = document.getElementById('nav-arrow-right');
+
+    if (leftArrow) {
+        if (step <= 1) {
+            leftArrow.classList.add('hidden');
+        } else {
+            leftArrow.classList.remove('hidden');
+        }
+    }
+
+    if (rightArrow) {
+        if (step >= 5) {
+            rightArrow.classList.add('hidden');
+        } else {
+            rightArrow.classList.remove('hidden');
+        }
     }
 }
 

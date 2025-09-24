@@ -1,4 +1,5 @@
-const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol } = require('electron');
+const electron = require('electron');
+const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol } = electron;
 const path = require('path');
 const Store = require('electron-store');
 
@@ -11,17 +12,19 @@ require('dotenv').config({
 const AuthService = require('./services/AuthService');
 const DatabaseService = require('./services/DatabaseService');
 const PortalDataTransferService = require('./services/PortalDataTransferService');
+const SupabaseService = require('./services/SupabaseService');
 
 // Initialize electron-store for persistent settings
 const store = new Store();
 
 // Initialize services with error handling
-let authService, dbService, portalService;
+let authService, dbService, portalService, supabaseService;
 
 try {
   authService = new AuthService();
   dbService = new DatabaseService();
   portalService = new PortalDataTransferService();
+  supabaseService = new SupabaseService();
   console.log('✅ All services initialized successfully');
 } catch (error) {
   console.error('❌ Failed to initialize services:', error.message);
@@ -36,6 +39,11 @@ try {
     exportUserData: async () => ({ success: false, error: 'Database not available' }),
     getUserHistory: async () => [],
     signOut: async () => {},
+    requestPasswordReset: async () => ({ success: false, error: 'Service unavailable' }),
+    resetPassword: async () => ({ success: false, error: 'Service unavailable' }),
+    enableMFA: async () => ({ success: false, error: 'Service unavailable' }),
+    verifyMFASetup: async () => ({ success: false, error: 'Service unavailable' }),
+    disableMFA: async () => ({ success: false, error: 'Service unavailable' }),
     initializeFromStorage: async () => false,
     getCurrentUser: () => null,
     getCurrentSession: () => null,
@@ -47,12 +55,10 @@ try {
 let mainWindow;
 let settingsWindow;
 let onboardingWindow;
-let authWindow;
 let isDevelopment = process.argv.includes('--development') || process.env.NODE_ENV === 'development';
-let deeplinkingUrl;
 
-// Protocol for deep linking
-const PROTOCOL = 'hintify';
+// Deep linking variables
+let deeplinkingUrl = null;
 
 // Log development mode
 console.log('Development mode:', isDevelopment);
@@ -94,60 +100,97 @@ function saveConfig(config) {
   });
 }
 
-// IPC handlers
-ipcMain.on('open-settings', () => {
-  createSettingsWindow();
-});
+// Function to register all IPC handlers
+function registerIpcHandlers() {
+  // Settings and configuration handlers
+  ipcMain.on('open-settings', () => {
+    createSettingsWindow();
+  });
 
-ipcMain.on('config-updated', (event, newConfig) => {
-  saveConfig(newConfig);
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('config-updated', newConfig);
-  }
-});
-
-ipcMain.on('onboarding-completed', (event, config) => {
-  console.log('✅ Onboarding completed with config:', config);
-  saveConfig(config);
-  
-  if (onboardingWindow && !onboardingWindow.isDestroyed()) {
-    onboardingWindow.close();
-  }
-  
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('config-updated', config);
-    mainWindow.show();
-    mainWindow.focus();
-    
-    // After onboarding, check if user needs to authenticate
-    const authStatus = checkAuthStatus();
-    if (!authStatus.authenticated) {
-      console.log('🔐 Onboarding complete, but user needs to authenticate');
-      // The main window will show the auth UI automatically
+  ipcMain.on('config-updated', (event, newConfig) => {
+    saveConfig(newConfig);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('config-updated', newConfig);
     }
-  }
-});
+  });
 
-// Auth-related IPC handlers
-ipcMain.on('auth-completed', async (event, userInfo) => {
+  ipcMain.on('onboarding-completed', (event, config) => {
+    console.log('✅ Onboarding completed with config:', config);
+    saveConfig(config);
+    
+    if (onboardingWindow && !onboardingWindow.isDestroyed()) {
+      onboardingWindow.close();
+    }
+    
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('config-updated', config);
+      mainWindow.show();
+      mainWindow.focus();
+      
+      // After onboarding, check if user needs to authenticate
+      const authStatus = checkAuthStatus();
+      if (!authStatus.authenticated) {
+        console.log('🔐 Onboarding complete, but user needs to authenticate');
+        // The main window will show the auth UI automatically
+      }
+    }
+  });
+
+  // Auth-related IPC handlers with enhanced error handling and validation
+  ipcMain.on('auth-completed', async (event, userInfo) => {
   try {
-    // Process authentication through AuthService
-    const authResult = await authService.processAuthentication(userInfo);
-    
-    // Save authentication status to store
-    store.set('user_authenticated', true);
-    store.set('user_info', authResult.user);
-    
-    // Close auth window
-    if (authWindow && !authWindow.isDestroyed()) {
-      authWindow.close();
+    console.log('🔐 Processing Supabase authentication in main process...');
+    console.log('📊 User info received:', {
+      hasId: !!userInfo?.id,
+      hasEmail: !!userInfo?.email,
+      hasName: !!userInfo?.name,
+      provider: userInfo?.provider
+    });
+
+    // Validate user info before processing
+    if (!userInfo || (!userInfo.email && !userInfo.id)) {
+      throw new Error('Invalid user data received from renderer process');
     }
+
+    let authResult;
+    try {
+      // Process authentication through AuthService to create DB user/session
+      authResult = await authService.processAuthentication(userInfo);
+      console.log('✅ Authentication processed successfully:', {
+        userId: authResult.user.id,
+        sessionId: authResult.session.id
+      });
+      
+      // Merge normalized user info back to store
+      const finalUserInfo = { ...userInfo, id: authResult.user.id };
+      store.set('user_authenticated', true);
+      store.set('user_info', finalUserInfo);
+      store.set('last_auth_time', new Date().toISOString());
+      
+    } catch (dbError) {
+      console.error('❌ Failed to persist auth in database:', dbError?.message || dbError);
+      
+      // Still persist minimal local state so app can proceed
+      // This ensures the app works even if database is unavailable
+      store.set('user_authenticated', true);
+      store.set('user_info', userInfo);
+      store.set('last_auth_time', new Date().toISOString());
+      
+      // Log the database error for debugging
+      console.warn('⚠️ App will continue with local authentication only');
+    }
+    
+    // Auth window no longer used - authentication now handled via browser
     
     // Notify main window of auth status change
     if (mainWindow && !mainWindow.isDestroyed()) {
+      const finalUserInfo = store.get('user_info');
+      console.log('📡 Notifying main window of authentication success...');
+      
       mainWindow.webContents.send('auth-status-updated', {
         authenticated: true,
-        user: authResult.user
+        user: finalUserInfo,
+        timestamp: new Date().toISOString()
       });
     }
     
@@ -155,20 +198,115 @@ ipcMain.on('auth-completed', async (event, userInfo) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
+      console.log('🖥️ Main window focused');
     }
     
-    console.log('✅ Authentication completed and stored in database');
+    console.log('🎉 Authentication completed successfully via Supabase');
+    
   } catch (error) {
     console.error('❌ Authentication processing failed:', error);
+    
+    // Send error notification to main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('auth-status-updated', {
+        authenticated: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Clear any partial authentication data
+    store.set('user_authenticated', false);
+    store.delete('user_info');
+    store.delete('last_auth_time');
   }
 });
 
-ipcMain.on('show-auth-window', () => {
-  console.log('🔐 Auth window requested from main app');
-  createAuthWindow();
+  // Auth window handler removed - now using direct browser authentication
+
+  // Handle sign-up request
+  ipcMain.on('show-signup-window', () => {
+    console.log('📝 Sign-up window requested from main app - opening browser directly');
+    // Open browser for sign-up (same as sign-in page with tabs)
+    const authUrl = 'https://hintify.nexus-v.tech/sign-in?source=app';
+    const { shell } = require('electron');
+    shell.openExternal(authUrl);
+  });
+
+  // Handle browser authentication request
+  ipcMain.handle('open-browser-auth', async () => {
+    try {
+      console.log('🌐 Opening browser for Supabase authentication...');
+
+      // Open the production website sign-in page directly
+      const authUrl = 'https://hintify.nexus-v.tech/sign-in?source=app';
+      const { shell } = require('electron');
+      await shell.openExternal(authUrl);
+
+      console.log('✅ Browser opened for authentication at sign-in page');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Failed to open browser for authentication:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Handle password reset request
+  ipcMain.handle('request-password-reset', async (event, email) => {
+  try {
+    const result = await authService.requestPasswordReset(email);
+    return result;
+  } catch (error) {
+    console.error('Password reset request failed:', error);
+    return { success: false, error: error.message };
+  }
 });
 
-ipcMain.on('user-logged-out', async () => {
+  // Handle password reset
+  ipcMain.handle('reset-password', async (event, email, code, newPassword) => {
+  try {
+    const result = await authService.resetPassword(email, code, newPassword);
+    return result;
+  } catch (error) {
+    console.error('Password reset failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+  // Handle MFA enable request
+  ipcMain.handle('enable-mfa', async () => {
+  try {
+    const result = await authService.enableMFA();
+    return result;
+  } catch (error) {
+    console.error('MFA enable failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+  // Handle MFA verification
+  ipcMain.handle('verify-mfa-setup', async (event, code) => {
+  try {
+    const result = await authService.verifyMFASetup(code);
+    return result;
+  } catch (error) {
+    console.error('MFA verification failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+  // Handle MFA disable request
+  ipcMain.handle('disable-mfa', async () => {
+  try {
+    const result = await authService.disableMFA();
+    return result;
+  } catch (error) {
+    console.error('MFA disable failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+  ipcMain.on('user-logged-out', async () => {
   console.log('🚪 User logged out');
   
   try {
@@ -178,6 +316,7 @@ ipcMain.on('user-logged-out', async () => {
     // Clear stored auth data
     store.set('user_authenticated', false);
     store.delete('user_info');
+    store.delete('last_auth_time');
     
     console.log('✅ User signed out and session ended');
   } catch (error) {
@@ -185,12 +324,68 @@ ipcMain.on('user-logged-out', async () => {
   }
 });
 
-ipcMain.on('close-app', () => {
-  app.quit();
+  // Get authentication status
+  ipcMain.handle('get-auth-status', async () => {
+  try {
+    const authStatus = authService.getAuthStatus();
+    const storedAuth = store.get('user_authenticated', false);
+    const userInfo = store.get('user_info', null);
+    
+    return {
+      success: true,
+      authenticated: authStatus.authenticated && storedAuth,
+      user: userInfo,
+      session: authStatus.session,
+      lastActivity: authStatus.lastActivity,
+      sessionValid: authStatus.sessionValid
+    };
+  } catch (error) {
+    console.error('Failed to get auth status:', error);
+    return {
+      success: false,
+      error: error.message,
+      authenticated: false
+    };
+  }
 });
 
-// Question and Answer handling
-ipcMain.handle('save-question-answer', async (event, data) => {
+  // Validate current session
+  ipcMain.handle('validate-session', async () => {
+  try {
+    const isValid = await authService.validateSession();
+    return {
+      success: true,
+      valid: isValid
+    };
+  } catch (error) {
+    console.error('Session validation failed:', error);
+    return {
+      success: false,
+      error: error.message,
+      valid: false
+    };
+  }
+});
+
+  ipcMain.on('close-app', () => {
+    app.quit();
+  });
+
+  // Handle window focus request
+  ipcMain.handle('focus-main-window', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.show();
+      mainWindow.focus();
+      return true;
+    }
+    return false;
+  });
+
+  // Question and Answer handling
+  ipcMain.handle('save-question-answer', async (event, data) => {
   try {
     const result = await authService.saveQuestionAnswer(
       data.questionText,
@@ -210,8 +405,8 @@ ipcMain.handle('save-question-answer', async (event, data) => {
   }
 });
 
-// Data transfer to Portal
-ipcMain.handle('transfer-data-to-portal', async () => {
+  // Data transfer to Portal
+  ipcMain.handle('transfer-data-to-portal', async () => {
   try {
     const result = await authService.transferDataToPortal();
     return result;
@@ -221,8 +416,8 @@ ipcMain.handle('transfer-data-to-portal', async () => {
   }
 });
 
-// Export user data
-ipcMain.handle('export-user-data', async (event, format = 'json') => {
+  // Export user data
+  ipcMain.handle('export-user-data', async (event, format = 'json') => {
   try {
     const result = await authService.exportUserData(format);
     return result;
@@ -232,8 +427,8 @@ ipcMain.handle('export-user-data', async (event, format = 'json') => {
   }
 });
 
-// Get user history
-ipcMain.handle('get-user-history', async (event, limit = 50) => {
+  // Get user history
+  ipcMain.handle('get-user-history', async (event, limit = 50) => {
   try {
     const history = await authService.getUserHistory(limit);
     return { success: true, history };
@@ -243,8 +438,8 @@ ipcMain.handle('get-user-history', async (event, limit = 50) => {
   }
 });
 
-// Sync account data
-ipcMain.handle('sync-account-data', async () => {
+  // Sync account data
+  ipcMain.handle('sync-account-data', async () => {
   try {
     const result = await authService.syncAccountData();
     return { success: true, result };
@@ -254,16 +449,17 @@ ipcMain.handle('sync-account-data', async () => {
   }
 });
 
-// Log activity
-ipcMain.handle('log-activity', async (event, featureName, action, details) => {
-  try {
-    await authService.logActivity(featureName, action, details);
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to log activity:', error);
-    return { success: false, error: error.message };
-  }
-});
+  // Log activity
+  ipcMain.handle('log-activity', async (event, featureName, action, details) => {
+    try {
+      await authService.logActivity(featureName, action, details);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+      return { success: false, error: error.message };
+    }
+  });
+}
 
 function createMainWindow() {
   const config = loadConfig();
@@ -280,7 +476,8 @@ function createMainWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      enableRemoteModule: true
+      enableRemoteModule: true,
+      webSecurity: true
   },
   icon: resolveAsset('logo_m.png'),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
@@ -413,46 +610,7 @@ function createOnboardingWindow() {
   onboardingWindow.setMenuBarVisibility(false);
 }
 
-function createAuthWindow() {
-  if (authWindow && !authWindow.isDestroyed()) {
-    authWindow.focus();
-    return;
-  }
-
-  authWindow = new BrowserWindow({
-    width: 600,
-    height: 800,
-    resizable: false,
-    center: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: true
-    },
-    icon: resolveAsset('logo_m.png'),
-    title: 'Sign In - Hintify SnapAssist AI',
-    show: false
-  });
-
-  authWindow.loadFile(path.join(__dirname, 'renderer', 'auth.html'));
-
-  authWindow.once('ready-to-show', () => {
-    authWindow.show();
-    
-    if (isDevelopment) {
-      authWindow.webContents.openDevTools();
-    }
-  });
-
-  authWindow.on('closed', () => {
-    authWindow = null;
-  });
-
-  // Remove menu bar for auth window
-  authWindow.setMenuBarVisibility(false);
-  
-  return authWindow;
-}
+// createAuthWindow function removed - now using direct browser authentication
 
 // Check authentication status
 function checkAuthStatus() {
@@ -501,6 +659,9 @@ function createMenuTemplate() {
         authStatus.authenticated ? {
           label: `Sign Out (${authStatus.user?.name || authStatus.user?.email || 'User'})`,
           click: () => {
+            // End backend session
+            Promise.resolve().then(() => authService.signOut()).catch(() => {});
+
             // Clear auth data
             store.set('user_authenticated', false);
             store.delete('user_info');
@@ -518,7 +679,10 @@ function createMenuTemplate() {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('show-sign-in');
             } else {
-              createAuthWindow();
+              // Open browser directly for authentication
+              const authUrl = 'https://hintify.nexus-v.tech/sign-in?source=app';
+              const { shell } = require('electron');
+              shell.openExternal(authUrl);
             }
           }
         },
@@ -643,128 +807,6 @@ function createMenuTemplate() {
   return template;
 }
 
-// Handle deep link
-async function handleDeepLink(url) {
-  console.log('Deep link received:', url);
-  
-  if (!url || !url.startsWith(`${PROTOCOL}://`)) {
-    return;
-  }
-  
-  try {
-    const urlObj = new URL(url);
-    const action = urlObj.pathname.slice(1); // Remove leading '/'
-    const params = Object.fromEntries(urlObj.searchParams);
-    
-    console.log('Deep link action:', action, 'params:', params);
-    
-    if (action === 'auth-success') {
-      // Extract user data from URL parameters with comprehensive fallbacks
-      const userData = {
-        id: params.userId || params.user_id || params.id,
-        email: params.email || params.userEmail || params.emailAddress,
-        name: params.name || params.fullName || params.userName || params.displayName,
-        firstName: params.firstName || params.first_name,
-        lastName: params.lastName || params.last_name,
-        imageUrl: params.imageUrl || params.image_url || params.avatar || params.picture,
-        username: params.username,
-        provider: params.provider || 'unknown',
-        timestamp: params.timestamp
-      };
-      
-      // Filter out undefined/null/empty values
-      Object.keys(userData).forEach(key => {
-        if (userData[key] === undefined || userData[key] === null || userData[key] === '') {
-          delete userData[key];
-        }
-      });
-      
-      console.log('🔑 Authentication successful via deep link. User data:', {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        hasImage: !!userData.imageUrl,
-        provider: userData.provider,
-        username: userData.username
-      });
-      
-      // Validate essential fields
-      if (!userData.id && !userData.email) {
-        console.error('❌ Invalid authentication data: missing both ID and email');
-        return;
-      }
-      
-      // Process authentication through AuthService
-      try {
-        const authResult = await authService.processAuthentication(userData);
-        
-        // Save authentication data to store
-        store.set('user_authenticated', true);
-        store.set('user_info', authResult.user);
-        
-        console.log('💾 User authenticated and stored in database:', authResult.user.id);
-        
-        // Immediately notify all windows of successful authentication
-        const authStatusUpdate = {
-          authenticated: true,
-          user: authResult.user
-        };
-        
-        [authWindow, mainWindow].forEach(window => {
-          if (window && !window.isDestroyed()) {
-            console.log(`📢 Sending auth update to ${window === authWindow ? 'auth' : 'main'} window`);
-            
-            window.webContents.send('deep-link-received', {
-              action: 'auth-success',
-              user: authResult.user
-            });
-            
-            window.webContents.send('auth-status-updated', authStatusUpdate);
-          }
-        });
-        
-      } catch (authError) {
-        console.error('❌ Authentication processing failed:', authError);
-        // Still update store with basic info as fallback
-        store.set('user_authenticated', true);
-        store.set('user_info', {
-          ...userData,
-          authenticatedAt: new Date().toISOString()
-        });
-      }
-      
-      // Update app menu with new auth status
-      const menu = Menu.buildFromTemplate(createMenuTemplate());
-      Menu.setApplicationMenu(menu);
-      
-      // Close auth window and show main window
-      if (authWindow && !authWindow.isDestroyed()) {
-        console.log('🚪 Closing auth window...');
-        setTimeout(() => {
-          authWindow.close();
-        }, 1500); // Give user time to see success message
-      }
-      
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        console.log('🎯 Focusing main window...');
-        setTimeout(() => {
-          mainWindow.show();
-          mainWindow.focus();
-        }, 500);
-      }
-      
-      console.log('✅ Authentication completed and all systems notified');
-      
-    } else {
-      console.log('Unknown deep link action:', action);
-    }
-  } catch (error) {
-    console.error('❌ Error parsing deep link:', error);
-  }
-}
-
 function registerGlobalShortcuts() {
   // Register global shortcut for screenshot capture
   const captureShortcut = process.platform === 'darwin' ? 'Cmd+Shift+H' : 'Ctrl+Shift+H';
@@ -776,6 +818,172 @@ function registerGlobalShortcuts() {
   });
 
   console.log(`Global shortcut registered: ${captureShortcut}`);
+}
+
+// Handle deep link authentication
+async function handleDeepLink(url) {
+  try {
+    console.log('🔗 Processing deep link:', url);
+
+    const urlObj = new URL(url);
+    const protocol = urlObj.protocol;
+    const pathname = urlObj.pathname;
+
+    if (protocol !== 'hintify:') {
+      console.warn('⚠️ Invalid protocol for deep link:', protocol);
+      return;
+    }
+
+    // Handle authentication deep link
+    if (pathname === '//auth' || pathname === '/auth') {
+      const searchParams = urlObj.searchParams;
+      const accessToken = searchParams.get('token') || searchParams.get('access_token'); // Support both formats
+      const refreshToken = searchParams.get('refresh_token');
+      const userDataStr = searchParams.get('user');
+      const expiresIn = searchParams.get('expires_in');
+      const tokenType = searchParams.get('token_type');
+
+      console.log('🔗 Deep link parameters received:', {
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken,
+        hasUserData: !!userDataStr,
+        accessTokenLength: accessToken?.length,
+        refreshTokenLength: refreshToken?.length
+      });
+
+      if (accessToken && refreshToken) {
+        console.log('🔐 Authentication tokens received via deep link');
+
+        // Parse user data
+        let userData = null;
+        if (userDataStr) {
+          try {
+            userData = JSON.parse(decodeURIComponent(userDataStr));
+            console.log('👤 User data parsed:', {
+              id: userData.id,
+              email: userData.email,
+              name: userData.name
+            });
+          } catch (error) {
+            console.warn('⚠️ Failed to parse user data from deep link:', error);
+          }
+        }
+
+        // Process the authentication tokens
+        await processDeepLinkAuth({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_in: parseInt(expiresIn) || 3600,
+          token_type: tokenType || 'bearer',
+          user: userData
+        });
+
+        // Show main window and focus it
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createMainWindow();
+        }
+
+        // Auth window no longer used - authentication handled via browser
+
+      } else {
+        console.warn('⚠️ Deep link missing required authentication tokens');
+
+        // Show error dialog
+        if (mainWindow) {
+          dialog.showErrorBox(
+            'Authentication Error',
+            'The authentication link is missing required information. Please try signing in again from the website.'
+          );
+        }
+      }
+    } else {
+      console.warn('⚠️ Unknown deep link path:', pathname);
+    }
+
+  } catch (error) {
+    console.error('❌ Error processing deep link:', error);
+
+    if (mainWindow) {
+      dialog.showErrorBox(
+        'Deep Link Error',
+        'There was an error processing the authentication link. Please try again.'
+      );
+    }
+  }
+}
+
+// Process authentication tokens from deep link
+async function processDeepLinkAuth(tokens) {
+  try {
+    console.log('🔐 Processing deep link authentication tokens...');
+
+    if (!supabaseService) {
+      throw new Error('Supabase service not initialized');
+    }
+
+    // Set the session in Supabase
+    const sessionData = await supabaseService.setSession(tokens.access_token, tokens.refresh_token);
+
+    let userData;
+
+    // Use user data from deep link if available, otherwise fetch from Supabase
+    if (tokens.user && tokens.user.id && tokens.user.email) {
+      console.log('📦 Using user data from deep link');
+      userData = {
+        id: tokens.user.id,
+        email: tokens.user.email,
+        name: tokens.user.name || tokens.user.firstName,
+        firstName: tokens.user.firstName,
+        lastName: tokens.user.lastName,
+        avatar: tokens.user.avatar,
+        supabase_user_id: tokens.user.id
+      };
+    } else {
+      console.log('🔍 Fetching user data from Supabase');
+      // Get user data from Supabase
+      const user = await supabaseService.getCurrentUser();
+      if (!user) {
+        throw new Error('Failed to get user data from Supabase');
+      }
+
+      // Extract user data in the format expected by AuthService
+      userData = supabaseService.extractUserData(user, sessionData.session);
+    }
+
+    // Store tokens securely
+    store.set('supabase_access_token', tokens.access_token);
+    store.set('supabase_refresh_token', tokens.refresh_token);
+    store.set('supabase_token_expires_at', Date.now() + (tokens.expires_in * 1000));
+
+    // Process authentication through existing auth service
+    if (authService) {
+      await authService.processAuthentication(userData);
+    }
+
+    // Update local storage
+    store.set('user_authenticated', true);
+    store.set('user_info', userData);
+    store.set('last_auth_time', new Date().toISOString());
+
+    // Notify main window of successful authentication
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('auth-status-updated', {
+        authenticated: true,
+        user: userData,
+        timestamp: new Date().toISOString(),
+        source: 'deeplink'
+      });
+    }
+
+    console.log('✅ Deep link authentication processed successfully');
+
+  } catch (error) {
+    console.error('❌ Error processing deep link authentication:', error);
+    throw error;
+  }
 }
 
 function setupApp() {
@@ -821,6 +1029,13 @@ function setupApp() {
     }
   }
 
+  // Handle deep link if one was received during startup
+  if (deeplinkingUrl) {
+    console.log('🔗 Processing startup deep link:', deeplinkingUrl);
+    handleDeepLink(deeplinkingUrl);
+    deeplinkingUrl = null; // Clear after processing
+  }
+
   // Set up menu
   const menu = Menu.buildFromTemplate(createMenuTemplate());
   Menu.setApplicationMenu(menu);
@@ -833,30 +1048,47 @@ function setupApp() {
     try {
       await portalService.syncPendingTransfers();
     } catch (error) {
-      // Silently fail for periodic sync
+      console.debug('Periodic sync failed (non-fatal):', error?.message || error);
     }
   }, 300000); // Every 5 minutes
 }
 
+// Protocol registration for deep linking
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('hintify', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('hintify');
+}
+
+// Handle deep linking on Windows/Linux
+app.on('second-instance', (event, commandLine) => {
+  console.log('🔗 Second instance detected, handling deep link...');
+
+  // Someone tried to run a second instance, focus our window instead
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+
+  // Handle deep link from command line
+  const url = commandLine.find(arg => arg.startsWith('hintify://'));
+  if (url) {
+    console.log('🔗 Deep link URL from second instance:', url);
+    handleDeepLink(url);
+  }
+});
+
+// Handle deep linking on macOS
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  console.log('🔗 Deep link URL from macOS:', url);
+  handleDeepLink(url);
+});
+
 // App event handlers
 app.whenReady().then(() => {
-  // Ensure single instance for better deep link handling
-  const gotTheLock = app.requestSingleInstanceLock();
-  
-  if (!gotTheLock) {
-    app.quit();
-    return;
-  }
-  
-  // Register protocol for deep linking
-  if (process.defaultApp) {
-    if (process.argv.length >= 2) {
-      app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
-    }
-  } else {
-    app.setAsDefaultProtocolClient(PROTOCOL);
-  }
-  
   // About panel with author credit
   if (app.setAboutPanelOptions) {
     app.setAboutPanelOptions({
@@ -867,16 +1099,17 @@ app.whenReady().then(() => {
       copyright: '© 2025 AryanVBW — demo@hintify.app'
     });
   }
-  setupApp();
+  // Register IPC handlers after app is ready
+  registerIpcHandlers();
 
-  // Handle deep link if app was opened with one
-  if (process.argv.length >= 2) {
-    const url = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
-    if (url) {
-      console.log('Initial deep link:', url);
-      setTimeout(() => handleDeepLink(url), 1000); // Delay to ensure windows are created
-    }
+  // Handle deep link from command line arguments (Windows/Linux)
+  const url = process.argv.find(arg => arg.startsWith('hintify://'));
+  if (url) {
+    console.log('🔗 Deep link URL from command line:', url);
+    deeplinkingUrl = url;
   }
+
+  setupApp();
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked
@@ -901,30 +1134,6 @@ app.on('will-quit', () => {
 app.on('activate', () => {
   if (mainWindow === null) {
     createMainWindow();
-  }
-});
-
-// Handle deep link on macOS
-app.on('open-url', (event, url) => {
-  event.preventDefault();
-  deeplinkingUrl = url;
-  console.log('macOS deep link:', url);
-  handleDeepLink(url);
-});
-
-// Handle deep link on Windows/Linux
-app.on('second-instance', (event, commandLine, workingDirectory) => {
-  // Someone tried to run a second instance, focus our window instead
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
-  
-  // Handle deep link from command line
-  const url = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`));
-  if (url) {
-    console.log('Windows/Linux deep link:', url);
-    handleDeepLink(url);
   }
 });
 

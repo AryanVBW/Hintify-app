@@ -1,216 +1,252 @@
-const { ipcRenderer, shell } = require('electron');
+const { ipcRenderer } = require('electron');
 const Store = require('electron-store');
 const path = require('path');
+
+// Load environment variables
+try {
+    require('dotenv').config({
+        path: path.resolve(__dirname, '../../.env.local')
+    });
+} catch (e) {
+    console.debug('dotenv not loaded in renderer (non-fatal):', e?.message || e);
+}
 
 // Initialize store
 const store = new Store();
 
-// Load app images with proper paths
+// Authentication state
+let authState = {
+    user: null,
+    session: null,
+    isAuthenticated: false
+};
+
+// UI Helper Functions
+function showLoading(message = 'Loading...') {
+    const loadingDiv = document.getElementById('loading');
+    const statusDiv = document.getElementById('status');
+    
+    if (loadingDiv) {
+        loadingDiv.style.display = 'block';
+        loadingDiv.textContent = message;
+    }
+    
+    if (statusDiv) {
+        statusDiv.textContent = message;
+    }
+}
+
+function hideLoading() {
+    const loadingDiv = document.getElementById('loading');
+    if (loadingDiv) {
+        loadingDiv.style.display = 'none';
+    }
+}
+
+function showError(title, message) {
+    const errorDiv = document.getElementById('error');
+    const errorTitleDiv = document.getElementById('error-title');
+    const errorMessageDiv = document.getElementById('error-message');
+    
+    if (errorDiv) errorDiv.style.display = 'block';
+    if (errorTitleDiv) errorTitleDiv.textContent = title;
+    if (errorMessageDiv) errorMessageDiv.textContent = message;
+    
+    console.error(`${title}: ${message}`);
+}
+
+function hideError() {
+    const errorDiv = document.getElementById('error');
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+    }
+}
+
+function updateStatus(message) {
+    const statusDiv = document.getElementById('status');
+    if (statusDiv) {
+        statusDiv.textContent = message;
+    }
+    console.log(`Status: ${message}`);
+}
+
+// Load app images
 function loadAppImages() {
+    const logoImg = document.getElementById('app-logo');
+    if (logoImg) {
+        logoImg.src = path.join(__dirname, '../../assets/logo.png');
+        logoImg.onerror = () => {
+            console.warn('Logo image not found, using fallback');
+            logoImg.style.display = 'none';
+        };
+    }
+}
+
+// Check authentication status with main process
+async function checkAuthStatus() {
     try {
-        const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
-        const basePath = isDev ? '../../assets/' : (process.resourcesPath + '/assets/');
+        const authStatus = await ipcRenderer.invoke('get-auth-status');
+        console.log('🔍 Auth status from main process:', authStatus);
         
-        console.log('Loading images in', isDev ? 'development' : 'production', 'mode from:', basePath);
-        
-        // Set logo image
-        const appLogo = document.getElementById('app-logo');
-        if (appLogo) {
-            appLogo.src = path.join(basePath, 'logo_m.png');
+        if (authStatus?.isAuthenticated && authStatus?.user) {
+            console.log('✅ User already authenticated');
+            authState.user = authStatus.user;
+            authState.isAuthenticated = true;
+            
+            // Close auth window and return to main app
+            ipcRenderer.send('auth-completed', authStatus.user);
+            return true;
         }
+        
+        return false;
     } catch (error) {
-        console.error('Error loading app images:', error);
-        // Fallback: try to load with relative paths
-        const appLogo = document.getElementById('app-logo');
-        if (appLogo) appLogo.src = '../../assets/logo_m.png';
+        console.error('❌ Failed to check auth status:', error);
+        return false;
     }
 }
 
-// Update status text
-function updateStatus(text) {
-    const statusEl = document.getElementById('status-text');
-    if (statusEl) {
-        statusEl.textContent = text;
-    }
-}
-
-// Handle sign-in button click
-function handleSignIn() {
-    const signInBtn = document.getElementById('sign-in-btn');
-    if (!signInBtn) return;
-
-    // Add loading state
-    signInBtn.classList.add('loading');
-    signInBtn.disabled = true;
-    updateStatus('Opening Hintify website...');
-
-    // Open the website for authentication
-    const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
-    const websiteUrl = isDev 
-        ? 'http://localhost:3000/auth-success?source=app'
-        : 'https://hintify-h4q78ezmn-aryanvbws-projects.vercel.app/auth-success?source=app';
-    
-    console.log('Opening website URL:', websiteUrl, '(dev mode:', isDev, ')');
-    
-    shell.openExternal(websiteUrl).then(() => {
-        updateStatus('Please complete sign-in in your browser');
-        
-        // Reset button after a delay
-        setTimeout(() => {
-            signInBtn.classList.remove('loading');
-            signInBtn.disabled = false;
-            updateStatus('Waiting for authentication...');
-        }, 2000);
-    }).catch((error) => {
-        console.error('Failed to open website:', error);
-        updateStatus('Failed to open website. Please try again.');
-        signInBtn.classList.remove('loading');
-        signInBtn.disabled = false;
+// Handle successful authentication
+function handleAuthSuccess(user, session) {
+    console.log('✅ Authentication successful:', {
+        userId: user?.id,
+        email: user?.email,
+        provider: user?.provider || 'supabase'
     });
+    
+    authState.user = user;
+    authState.session = session;
+    authState.isAuthenticated = true;
+    
+    // Update UI
+    updateStatus('Authentication successful! Redirecting...');
+    hideError();
+    hideLoading();
+    
+    // Send to main process
+    ipcRenderer.send('auth-completed', user);
 }
 
-// Check authentication status
-function checkAuthStatus() {
-    // Check if user is authenticated (we'll implement this with deep linking)
-    const isAuthenticated = store.get('user_authenticated', false);
-    const userInfo = store.get('user_info', null);
+// Handle authentication failure
+function handleAuthError(error) {
+    console.error('❌ Authentication failed:', error);
     
-    if (isAuthenticated && userInfo) {
-        updateStatus('Authentication verified! Opening app...');
+    authState.user = null;
+    authState.session = null;
+    authState.isAuthenticated = false;
+    
+    // Update UI
+    showError('Authentication Failed', error.message || 'An unexpected error occurred');
+    hideLoading();
+    updateStatus('Authentication failed');
+}
+
+// Initialize Supabase authentication UI
+function initializeSupabaseAuth() {
+    console.log('🚀 Initializing Supabase authentication...');
+    
+    // Hide legacy authentication containers (if they exist)
+    const legacySignIn = document.getElementById('clerk-signin');
+    const legacySignUp = document.getElementById('clerk-signup');
+    if (legacySignIn) legacySignIn.style.display = 'none';
+    if (legacySignUp) legacySignUp.style.display = 'none';
+    
+    // Show Supabase authentication UI
+    const authActions = document.querySelector('.auth-actions');
+    if (authActions) {
+        authActions.innerHTML = `
+            <div class="supabase-auth-container">
+                <div class="auth-message">
+                    <h3>Sign in to Hintify</h3>
+                    <p>Choose your preferred sign-in method in the browser</p>
+                </div>
+
+                <button id="browser-signin-btn" class="btn btn-primary">
+                    <span class="btn-text">Open Sign In Page</span>
+                    <span class="btn-icon">🌐</span>
+                </button>
+
+                <div class="auth-note">
+                    <p>You can sign in with <strong>Google</strong> or <strong>Email</strong> in the browser</p>
+                    <p class="text-sm">After signing in, click "Open App" to return here</p>
+                </div>
+            </div>
+        `;
         
-        // Send message to main process to show main window
-        setTimeout(() => {
-            ipcRenderer.send('auth-completed', userInfo);
-        }, 1000);
-    } else {
-        updateStatus('Ready to sign in');
+        // Add event listener for browser sign-in
+        const browserSignInBtn = document.getElementById('browser-signin-btn');
+        if (browserSignInBtn) {
+            browserSignInBtn.addEventListener('click', handleBrowserSignIn);
+        }
+    }
+    
+    updateStatus('Ready to sign in');
+}
+
+// Handle browser sign-in
+async function handleBrowserSignIn() {
+    try {
+        console.log('🌐 Opening browser for authentication...');
+        showLoading('Opening browser for sign-in...');
+        
+        // Send request to main process to open browser
+        const result = await ipcRenderer.invoke('open-browser-auth');
+        
+        if (result?.success) {
+            updateStatus('Please complete sign-in in your browser...');
+            // The main process will handle the deep link callback
+        } else {
+            throw new Error(result?.error || 'Failed to open browser authentication');
+        }
+        
+    } catch (error) {
+        console.error('❌ Browser sign-in failed:', error);
+        handleAuthError(error);
     }
 }
 
-// Listen for authentication updates from main process
-ipcRenderer.on('auth-status-updated', (event, authData) => {
-    console.log('🔄 Auth status update received:', authData);
+// Listen for authentication events from main process
+ipcRenderer.on('auth-status-updated', (event, data) => {
+    console.log('📡 Auth status updated:', data);
     
-    if (authData.authenticated && authData.user) {
-        const user = authData.user;
-        
-        // Log received user data for debugging
-        console.log('✅ User authenticated successfully:', {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            hasImage: !!user.imageUrl,
-            provider: user.provider,
-            allFields: Object.keys(user)
-        });
-        
-        updateStatus('Authentication successful!');
-        
-        // Save auth status with all received data
-        store.set('user_authenticated', true);
-        store.set('user_info', user);
-        
-        // Show success message with user details
-        const userName = user.name || user.email || user.firstName || 'User';
-        setTimeout(() => {
-            updateStatus(`Welcome back, ${userName}!`);
-        }, 500);
-        
-        // Close auth window and show main app
-        setTimeout(() => {
-            ipcRenderer.send('auth-completed', user);
-        }, 2000);
+    if (data.authenticated && data.user) {
+        handleAuthSuccess(data.user, data.session);
     } else {
-        console.log('❌ Authentication failed or incomplete data');
-        updateStatus('Authentication failed. Please try again.');
+        handleAuthError(new Error('Authentication was cancelled or failed'));
     }
 });
 
-// Listen for deep link data
-ipcRenderer.on('deep-link-received', (event, linkData) => {
-    console.log('🔗 Deep link received in auth window:', linkData);
+// Listen for deep link authentication
+ipcRenderer.on('deep-link-auth', (event, data) => {
+    console.log('🔗 Deep link authentication received:', data);
     
-    if (linkData.action === 'auth-success' && linkData.user) {
-        const user = linkData.user;
-        
-        // Log detailed user data for debugging
-        console.log('📄 Received user data from deep link:', {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            imageUrl: user.imageUrl,
-            provider: user.provider,
-            hasAccessToken: !!user.accessToken,
-            allKeys: Object.keys(user)
-        });
-        
-        // Validate user data
-        if (!user.id && !user.email) {
-            console.error('❌ Invalid user data: missing essential fields');
-            updateStatus('Authentication failed: Invalid user data');
-            return;
-        }
-        
-        updateStatus('Authentication successful!');
-        
-        // Save auth data with all received information
-        store.set('user_authenticated', true);
-        store.set('user_info', user);
-        
-        // Show welcome message
-        const userName = user.name || user.firstName || user.email || 'User';
-        setTimeout(() => {
-            updateStatus(`Welcome, ${userName}!`);
-        }, 500);
-        
-        // Complete authentication
-        setTimeout(() => {
-            ipcRenderer.send('auth-completed', user);
-        }, 1500);
+    if (data.success && data.user) {
+        handleAuthSuccess(data.user, data.session);
     } else {
-        console.log('❌ Invalid deep link data:', linkData);
-        updateStatus('Authentication failed: Invalid data received');
+        handleAuthError(new Error(data.error || 'Deep link authentication failed'));
     }
 });
 
 // Initialize the auth screen
-function initializeAuth() {
-    console.log('🔐 Initializing authentication screen...');
-    console.log('Environment check:', {
-        NODE_ENV: process.env.NODE_ENV,
-        hasDevArg: process.argv.includes('--development'),
-        isDev: process.env.NODE_ENV === 'development' || process.argv.includes('--development')
-    });
+async function initializeAuth() {
+    console.log('🔐 Initializing Supabase authentication screen...');
     
     // Load images
     loadAppImages();
     
-    // Check existing auth status
-    checkAuthStatus();
-    
-    // Set up event listeners
-    const signInBtn = document.getElementById('sign-in-btn');
-    if (signInBtn) {
-        signInBtn.addEventListener('click', handleSignIn);
+    // Check existing auth status first
+    const isAlreadyAuthenticated = await checkAuthStatus();
+    if (isAlreadyAuthenticated) {
+        return; // User is already authenticated, auth window will close
     }
     
-    // Handle keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            handleSignIn();
-        } else if (e.key === 'Escape') {
-            // Allow user to close the app
-            ipcRenderer.send('close-app');
-        }
-    });
+    // Initialize Supabase authentication UI
+    initializeSupabaseAuth();
 }
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', initializeAuth);
 
-// Handle window focus (user might return from browser)
+// Handle window focus
 window.addEventListener('focus', () => {
     // Check if authentication completed while user was away
     checkAuthStatus();
@@ -218,7 +254,11 @@ window.addEventListener('focus', () => {
 
 // Export functions for potential use
 module.exports = {
-    handleSignIn,
+    initializeSupabaseAuth: initializeSupabaseAuth,
+    handleAuthSuccess,
+    handleAuthError,
     checkAuthStatus,
-    updateStatus
+    updateStatus,
+    showError,
+    hideError
 };

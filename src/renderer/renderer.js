@@ -49,26 +49,63 @@ function applyTheme(theme) {
   document.body.className = `theme-${theme || 'dark'}`;
 }
 
-// Check authentication status
-function checkAuthStatus() {
-  const isAuthenticated = store.get('user_authenticated', false);
-  const userData = store.get('user_info', null);
-  
-  console.log('🔍 Checking authentication status:', {
-    isAuthenticated,
-    hasUserData: !!userData,
-    userEmail: userData?.email,
-    userName: userData?.name || userData?.firstName,
-    storedAt: userData?.authenticatedAt
-  });
-  
-  if (isAuthenticated && userData) {
-    console.log('✅ User is authenticated, setting up UI...');
-    userInfo = userData;
-    updateAuthUI(true, userData);
-    return true;
-  } else {
+// Check authentication status with enhanced validation
+async function checkAuthStatus() {
+  try {
+    console.log('🔍 Checking authentication status...');
+    
+    // First check local storage
+    const isAuthenticated = store.get('user_authenticated', false);
+    const userData = store.get('user_info', null);
+    const lastAuthTime = store.get('last_auth_time', null);
+    
+    console.log('📊 Local auth status:', {
+      isAuthenticated,
+      hasUserData: !!userData,
+      userEmail: userData?.email,
+      userName: userData?.name || userData?.firstName,
+      lastAuthTime
+    });
+    
+    if (isAuthenticated && userData) {
+      // Validate session with main process
+      try {
+        const authStatus = await ipcRenderer.invoke('get-auth-status');
+        
+        if (authStatus.success && authStatus.authenticated && authStatus.sessionValid) {
+          console.log('✅ User is authenticated with valid session, setting up UI...');
+          userInfo = userData;
+          updateAuthUI(true, userData);
+          return true;
+        } else {
+          console.log('⚠️ Session invalid, clearing authentication...');
+          // Session is invalid, clear local data
+          store.set('user_authenticated', false);
+          store.delete('user_info');
+          store.delete('last_auth_time');
+          userInfo = null;
+          updateAuthUI(false);
+          return false;
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to validate session with main process:', error);
+        // Fallback to local check if main process validation fails
+        if (isAuthenticated && userData) {
+          console.log('✅ Using local authentication data as fallback...');
+          userInfo = userData;
+          updateAuthUI(true, userData);
+          return true;
+        }
+      }
+    }
+    
     console.log('❌ User not authenticated, showing sign-in UI');
+    userInfo = null;
+    updateAuthUI(false);
+    return false;
+    
+  } catch (error) {
+    console.error('❌ Error checking authentication status:', error);
     userInfo = null;
     updateAuthUI(false);
     return false;
@@ -76,7 +113,7 @@ function checkAuthStatus() {
 }
 
 // Update authentication UI
-function updateAuthUI(isAuthenticated, userData = null) {
+function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
   const authBtn = document.getElementById('auth-btn');
   const userAccountSection = document.getElementById('user-account-section');
   const userAvatar = document.getElementById('user-avatar');
@@ -165,48 +202,168 @@ function updateAuthUI(isAuthenticated, userData = null) {
     }
     
     console.log('✅ Enhanced user authentication UI updated successfully');
+  } else if (isGuestMode) {
+    // Guest mode UI
+    if (authBtn) {
+      authBtn.classList.remove('hidden');
+      authBtn.textContent = 'Guest Mode';
+      authBtn.style.backgroundColor = 'var(--accent)';
+      authBtn.style.color = 'white';
+      authBtn.title = 'Currently in Guest Mode - Click to sign in';
+      console.log('🚀 Guest mode button shown with accent color');
+    }
+    if (userAccountSection) {
+      userAccountSection.classList.remove('hidden');
+      console.log('✅ User account section shown for guest mode');
+    }
+
+    // Update UI elements for guest mode
+    if (userAvatar) {
+      userAvatar.src = '../../assets/logo_m.png'; // Default avatar for guest
+    }
+
+    if (userName) {
+      userName.textContent = 'Guest User';
+      userName.style.color = 'var(--fg-text)';
+      console.log('👤 Guest user name set');
+    }
+
+    if (accountEmail) {
+      accountEmail.textContent = 'Using app without account';
+      console.log('📧 Guest mode email text set');
+    }
+
+    if (syncIndicator && syncText) {
+      syncIndicator.classList.remove('active', 'error');
+      syncIndicator.classList.add('guest');
+      syncText.textContent = 'Guest Mode';
+      console.log('🔄 Guest mode sync status set');
+    }
+
+    console.log('✅ Guest mode UI updated successfully');
   } else {
     // Show sign-in button, hide user account section
     if (authBtn) {
       authBtn.classList.remove('hidden');
+      authBtn.textContent = 'Sign In';
+      authBtn.style.backgroundColor = '';
+      authBtn.style.color = '';
+      authBtn.title = 'Sign In to Hintify';
       console.log('✅ Sign-in button shown');
     }
     if (userAccountSection) {
       userAccountSection.classList.add('hidden');
       console.log('🚫 User account section hidden');
     }
-    
+
     console.log('❌ User not authenticated - sign-in UI shown');
   }
 }
 
-// Handle sign-in button click
+// Handle sign-in button click with improved error handling
 function handleSignIn() {
-  console.log('🔐 Sign in requested from main app');
-  
-  // Open the website directly for authentication
-  const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
-  const websiteUrl = isDev 
-    ? 'http://localhost:3000/auth-success?source=app'
-    : 'https://hintify-h4q78ezmn-aryanvbws-projects.vercel.app/auth-success?source=app';
-  
-  console.log('Opening website URL:', websiteUrl, '(dev mode:', isDev, ')');
-  
-  updateStatus('Opening Hintify website...');
-  
-  shell.openExternal(websiteUrl).then(() => {
-    updateStatus('Please complete sign-in in your browser');
+  console.log('🔐 Sign in requested from main app - opening browser directly');
+
+  // Use IPC to tell main process to open browser for authentication
+  const { ipcRenderer } = require('electron');
+  ipcRenderer.invoke('open-browser-auth').then((result) => {
+    if (result.success) {
+      updateStatus('Please complete sign-in in your browser...');
+
+      // Set a timeout to offer guest mode if authentication takes too long
+      setTimeout(() => {
+        if (!userInfo) {
+          console.log('⏰ Authentication timeout - offering guest mode');
+          showAuthenticationTimeoutDialog();
+        }
+      }, 60000); // 60 seconds timeout
+
+    } else {
+      console.error('❌ Failed to open browser:', result.error);
+      handleAuthenticationError('Failed to open browser for sign-in', result.error);
+    }
   }).catch((error) => {
-    console.error('Failed to open website:', error);
-    updateStatus('Failed to open website. Please try again.');
+    console.error('❌ Browser auth error:', error);
+    handleAuthenticationError('Failed to open browser for sign-in', error.message);
   });
 }
 
-// Save question and answer to database
+// Handle authentication errors gracefully
+function handleAuthenticationError(message, error) {
+  updateStatus('Sign-in failed');
+
+  // Show error dialog with option to continue as guest
+  const errorDialog = document.createElement('div');
+  errorDialog.className = 'auth-error-dialog';
+  errorDialog.innerHTML = `
+    <div class="error-dialog-content">
+      <h3>🚫 Sign-in Failed</h3>
+      <p>${message}</p>
+      <p class="error-details">Error: ${error}</p>
+      <div class="error-actions">
+        <button id="retry-auth-btn" class="btn btn-primary">Try Again</button>
+        <button id="continue-guest-error-btn" class="btn btn-secondary">Continue as Guest</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(errorDialog);
+
+  // Add event listeners
+  document.getElementById('retry-auth-btn')?.addEventListener('click', () => {
+    document.body.removeChild(errorDialog);
+    handleSignIn();
+  });
+
+  document.getElementById('continue-guest-error-btn')?.addEventListener('click', () => {
+    document.body.removeChild(errorDialog);
+    enableGuestMode();
+  });
+}
+
+// Show authentication timeout dialog
+function showAuthenticationTimeoutDialog() {
+  const timeoutDialog = document.createElement('div');
+  timeoutDialog.className = 'auth-timeout-dialog';
+  timeoutDialog.innerHTML = `
+    <div class="timeout-dialog-content">
+      <h3>⏰ Taking a while?</h3>
+      <p>Authentication is taking longer than expected. You can continue using the app while waiting.</p>
+      <div class="timeout-actions">
+        <button id="wait-auth-btn" class="btn btn-secondary">Keep Waiting</button>
+        <button id="continue-guest-timeout-btn" class="btn btn-primary">Continue as Guest</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(timeoutDialog);
+
+  // Add event listeners
+  document.getElementById('wait-auth-btn')?.addEventListener('click', () => {
+    document.body.removeChild(timeoutDialog);
+  });
+
+  document.getElementById('continue-guest-timeout-btn')?.addEventListener('click', () => {
+    document.body.removeChild(timeoutDialog);
+    enableGuestMode();
+  });
+}
+
+// Save question and answer to database (works in both authenticated and guest mode)
 async function saveQuestionAnswer(questionText, answerText, questionType = 'text', imageData = null, metadata = null, processingTime = null) {
-  if (!userInfo) {
-    console.warn('Cannot save Q&A: user not authenticated');
+  if (!userInfo && !window.isGuestMode) {
+    console.warn('Cannot save Q&A: user not authenticated and not in guest mode');
     return false;
+  }
+
+  // In guest mode, we don't save to database but still return success for UI consistency
+  if (window.isGuestMode && !userInfo) {
+    console.log('📝 Guest Mode: Q&A would be saved if authenticated:', {
+      questionText: questionText.substring(0, 100) + '...',
+      questionType,
+      hasImageData: !!imageData
+    });
+    return true; // Return success for UI consistency
   }
   
   try {
@@ -245,15 +402,21 @@ async function saveQuestionAnswer(questionText, answerText, questionType = 'text
   }
 }
 
-// Log activity to database
+// Log activity to database (works in both authenticated and guest mode)
 async function logActivity(featureName, action, details = null) {
-  if (!userInfo) {
-    console.warn('Cannot log activity: user not authenticated');
+  if (!userInfo && !window.isGuestMode) {
+    console.warn('Cannot log activity: user not authenticated and not in guest mode');
     return;
   }
-  
+
   try {
-    await ipcRenderer.invoke('log-activity', featureName, action, details);
+    if (userInfo) {
+      // Authenticated user - log to database
+      await ipcRenderer.invoke('log-activity', featureName, action, details);
+    } else if (window.isGuestMode) {
+      // Guest mode - log locally for debugging/analytics
+      console.log(`📊 Guest Activity: ${featureName}.${action}`, details || '');
+    }
   } catch (error) {
     console.error('Failed to log activity:', error);
   }
@@ -1105,8 +1268,8 @@ function triggerCapture() {
   }
 }
 
-// Initialize the app
-function initializeApp() {
+// Initialize the app with async authentication check
+async function initializeApp() {
   console.log('🚀 Initializing Hintify SnapAssist AI...');
   
   // Load configuration
@@ -1118,16 +1281,55 @@ function initializeApp() {
   // Load images with proper paths
   loadAppImages();
   
-  // Check authentication status
-  const isAuthenticated = checkAuthStatus();
-  
-  // Check if onboarding was completed
-  if (!isAuthenticated) {
-    // Show authentication message in main area
-    displayAuthenticationMessage();
+  // Check authentication status (now async)
+  const isAuthenticated = await checkAuthStatus();
+
+  // Check if user has made an authentication choice before
+  const authChoiceMade = store.get('auth_choice_made', false);
+  const guestModeEnabled = store.get('guest_mode_enabled', false);
+
+  console.log('🔍 Auth state check:', { isAuthenticated, authChoiceMade, guestModeEnabled });
+
+  // Always check system readiness (works for both authenticated and guest users)
+  checkSystemReadiness();
+
+  // Determine what to show based on authentication state
+  if (isAuthenticated) {
+    // User is authenticated - show normal authenticated UI
+    console.log('✅ User authenticated - showing main app');
+  } else if (authChoiceMade && guestModeEnabled) {
+    // User previously chose guest mode - restore guest mode
+    console.log('🚀 Restoring guest mode from previous session');
+    window.isGuestMode = true;
+    updateAuthUI(false, null, true);
+    const hintsDisplay = document.getElementById('hints-display');
+    if (hintsDisplay) {
+      hintsDisplay.innerHTML = `
+        <div class="hint-item guest-mode-compact">
+          <div class="hint-label">🚀 Welcome Back!</div>
+          <div class="hint-text">
+            You're continuing in guest mode. All core features are available:
+            <br><br>
+            • Capture screenshots with the 📸 button or <strong>Ctrl+Shift+S</strong>
+            <br>
+            • Process clipboard images with <strong>Ctrl+Shift+V</strong>
+            <br>
+            • Get AI-powered hints without spoiling answers
+            <br><br>
+            <em>Sign in anytime to unlock progress tracking and personalized features!</em>
+          </div>
+        </div>
+      `;
+    }
+    updateStatus('Ready - Guest Mode');
+  } else if (!authChoiceMade) {
+    // First time or user hasn't made a choice - show guest mode welcome message
+    console.log('❓ No auth choice made - showing guest mode options');
+    displayGuestModeMessage();
   } else {
-    // Check system readiness for authenticated users
-    checkSystemReadiness();
+    // Fallback case
+    console.log('🔄 Fallback - showing guest mode options');
+    displayGuestModeMessage();
   }
   
   // Update provider display
@@ -1144,7 +1346,6 @@ function setupEventListeners() {
   const captureBtn = document.getElementById('capture-btn');
   const settingsBtn = document.getElementById('settings-btn');
   const authBtn = document.getElementById('auth-btn');
-  const userInfoDiv = document.getElementById('user-info');
   
   if (captureBtn) {
     captureBtn.addEventListener('click', triggerCapture);
@@ -1159,6 +1360,11 @@ function setupEventListeners() {
   if (authBtn) {
     authBtn.addEventListener('click', handleSignIn);
   }
+
+  // If main process wants to show sign-in
+  ipcRenderer.on('show-sign-in', () => {
+    handleSignIn();
+  });
   
   // Setup account menu and modals
   setupAccountMenu();
@@ -1296,62 +1502,57 @@ function setupEventListeners() {
     console.log('🔄 Auth status updated:', authData);
     
     if (authData.authenticated && authData.user) {
-      console.log('✅ User authenticated, updating UI immediately');
-      
+      console.log('✅ User authenticated via Supabase, updating UI immediately');
+
+      // Clear guest mode if user successfully authenticates
+      window.isGuestMode = false;
+
       // Update local state
       userInfo = authData.user;
       store.set('user_authenticated', true);
       store.set('user_info', authData.user);
-      
+      store.set('last_auth_time', new Date().toISOString());
+      store.set('auth_choice_made', true);
+      store.set('guest_mode_enabled', false);
+
       // Update UI immediately
       updateAuthUI(true, authData.user);
-      
+
       // Clear any authentication messages and show system readiness
       checkSystemReadiness();
-      
+
       updateStatus('Authentication successful! Ready to process images.');
-      
+
+      // Show welcome message
+      const userName = authData.user.name || authData.user.firstName || authData.user.email || 'User';
+      displayHints(`✅ <strong>Welcome, ${userName}!</strong><br><br>You're now signed in with Supabase and ready to use Hintify SnapAssist AI. You can start capturing screenshots or processing clipboard images.`);
+
       console.log('🎨 UI updated for authenticated user:', {
         displayName: authData.user.name || authData.user.firstName || authData.user.email,
         email: authData.user.email,
-        hasImage: !!(authData.user.imageUrl || authData.user.avatar)
+        hasImage: !!(authData.user.imageUrl || authData.user.image_url),
+        provider: authData.user.provider
       });
       
+    } else if (authData.error) {
+      console.log('❌ Authentication failed:', authData.error);
+
+      // Handle authentication failure gracefully
+      handleAuthenticationError('Authentication failed', authData.error);
+
     } else {
       console.log('🚪 User logged out, updating UI');
-      
+
       // User logged out
       userInfo = null;
+      window.isGuestMode = false;
       store.set('user_authenticated', false);
       store.delete('user_info');
-      
+
       updateAuthUI(false);
-      displayAuthenticationMessage();
-      
-      updateStatus('Please sign in to continue');
-    }
-  });
-  
-  // Listen for deep link events (additional handler for direct deep link processing)
-  ipcRenderer.on('deep-link-received', (event, data) => {
-    console.log('🔗 Deep link received in renderer:', data);
-    
-    if (data.action === 'auth-success' && data.user) {
-      console.log('🎉 Processing deep link authentication success');
-      
-      // Update local state immediately
-      userInfo = data.user;
-      store.set('user_authenticated', true);
-      store.set('user_info', data.user);
-      
-      // Update UI
-      updateAuthUI(true, data.user);
-      checkSystemReadiness();
-      
-      updateStatus('Welcome back! Authentication successful.');
-      
-      // Show success message temporarily
-      displayHints(`✅ <strong>Welcome back, ${data.user.name || data.user.firstName || 'User'}!</strong><br><br>You're now signed in and ready to use Hintify SnapAssist AI. You can start capturing screenshots or processing clipboard images.`);
+      displayGuestModeMessage();
+
+      updateStatus('Ready');
     }
   });
   
@@ -1377,18 +1578,23 @@ function setupEventListeners() {
 function setupAccountMenu() {
   const accountMenuBtn = document.getElementById('account-menu-btn');
   const accountDropdown = document.getElementById('account-dropdown');
-  
+
   if (accountMenuBtn && accountDropdown) {
     accountMenuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+
+      // Bring window to front when opening account menu
+      const { ipcRenderer } = require('electron');
+      ipcRenderer.invoke('focus-main-window').catch(console.warn);
+
       accountDropdown.classList.toggle('hidden');
     });
-    
+
     // Close dropdown when clicking outside
     document.addEventListener('click', () => {
       accountDropdown.classList.add('hidden');
     });
-    
+
     accountDropdown.addEventListener('click', (e) => {
       e.stopPropagation();
     });
@@ -1536,7 +1742,7 @@ async function handleClearLocalData() {
     showLoading(true, 'Clearing local data...');
     
     // Sign out user (which clears data)
-    await ipcRenderer.send('user-logged-out');
+  ipcRenderer.send('user-logged-out');
     
     showLoading(false);
     
@@ -1552,29 +1758,105 @@ async function handleClearLocalData() {
   }
 }
 
-// Display authentication message in main area
-function displayAuthenticationMessage() {
+// Display guest mode welcome message in main area
+function displayGuestModeMessage() {
   const hintsDisplay = document.getElementById('hints-display');
   if (!hintsDisplay) return;
 
   hintsDisplay.innerHTML = `
     <div class="welcome-message">
-      <h2>🔐 Authentication Required</h2>
-      <p>Please sign in to use Hintify SnapAssist AI and track your learning progress.</p>
+      <h2>🎯 Welcome to Hintify SnapAssist AI</h2>
+      <p>Start using the app right away! Capture screenshots or process clipboard images to get AI-powered hints.</p>
       <div class="instructions">
-        <h3>Sign In Benefits:</h3>
+        <h3>How to Get Started:</h3>
         <ul>
-          <li>🧠 Track your thinking progress and improvement</li>
-          <li>📊 Access your personalized dashboard</li>
-          <li>🎯 Get hints tailored to your skill level</li>
-          <li>🚀 Sync your preferences across devices</li>
+          <li>📸 <strong>Capture Screenshot:</strong> Click the camera button or press Ctrl+Shift+S</li>
+          <li>📋 <strong>Process Clipboard:</strong> Copy an image and press Ctrl+Shift+V</li>
+          <li>🤖 <strong>Get AI Hints:</strong> Receive intelligent hints without spoiling the answer</li>
+          <li>⚙️ <strong>Configure AI:</strong> Choose between local Ollama or cloud Gemini in settings</li>
         </ul>
-        <div class="setup-reminder">
-          <p><strong>Ready to start?</strong> Click the <strong>"Sign In"</strong> button in the top-right corner to authenticate with your Hintify account.</p>
+        <div class="guest-mode-actions">
+          <button id="continue-guest-btn" class="btn btn-primary">
+            <span class="btn-text">Continue as Guest</span>
+            <span class="btn-icon">🚀</span>
+          </button>
+          <button id="sign-in-prompt-btn" class="btn btn-secondary">
+            <span class="btn-text">Sign In for More Features</span>
+            <span class="btn-icon">🔐</span>
+          </button>
+        </div>
+        <div class="sign-in-benefits">
+          <h4>Sign In Benefits:</h4>
+          <ul>
+            <li>🧠 Track your thinking progress and improvement</li>
+            <li>📊 Access your personalized dashboard</li>
+            <li>🎯 Get hints tailored to your skill level</li>
+            <li>🚀 Sync your preferences across devices</li>
+          </ul>
         </div>
       </div>
     </div>
   `;
+
+  // Add event listeners for the new buttons
+  const continueGuestBtn = document.getElementById('continue-guest-btn');
+  const signInPromptBtn = document.getElementById('sign-in-prompt-btn');
+
+  if (continueGuestBtn) {
+    continueGuestBtn.addEventListener('click', () => {
+      console.log('🚀 User chose to continue as guest');
+      enableGuestMode();
+    });
+  }
+
+  if (signInPromptBtn) {
+    signInPromptBtn.addEventListener('click', () => {
+      console.log('🔐 User chose to sign in from guest prompt');
+      handleSignIn();
+    });
+  }
+}
+
+// Enable guest mode functionality
+function enableGuestMode() {
+  console.log('🚀 Enabling guest mode...');
+
+  // Set guest mode flag both in memory and persistent storage
+  window.isGuestMode = true;
+  store.set('guest_mode_enabled', true);
+  store.set('auth_choice_made', true); // Mark that user has made a choice
+
+  // Update UI to reflect guest mode
+  updateAuthUI(false, null, true); // Pass true for guest mode
+
+  // Show welcome message for guest mode (fix HTML rendering)
+  const hintsDisplay = document.getElementById('hints-display');
+  if (hintsDisplay) {
+    hintsDisplay.innerHTML = `
+      <div class="hint-item guest-mode-compact">
+        <div class="hint-label">🎯 Guest Mode Activated</div>
+        <div class="hint-text">
+          You're now using Hintify SnapAssist AI in guest mode! All core features are available:
+          <br><br>
+          • Capture screenshots with the 📸 button or <strong>Ctrl+Shift+S</strong>
+          <br>
+          • Process clipboard images with <strong>Ctrl+Shift+V</strong>
+          <br>
+          • Get AI-powered hints without spoiling answers
+          <br><br>
+          <em>Sign in anytime to unlock progress tracking and personalized features!</em>
+        </div>
+      </div>
+    `;
+  }
+
+  updateStatus('Ready - Guest Mode');
+}
+
+// Display authentication message in main area (legacy - kept for compatibility)
+function displayAuthenticationMessage() {
+  // Use the new guest mode message instead
+  displayGuestModeMessage();
 }
 
 // Start clipboard monitoring (simplified)
@@ -1599,10 +1881,16 @@ function startClipboardMonitor() {
 }
 
 // Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  initializeApp();
-  // Uncomment to enable auto clipboard monitoring
-  // startClipboardMonitor();
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await initializeApp();
+    // Uncomment to enable auto clipboard monitoring
+    // startClipboardMonitor();
+  } catch (error) {
+    console.error('❌ Failed to initialize app:', error);
+    updateStatus('Initialization failed');
+    displayHints('❌ Failed to initialize the application. Please refresh and try again.');
+  }
 });
 
 // Handle app focus

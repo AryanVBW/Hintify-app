@@ -24,34 +24,8 @@ class DatabaseService {
     }
     
     this.sql = neon(process.env.DATABASE_URL);
-    this.stackProjectId = process.env.NEXT_PUBLIC_STACK_PROJECT_ID;
-    this.stackSecretKey = process.env.STACK_SECRET_SERVER_KEY;
-    this.jwksUrl = process.env.STACK_JWKS_URL;
     
     console.log('✅ DatabaseService initialized with Neon connection');
-  }
-
-  // Verify JWT token from Stack Auth
-  async verifyToken(token) {
-    try {
-      // In a production environment, you'd fetch and cache the JWKS
-      // For now, we'll do basic verification
-      const decoded = jwt.decode(token, { complete: true });
-      if (!decoded) {
-        throw new Error('Invalid token');
-      }
-      
-      // Verify the token audience and issuer
-      const payload = decoded.payload;
-      if (payload.aud !== this.stackProjectId) {
-        throw new Error('Invalid audience');
-      }
-      
-      return payload;
-    } catch (error) {
-      console.error('Token verification failed:', error);
-      throw error;
-    }
   }
 
   // Create or update user in database
@@ -59,7 +33,7 @@ class DatabaseService {
     try {
       const result = await this.sql`
         SELECT app_data.create_or_update_user(
-          ${userData.stack_user_id || null},
+          ${userData.supabase_user_id || userData.stack_user_id || null},
           ${userData.email},
           ${userData.name || null},
           ${userData.first_name || null},

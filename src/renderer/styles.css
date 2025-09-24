@@ -285,6 +285,11 @@ body {
   opacity: 1;
 }
 
+.sync-indicator.guest {
+  background-color: var(--accent);
+  opacity: 1;
+}
+
 .sync-text {
   color: var(--fg-text);
   font-size: 10px;
@@ -511,6 +516,22 @@ body {
   background-color: var(--hover-bg);
   border-radius: var(--border-radius);
   border-left: 4px solid var(--accent);
+}
+
+/* Compact guest mode display */
+.hint-item.guest-mode-compact {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+.hint-item.guest-mode-compact .hint-label {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.hint-item.guest-mode-compact .hint-text {
+  line-height: 1.4;
 }
 
 .hint-label {
@@ -982,6 +1003,187 @@ body {
   .instructions {
     padding: 16px;
   }
+}
+
+/* Guest Mode Styles */
+.guest-mode-actions {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.guest-mode-actions .btn {
+  min-width: 180px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.guest-mode-actions .btn-primary {
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  color: white;
+  box-shadow: 0 4px 12px rgba(132, 0, 255, 0.3);
+}
+
+.guest-mode-actions .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(132, 0, 255, 0.4);
+}
+
+.guest-mode-actions .btn-secondary {
+  background: var(--button-bg);
+  color: var(--fg-text);
+  border: 1px solid var(--border);
+}
+
+.guest-mode-actions .btn-secondary:hover {
+  background: var(--button-hover);
+  transform: translateY(-1px);
+}
+
+.sign-in-benefits {
+  margin-top: 24px;
+  padding: 16px;
+  background: var(--hover-bg);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border);
+}
+
+.sign-in-benefits h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--label-color);
+  margin-bottom: 12px;
+}
+
+.sign-in-benefits ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sign-in-benefits li {
+  padding: 6px 0;
+  position: relative;
+  padding-left: 20px;
+  font-size: 14px;
+  color: var(--fg-text);
+  opacity: 0.9;
+}
+
+.sign-in-benefits li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+/* Authentication Error Dialog Styles */
+.auth-error-dialog,
+.auth-timeout-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(4px);
+}
+
+.error-dialog-content,
+.timeout-dialog-content {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.error-dialog-content h3,
+.timeout-dialog-content h3 {
+  color: var(--label-color);
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.error-dialog-content p,
+.timeout-dialog-content p {
+  color: var(--fg-text);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.error-details {
+  font-size: 12px;
+  color: var(--fg-text);
+  opacity: 0.7;
+  font-family: monospace;
+  background: var(--hover-bg);
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+}
+
+.error-actions,
+.timeout-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.error-actions .btn,
+.timeout-actions .btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.error-actions .btn-primary,
+.timeout-actions .btn-primary {
+  background: var(--accent);
+  color: white;
+}
+
+.error-actions .btn-primary:hover,
+.timeout-actions .btn-primary:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
+}
+
+.error-actions .btn-secondary,
+.timeout-actions .btn-secondary {
+  background: var(--button-bg);
+  color: var(--fg-text);
+  border: 1px solid var(--border);
+}
+
+.error-actions .btn-secondary:hover,
+.timeout-actions .btn-secondary:hover {
+  background: var(--button-hover);
+  transform: translateY(-1px);
 }
 
 /* Profile and Account Settings Modals */

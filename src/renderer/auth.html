@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In - Hintify SnapAssist AI</title>
     <link rel="stylesheet" href="auth.css">
+    <!-- Supabase authentication handled by auth.js -->
 </head>
 <body class="theme-dark">
     <div class="auth-container">
@@ -53,14 +54,24 @@
                     </div>
                 </div>
 
+                <!-- Error message display -->
+                <div id="auth-error" class="auth-error hidden">
+                    <div class="error-icon">⚠️</div>
+                    <div class="error-content">
+                        <h3 id="error-title">Authentication Error</h3>
+                        <p id="error-message">An unexpected error occurred during authentication.</p>
+                    </div>
+                </div>
+
                 <div class="auth-actions">
-                    <button id="sign-in-btn" class="btn btn-primary">
-                        <span class="btn-text">Sign In with Hintify</span>
-                        <span class="btn-icon">→</span>
-                    </button>
+                    <!-- Supabase authentication UI will be dynamically inserted here -->
+                    <div id="supabase-auth" class="auth-container-dynamic">
+                        <!-- Content will be populated by auth.js -->
+                    </div>
                     
                     <div class="auth-note">
-                        <p>Don't have an account? The sign-in page will let you create one.</p>
+                            <p id="note-to-signup" style="display:block">Don't have an account? <a href="#" id="signup-link">Sign up here</a></p>
+                            <p id="note-to-signin" style="display:none">Already have an account? <a href="#" id="signin-link">Sign in here</a></p>
                     </div>
                 </div>
 
@@ -74,6 +85,14 @@
         <!-- Status indicator -->
         <div class="status-indicator">
             <div id="status-text" class="status-text">Ready to sign in</div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p class="loading-text">Processing your request...</p>
         </div>
     </div>
 
