@@ -830,6 +830,7 @@ function displayHints(hintsText) {
       textDiv.textContent = trimmed;
       hintsDisplay.appendChild(textDiv);
     }
+  });
   // Place one action bar for the entire hint set
   if (parsedHints.length) {
     const footer = document.createElement('div');
@@ -840,15 +841,81 @@ function displayHints(hintsText) {
     if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
   }
 
-  });
 }
 
 // Build tiny action bar for a hint (used by displayHints)
 function createHintActions({ hints, questionText }) {
   const bar = document.createElement('div');
   bar.className = 'hint-actions';
+  bar.style.position = 'relative';
 
-  const allText = hints.map(h => `${h.label} ${h.text}`).join('\n');
+  const header = questionText && String(questionText).trim()
+    ? `Question:\n${String(questionText).trim()}\n\n`
+    : '';
+  const flatList = hints.map(h => `${h.label} ${h.text}`).join('\n');
+  const formattedAll = `${header}Hints:\n${flatList}`;
+
+  // Small helper: open share target in default browser
+  const openShare = (type) => {
+    const encBody = encodeURIComponent(formattedAll);
+    const encSubject = encodeURIComponent('Hintify     Hints');
+    let url = '';
+    switch (type) {
+      case 'gmail':
+        url = `https://mail.google.com/mail/?view=cm&fs=1&su=${encSubject}&body=${encBody}`; break;
+      case 'mailto':
+        url = `mailto:?subject=${encSubject}&body=${encBody}`; break;
+      case 'whatsapp':
+        url = `https://wa.me/?text=${encBody}`; break;
+      case 'telegram':
+        url = `https://t.me/share/url?text=${encBody}`; break;
+      case 'twitter':
+        url = `https://twitter.com/intent/tweet?text=${encBody}`; break;
+      default:
+        url = '';
+    }
+    if (url) {
+      try { require('electron').shell.openExternal(url); } catch {}
+    }
+  };
+
+  const toggleShareMenu = (anchor) => {
+    const existing = document.getElementById('share-menu');
+    if (existing) { existing.remove(); return; }
+    const menu = document.createElement('div');
+    menu.id = 'share-menu';
+    menu.style.position = 'absolute';
+    menu.style.right = '0';
+    menu.style.top = '40px';
+    menu.style.background = 'var(--panel-bg, #1f1f1f)';
+    menu.style.border = '1px solid var(--border, #333)';
+    menu.style.borderRadius = '8px';
+    menu.style.padding = '8px';
+    menu.style.boxShadow = '0 6px 24px rgba(0,0,0,0.35)';
+    menu.style.zIndex = '1000';
+
+    const mkItem = (key, label) => {
+      const it = document.createElement('button');
+      it.className = 'btn btn-secondary';
+      it.style.display = 'block';
+      it.style.width = '100%';
+      it.style.margin = '4px 0';
+      it.textContent = label;
+      it.addEventListener('click', (e) => { e.stopPropagation(); openShare(key); menu.remove(); });
+      return it;
+    };
+
+    menu.appendChild(mkItem('gmail', 'Gmail'));
+    menu.appendChild(mkItem('mailto', 'Default Mail'));
+    menu.appendChild(mkItem('whatsapp', 'WhatsApp'));
+    menu.appendChild(mkItem('telegram', 'Telegram'));
+    menu.appendChild(mkItem('twitter', 'Twitter / X'));
+
+    bar.appendChild(menu);
+
+    const onDoc = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', onDoc); } };
+    setTimeout(() => document.addEventListener('click', onDoc), 0);
+  };
 
   const mkBtn = (action, title, iconName) => {
     const b = document.createElement('button');
@@ -860,19 +927,19 @@ function createHintActions({ hints, questionText }) {
     b.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
-        switch(action){
+        switch (action) {
           case 'copy':
-            await navigator.clipboard.writeText(allText);
+            await navigator.clipboard.writeText(formattedAll);
             updateStatus('All hints copied');
             break;
           case 'speak': {
-            const u = new SpeechSynthesisUtterance(allText);
+            const u = new SpeechSynthesisUtterance(flatList);
             window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
             updateStatus('Speaking all hints...');
             break; }
           case 'like':
           case 'dislike':
-            await logActivity('review', action, { total_hints: hints.length, total_length: allText.length });
+            await logActivity('review', action, { total_hints: hints.length, total_length: flatList.length });
             updateStatus(action === 'like' ? 'Marked helpful' : 'Marked unhelpful');
             break;
           case 'regen': {
@@ -880,36 +947,46 @@ function createHintActions({ hints, questionText }) {
             showLoading(true, 'Regenerating...');
             const start = Date.now();
             try {
-              const h = await generateHints(
-                currentQuestionData.answerText ? currentQuestionData.answerText : currentQuestionData.questionText,
+              const regenPrompt = buildRegenerationPrompt(
+                currentQuestionData.questionText || currentQuestionData.answerText,
                 currentQuestionData.metadata?.question_type || 'text',
                 currentQuestionData.metadata?.difficulty || 'Medium',
-                currentQuestionData.imageData,
-                start
+                currentQuestionData.answerText || ''
               );
-              displayHints(h);
+              const cfg = currentConfig;
+              let newHints;
+              if (cfg.provider === 'ollama') {
+                newHints = await queryOllama(regenPrompt, cfg.ollama_model);
+              } else if (cfg.provider === 'gemini') {
+                const apiKey = store.get('gemini_api_key') || process.env.GEMINI_API_KEY;
+                newHints = apiKey ? await queryGemini(regenPrompt, cfg.gemini_model, apiKey) : '[Setup] Gemini API key not set. Please configure in Settings.';
+              } else {
+                newHints = '[Setup] No valid AI provider configured.';
+              }
+              // Update context for subsequent actions/saves
+              currentQuestionData = {
+                ...currentQuestionData,
+                answerText: newHints,
+                metadata: { ...currentQuestionData.metadata, regenerated: true, previous_hints_length: (flatList || '').length },
+                processingTime: Date.now() - start
+              };
+              displayHints(newHints);
             } finally { showLoading(false); }
             break; }
-          case 'share': {
-            const q = questionText || '';
-            const content = q ? `Query:\n${q}\n\nHints:\n${allText}` : `Hints:\n${allText}`;
-            if (navigator.share) {
-              try { await navigator.share({ text: content }); } catch {}
-            } else {
-              await navigator.clipboard.writeText(content);
-              updateStatus('Copied to clipboard for sharing');
-            }
-            break; }
+          case 'share':
+            toggleShareMenu(b);
+            break;
         }
-      } catch(err){ updateStatus('Action failed'); }
+      } catch (err) { updateStatus('Action failed'); }
     });
     bar.appendChild(b);
   };
-  // Icons: copy, speak, like, dislike, regenerate, share (Lucide)
-  mkBtn('copy','Copy all hints','clipboard');
-  mkBtn('speak','Speak all hints','volume-2');
+
+  // Icons: like, dislike, copy, speak, regenerate, share (Lucide)
   mkBtn('like','Liked the hints','thumbs-up');
   mkBtn('dislike','Disliked the hints','thumbs-down');
+  mkBtn('copy','Copy all hints','clipboard');
+  mkBtn('speak','Speak all hints','volume-2');
   mkBtn('regen','Regenerate hints','refresh-ccw');
   mkBtn('share','Share','share-2');
 
@@ -980,6 +1057,38 @@ or
 If the text is not a valid question, reply only:
 ⚠️ This does not appear to be a question.`;
 }
+
+// Improved system prompt specifically for REGENERATION with higher quality hints
+function buildRegenerationPrompt(text, qtype, difficulty, previousHints = '') {
+  return `You are SnapAssist AI, regenerating a new, higher‑quality set of HINTS for the same problem.
+
+Objective:
+- Produce a fresh set of 4–6 concise, progressively detailed hints that are MORE thorough and structured than before.
+- DO NOT reveal the final answer, numeric result, or which option is correct.
+- Treat this as a second pass: clarify concepts, add gentle scaffolding, and include tiny worked fragments (setup only) without completing the solution.
+
+Problem text:
+${text}
+
+Classification:
+- Type: ${qtype}
+- Difficulty: ${difficulty}
+
+Earlier hints (for reference only; avoid repeating verbatim):
+${previousHints}
+
+Requirements for regenerated hints:
+- Start from prerequisite concept(s) → formula(s) → setup → approach → final nudge.
+- Add context or micro‑examples when helpful (e.g., define symbols, typical pitfalls, units) but keep each hint under 2 sentences.
+- Prefer numbered hints strictly in the form:
+  Hint 1: ...\n  Hint 2: ...\n  Hint 3: ...\n  (Optionally Hint 4..6)
+- Absolutely avoid: final value, option letters, or step that directly completes the problem.
+- End with one short encouragement line.
+
+Output format (TEXT ONLY):
+Hint 1: ...\nHint 2: ...\nHint 3: ...\n(Hint 4..6 if useful)\n<encouragement line>`;
+}
+
 
 // Query Ollama
 async function queryOllama(prompt, model) {
@@ -1518,9 +1627,7 @@ function setupEventListeners() {
   }
 
   if (settingsBtn) {
-    settingsBtn.addEventListener('click', () => {
-      ipcRenderer.send('open-settings');
-    });
+    settingsBtn.addEventListener('click', openEmbeddedSettings);
   }
 
   if (authBtn) {
@@ -1728,6 +1835,16 @@ function setupEventListeners() {
     handleSignIn();
   });
 
+  // Open embedded settings when asked by main process (menu or IPC)
+  ipcRenderer.on('show-embedded-settings', openEmbeddedSettings);
+
+  // Allow embedded settings (iframe) to request closing the modal
+  window.addEventListener('message', (e) => {
+    if (e && e.data && e.data.type === 'close-embedded-settings') {
+      closeModal('app-settings-modal');
+    }
+  });
+
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
@@ -1853,7 +1970,7 @@ function setupModals() {
   }
 
   // Close modals when clicking outside
-  ['profile-modal', 'account-settings-modal'].forEach(modalId => {
+  ['profile-modal', 'account-settings-modal', 'app-settings-modal'].forEach(modalId => {
     const modal = document.getElementById(modalId);
     if (modal) {
       modal.addEventListener('click', (e) => {
@@ -1866,6 +1983,24 @@ function setupModals() {
 }
 
 // Handle sync data manually
+
+// Open Settings inside main window (embedded settings.html via iframe)
+function openEmbeddedSettings() {
+  const modal = document.getElementById('app-settings-modal');
+  const iframe = document.getElementById('app-settings-iframe');
+  if (!modal || !iframe) return;
+  iframe.src = 'settings.html';
+  modal.classList.remove('hidden');
+}
+
+// Close button for embedded settings
+(() => {
+  const btn = document.getElementById('close-app-settings-modal');
+  if (btn) {
+    btn.addEventListener('click', () => closeModal('app-settings-modal'));
+  }
+})();
+
 async function handleSyncData() {
   if (!userInfo) {
     alert('Please sign in first to sync your data.');

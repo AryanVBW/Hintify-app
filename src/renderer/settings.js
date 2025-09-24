@@ -188,15 +188,31 @@ function saveSettings() {
 
   showStatus('Settings saved successfully!', 'success');
 
-  // Close window after a short delay
+  // Close after a short delay
   setTimeout(() => {
-    window.close();
+    try {
+      if (window !== window.top) {
+        window.parent.postMessage({ type: 'close-embedded-settings' }, '*');
+      } else {
+        window.close();
+      }
+    } catch {
+      window.close();
+    }
   }, 1000);
 }
 
 // Cancel and close
 function cancelSettings() {
-  window.close();
+  try {
+    if (window !== window.top) {
+      window.parent.postMessage({ type: 'close-embedded-settings' }, '*');
+    } else {
+      window.close();
+    }
+  } catch {
+    window.close();
+  }
 }
 
 // Get clipboard text and paste into API key field

@@ -477,6 +477,7 @@ function createMainWindow() {
     fullscreenable: true,
     webPreferences: {
       nodeIntegration: true,
+      nodeIntegrationInSubFrames: true,
       contextIsolation: false,
       enableRemoteModule: true,
       webSecurity: true
@@ -544,54 +545,23 @@ function saveWindowBounds() {
 }
 
 function createSettingsWindow() {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus();
-    return;
+  // Open settings INSIDE the main window instead of a separate BrowserWindow
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      mainWindow.webContents.send('show-embedded-settings');
+      mainWindow.focus();
+      return;
+    } catch {}
   }
-
-  const display = screen.getPrimaryDisplay();
-  const { width: sw, height: sh } = display.workAreaSize || { width: 1000, height: 800 };
-
-  settingsWindow = new BrowserWindow({
-    width: Math.max(sw - 80, 900),
-    height: Math.max(sh - 80, 650),
-    resizable: true,
-    center: true,
-    parent: null,
-    modal: false,
-    transparent: process.platform === 'darwin',
-    backgroundColor: process.platform === 'darwin' ? '#00000000' : undefined,
-    vibrancy: process.platform === 'darwin' ? 'sidebar' : undefined,
-    visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: true
-  },
-  icon: resolveAsset('logo_m.png'),
-    title: 'Settings - Hintify SnapAssist AI'
-  });
-
-  // Make settings also float above the app for a focused experience
+  // If mainWindow is not available, create it first, then show embedded settings
   try {
-    const level = process.platform === 'darwin' ? 'floating' : 'normal';
-    settingsWindow.setAlwaysOnTop(true, level);
+    createMainWindow();
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('show-embedded-settings');
+      }
+    }, 300);
   } catch {}
-
-
-  settingsWindow.loadFile(path.join(__dirname, 'renderer', 'settings.html'));
-
-  settingsWindow.on('closed', () => {
-    settingsWindow = null;
-  });
-
-  // Remove menu bar for settings window
-  settingsWindow.setMenuBarVisibility(false);
-  
-  // Enable dev tools for debugging if needed
-  if (isDevelopment) {
-    settingsWindow.webContents.openDevTools();
-  }
 }
 
 function createOnboardingWindow() {
