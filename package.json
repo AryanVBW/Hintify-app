@@ -68,16 +68,16 @@
     },
     "directories": {
       "output": "dist",
-      "publish": [
-        {
-          "provider": "github",
-          "owner": "AryanVBW",
-          "repo": "Hintify-app",
-          "private": true
-        }
-      ],
       "buildResources": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AryanVBW",
+        "repo": "Hintify-app",
+        "private": true
+      }
+    ],
     "files": [
       "src/**/*",
       "assets/**/*",
@@ -104,13 +104,6 @@
       "category": "public.app-category.education",
       "icon": "build/icon.png",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
         {
           "target": "zip",
           "arch": [
