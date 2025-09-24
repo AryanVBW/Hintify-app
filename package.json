@@ -1,6 +1,6 @@
 {
   "name": "hintify-snapassist-ai",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hintify SnapAssist AI – Your intelligent study companion for instant homework hints and guidance",
   "main": "src/main.js",
   "author": {
@@ -68,10 +68,14 @@
     },
     "directories": {
       "output": "dist",
-    "publish": [
-      { "provider": "github", "owner": "AryanVBW", "repo": "Hintify-app", "private": true }
-    ],
-
+      "publish": [
+        {
+          "provider": "github",
+          "owner": "AryanVBW",
+          "repo": "Hintify-app",
+          "private": true
+        }
+      ],
       "buildResources": "build"
     },
     "files": [
