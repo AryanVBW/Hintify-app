@@ -59,11 +59,12 @@ async function refreshUserCard() {
   try {
     const status = await ipcRenderer.invoke('get-auth-status');
     const isAuthed = !!(status && status.success && status.authenticated && status.user);
+    const isGuest = store.get('guest_mode_enabled', false);
     if (elements.userName) elements.userName.textContent = isAuthed ? (status.user.name || status.user.firstName || status.user.email || 'User') : 'Guest User';
-    if (elements.userEmail) elements.userEmail.textContent = isAuthed ? (status.user.email || '') : 'Using app without account';
+    if (elements.userEmail) elements.userEmail.textContent = isAuthed ? (status.user.email || '') : (isGuest ? 'Guest Mode' : 'Using app without account');
     if (elements.userAvatar) {
       const avatarUrl = status?.user?.avatar || status?.user?.imageUrl || status?.user?.image_url || '';
-      if (avatarUrl) elements.userAvatar.src = avatarUrl; else elements.userAvatar.removeAttribute('src');
+      if (isAuthed && avatarUrl) elements.userAvatar.src = avatarUrl; else elements.userAvatar.removeAttribute('src');
     }
     if (elements.signInBtn && elements.signOutBtn) {
       elements.signInBtn.classList.toggle('hidden', isAuthed);
