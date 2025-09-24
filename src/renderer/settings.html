@@ -14,6 +14,21 @@
         </div>
 
         <div class="settings-content">
+            <!-- User section -->
+            <div class="user-card">
+                <div class="user-left">
+                    <div class="avatar-wrap"><img id="settings-user-avatar" class="user-avatar" alt="User"></div>
+                    <div class="user-meta">
+                        <div id="settings-user-name" class="user-name">Guest User</div>
+                        <div id="settings-user-email" class="user-email">Using app without account</div>
+                    </div>
+                </div>
+                <div class="user-actions">
+                    <button id="settings-signin-btn" class="btn btn-primary">Sign In</button>
+                    <button id="settings-signout-btn" class="btn btn-secondary hidden">Sign Out</button>
+                </div>
+            </div>
+
             <div class="setting-group">
                 <label for="provider-select">AI Provider</label>
                 <select id="provider-select">
@@ -47,7 +62,7 @@
                     <button type="button" id="toggle-key-visibility" class="btn btn-secondary" title="Toggle visibility">👁</button>
                 </div>
                 <small>
-                    Get your API key from 
+                    Get your API key from
                     <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
                     <br>
                     <em>Tip: Copy your API key, then click the 📋 button to paste it</em>

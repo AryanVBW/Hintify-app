@@ -54,6 +54,26 @@ function showStatus(message, type = 'info', duration = 3000) {
   }, duration);
 }
 
+// User card helpers
+async function refreshUserCard() {
+  try {
+    const status = await ipcRenderer.invoke('get-auth-status');
+    const isAuthed = !!(status && status.success && status.authenticated && status.user);
+    if (elements.userName) elements.userName.textContent = isAuthed ? (status.user.name || status.user.firstName || status.user.email || 'User') : 'Guest User';
+    if (elements.userEmail) elements.userEmail.textContent = isAuthed ? (status.user.email || '') : 'Using app without account';
+    if (elements.userAvatar) {
+      const avatarUrl = status?.user?.avatar || status?.user?.imageUrl || status?.user?.image_url || '';
+      if (avatarUrl) elements.userAvatar.src = avatarUrl; else elements.userAvatar.removeAttribute('src');
+    }
+    if (elements.signInBtn && elements.signOutBtn) {
+      elements.signInBtn.classList.toggle('hidden', isAuthed);
+      elements.signOutBtn.classList.toggle('hidden', !isAuthed);
+    }
+  } catch (e) {
+    // Silent fail; keep defaults
+  }
+}
+
 // Test Ollama connection
 async function testOllamaConnection(model) {
   try {
@@ -62,7 +82,7 @@ async function testOllamaConnection(model) {
       prompt: 'Hello',
       stream: false
     }, { timeout: 10000 });
-    
+
     return { success: true, message: 'Ollama connection successful' };
   } catch (error) {
     if (error.code === 'ECONNREFUSED') {
@@ -200,7 +220,7 @@ async function pasteFromClipboard() {
 function toggleApiKeyVisibility() {
   const keyInput = elements.geminiApiKey;
   const toggleBtn = elements.toggleKeyVisibility;
-  
+
   if (keyInput.type === 'password') {
     keyInput.type = 'text';
     toggleBtn.textContent = '🙈';
@@ -215,7 +235,7 @@ function toggleApiKeyVisibility() {
 // Update form fields based on current provider
 function updateProviderFields() {
   const provider = elements.providerSelect.value;
-  
+
   // You could show/hide relevant fields here
   // For now, we show all fields
 }
@@ -223,20 +243,20 @@ function updateProviderFields() {
 // Load form with current settings
 function loadForm() {
   const config = loadConfig();
-  
+
   // Set form values
   elements.providerSelect.value = config.provider;
   elements.ollamaModel.value = config.ollama_model;
   elements.geminiModel.value = config.gemini_model;
   elements.themeSelect.value = config.theme;
-  
+
   // Load Gemini API key
   const geminiApiKey = store.get('gemini_api_key') || '';
   elements.geminiApiKey.value = geminiApiKey;
-  
+
   // Apply current theme
   applyTheme(config.theme);
-  
+
   // Update provider-specific fields
   updateProviderFields();
 }
@@ -255,7 +275,13 @@ function initializeSettings() {
     saveBtn: document.getElementById('save-btn'),
     toggleKeyVisibility: document.getElementById('toggle-key-visibility'),
     pasteKeyBtn: document.getElementById('paste-key-btn'),
-    statusMessage: document.getElementById('status-message')
+    statusMessage: document.getElementById('status-message'),
+    // User card elements
+    userAvatar: document.getElementById('settings-user-avatar'),
+    userName: document.getElementById('settings-user-name'),
+    userEmail: document.getElementById('settings-user-email'),
+    signInBtn: document.getElementById('settings-signin-btn'),
+    signOutBtn: document.getElementById('settings-signout-btn')
   };
 
   // Ensure API key input can receive paste events
@@ -268,7 +294,7 @@ function initializeSettings() {
         elements.geminiApiKey.value = elements.geminiApiKey.value.trim();
       }, 10);
     });
-    
+
     // Add keyboard shortcut for paste
     elements.geminiApiKey.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
@@ -276,18 +302,18 @@ function initializeSettings() {
         e.stopPropagation();
       }
     });
-    
+
     // Add right-click context menu support
     elements.geminiApiKey.addEventListener('contextmenu', (e) => {
       // Allow native context menu with paste option
       e.stopPropagation();
     });
-    
+
     // Add focus styling
     elements.geminiApiKey.addEventListener('focus', () => {
       elements.geminiApiKey.style.borderColor = 'var(--accent)';
     });
-    
+
     elements.geminiApiKey.addEventListener('blur', () => {
       elements.geminiApiKey.style.borderColor = 'var(--input-border)';
     });
@@ -297,23 +323,23 @@ function initializeSettings() {
   if (elements.cancelBtn) {
     elements.cancelBtn.addEventListener('click', cancelSettings);
   }
-  
+
   if (elements.testConnectionBtn) {
     elements.testConnectionBtn.addEventListener('click', testConnection);
   }
-  
+
   if (elements.saveBtn) {
     elements.saveBtn.addEventListener('click', saveSettings);
   }
-  
+
   if (elements.toggleKeyVisibility) {
     elements.toggleKeyVisibility.addEventListener('click', toggleApiKeyVisibility);
   }
-  
+
   if (elements.pasteKeyBtn) {
     elements.pasteKeyBtn.addEventListener('click', pasteFromClipboard);
   }
-  
+
   if (elements.providerSelect) {
     elements.providerSelect.addEventListener('change', updateProviderFields);
   }
@@ -324,6 +350,26 @@ function initializeSettings() {
       applyTheme(e.target.value);
     });
   }
+
+  // Sign in/out
+  if (elements.signInBtn) {
+    elements.signInBtn.addEventListener('click', async () => {
+      try {
+        await ipcRenderer.invoke('open-browser-auth');
+        showStatus('Opening sign-in in browser...', 'info', 2000);
+      } catch {}
+    });
+  }
+  if (elements.signOutBtn) {
+    elements.signOutBtn.addEventListener('click', async () => {
+      ipcRenderer.send('user-logged-out');
+      showStatus('Signed out', 'success', 1500);
+      setTimeout(refreshUserCard, 800);
+    });
+  }
+
+  // Load user card
+  refreshUserCard();
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {

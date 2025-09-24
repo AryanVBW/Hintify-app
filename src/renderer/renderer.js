@@ -1,4 +1,4 @@
-const { ipcRenderer, clipboard, nativeImage, shell } = require('electron');
+const { ipcRenderer, clipboard, nativeImage, shell, desktopCapturer } = require('electron');
 const Store = require('electron-store');
 const axios = require('axios');
 const fs = require('fs');
@@ -53,12 +53,12 @@ function applyTheme(theme) {
 async function checkAuthStatus() {
   try {
     console.log('🔍 Checking authentication status...');
-    
+
     // First check local storage
     const isAuthenticated = store.get('user_authenticated', false);
     const userData = store.get('user_info', null);
     const lastAuthTime = store.get('last_auth_time', null);
-    
+
     console.log('📊 Local auth status:', {
       isAuthenticated,
       hasUserData: !!userData,
@@ -66,12 +66,12 @@ async function checkAuthStatus() {
       userName: userData?.name || userData?.firstName,
       lastAuthTime
     });
-    
+
     if (isAuthenticated && userData) {
       // Validate session with main process
       try {
         const authStatus = await ipcRenderer.invoke('get-auth-status');
-        
+
         if (authStatus.success && authStatus.authenticated && authStatus.sessionValid) {
           console.log('✅ User is authenticated with valid session, setting up UI...');
           userInfo = userData;
@@ -98,12 +98,12 @@ async function checkAuthStatus() {
         }
       }
     }
-    
+
     console.log('❌ User not authenticated, showing sign-in UI');
     userInfo = null;
     updateAuthUI(false);
     return false;
-    
+
   } catch (error) {
     console.error('❌ Error checking authentication status:', error);
     userInfo = null;
@@ -122,9 +122,9 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
   const syncStatus = document.getElementById('sync-status');
   const syncIndicator = syncStatus?.querySelector('.sync-indicator');
   const syncText = syncStatus?.querySelector('.sync-text');
-  
+
   console.log('🎨 Updating enhanced auth UI:', { isAuthenticated, userData });
-  
+
   if (isAuthenticated && userData) {
     // Show user account section, hide sign-in button
     if (authBtn) {
@@ -135,7 +135,7 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
       userAccountSection.classList.remove('hidden');
       console.log('✅ User account section shown');
     }
-    
+
     // Update user avatar with better error handling
     if (userAvatar) {
       const imageUrl = userData.image_url || userData.imageUrl || userData.avatar || userData.picture;
@@ -151,10 +151,10 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
         console.log('🖼️ Using default avatar');
       }
     }
-    
+
     // Update user name with comprehensive fallbacks
     if (userName) {
-      const displayName = userData.name || 
+      const displayName = userData.name ||
                          userData.fullName ||
                          (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
                          userData.firstName ||
@@ -162,25 +162,25 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
                          userData.username ||
                          userData.email ||
                          'User';
-      
+
       userName.textContent = displayName;
-      
+
       console.log('📝 User name set:', displayName);
     }
-    
+
     // Update account email
     if (accountEmail && userData.email) {
       accountEmail.textContent = userData.email;
       console.log('📧 Account email set:', userData.email);
     }
-    
+
     // Update sync status
     if (syncIndicator && syncText) {
       const syncStatusData = userData.sync_status || 'active';
-      
+
       // Reset classes
       syncIndicator.classList.remove('active', 'error');
-      
+
       switch (syncStatusData) {
         case 'active':
           syncIndicator.classList.add('active');
@@ -197,23 +197,23 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
         default:
           syncText.textContent = 'Unknown';
       }
-      
+
       console.log('🔄 Sync status updated:', syncStatusData);
     }
-    
+
     console.log('✅ Enhanced user authentication UI updated successfully');
   } else if (isGuestMode) {
-    // Guest mode UI
+    // Guest mode UI: keep the topbar minimal — no big Guest Mode button
     if (authBtn) {
-      authBtn.classList.remove('hidden');
-      authBtn.textContent = 'Guest Mode';
-      authBtn.style.backgroundColor = 'var(--accent)';
-      authBtn.style.color = 'white';
-      authBtn.title = 'Currently in Guest Mode - Click to sign in';
-      console.log('🚀 Guest mode button shown with accent color');
+      authBtn.classList.add('hidden');
+      authBtn.textContent = 'Sign In';
+      authBtn.style.backgroundColor = '';
+      authBtn.style.color = '';
+      authBtn.title = 'Sign In to Hintify';
     }
     if (userAccountSection) {
       userAccountSection.classList.remove('hidden');
+      userAccountSection.classList.add('guest');
       console.log('✅ User account section shown for guest mode');
     }
 
@@ -365,7 +365,7 @@ async function saveQuestionAnswer(questionText, answerText, questionType = 'text
     });
     return true; // Return success for UI consistency
   }
-  
+
   try {
     const data = {
       questionText,
@@ -377,12 +377,12 @@ async function saveQuestionAnswer(questionText, answerText, questionType = 'text
       metadata,
       processingTime
     };
-    
+
     const result = await ipcRenderer.invoke('save-question-answer', data);
-    
+
     if (result.success) {
       console.log('✅ Question and answer saved to database:', result);
-      
+
       // Log the activity
       await logActivity('question_answer', 'saved', {
         questionId: result.questionId,
@@ -390,7 +390,7 @@ async function saveQuestionAnswer(questionText, answerText, questionType = 'text
         questionType,
         aiProvider: data.aiProvider
       });
-      
+
       return true;
     } else {
       console.error('❌ Failed to save Q&A to database:', result.error);
@@ -428,17 +428,17 @@ async function transferDataToPortal() {
     alert('Please sign in first to transfer your data.');
     return;
   }
-  
+
   try {
     showLoading(true, 'Transferring data to Portal...');
-    
+
     const result = await ipcRenderer.invoke('transfer-data-to-portal');
-    
+
     showLoading(false);
-    
+
     if (result.success) {
       alert(
-        result.queued 
+        result.queued
           ? 'Data queued for transfer when Portal becomes available.'
           : 'Data successfully transferred to Portal!'
       );
@@ -458,14 +458,14 @@ async function exportUserData(format = 'json') {
     alert('Please sign in first to export your data.');
     return;
   }
-  
+
   try {
     showLoading(true, `Exporting data as ${format.toUpperCase()}...`);
-    
+
     const result = await ipcRenderer.invoke('export-user-data', format);
-    
+
     showLoading(false);
-    
+
     if (result.success) {
       // Create download link
       const blob = new Blob([result.data], { type: result.mimeType });
@@ -477,7 +477,7 @@ async function exportUserData(format = 'json') {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       alert('Data exported successfully!');
     } else {
       alert(`Failed to export data: ${result.error}`);
@@ -495,10 +495,10 @@ async function getUserHistory() {
     console.warn('Cannot get history: user not authenticated');
     return [];
   }
-  
+
   try {
     const result = await ipcRenderer.invoke('get-user-history', 50);
-    
+
     if (result.success) {
       return result.history;
     } else {
@@ -514,15 +514,15 @@ async function getUserHistory() {
 // Handle user logout
 function handleLogout() {
   console.log('🚪 User logout requested');
-  
+
   // Clear auth data
   store.set('user_authenticated', false);
   store.delete('user_info');
-  
+
   // Update UI
   userInfo = null;
   updateAuthUI(false);
-  
+
   // Send message to main process
   ipcRenderer.send('user-logged-out');
 }
@@ -531,18 +531,18 @@ function handleLogout() {
 async function showHistoryModal() {
   const modal = document.getElementById('history-modal');
   const historyContent = document.getElementById('history-content');
-  
+
   if (!modal || !historyContent) return;
-  
+
   // Show modal
   modal.classList.remove('hidden');
-  
+
   // Show loading
   historyContent.innerHTML = '<div class="loading-message">Loading history...</div>';
-  
+
   try {
     const history = await getUserHistory();
-    
+
     if (history.length === 0) {
       historyContent.innerHTML = `
         <div class="empty-history">
@@ -552,7 +552,7 @@ async function showHistoryModal() {
       `;
       return;
     }
-    
+
     // Group questions and answers
     const groupedHistory = {};
     history.forEach(item => {
@@ -564,7 +564,7 @@ async function showHistoryModal() {
           answers: []
         };
       }
-      
+
       if (item.answer_text) {
         groupedHistory[item.question_id].answers.push({
           text: item.answer_text,
@@ -574,7 +574,7 @@ async function showHistoryModal() {
         });
       }
     });
-    
+
     // Generate HTML
     let historyHtml = '';
     Object.values(groupedHistory).forEach(item => {
@@ -585,7 +585,7 @@ async function showHistoryModal() {
         hour: '2-digit',
         minute: '2-digit'
       });
-      
+
       historyHtml += `
         <div class="history-item">
           <div class="history-question">${escapeHtml(item.question)}</div>
@@ -599,9 +599,9 @@ async function showHistoryModal() {
         </div>
       `;
     });
-    
+
     historyContent.innerHTML = historyHtml;
-    
+
   } catch (error) {
     console.error('Failed to load history:', error);
     historyContent.innerHTML = `
@@ -625,19 +625,19 @@ function loadAppImages() {
   try {
     const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
     const basePath = isDev ? '../../assets/' : (process.resourcesPath + '/assets/');
-    
+
     // Set logo image
     const appLogo = document.getElementById('app-logo');
     if (appLogo) {
       appLogo.src = path.join(basePath, 'logo_m.png');
     }
-    
+
     // Set capture button icon
     const captureIcon = document.getElementById('capture-icon');
     if (captureIcon) {
       captureIcon.src = path.join(basePath, 'screenshot-64.png');
     }
-    
+
     // Set settings button icon
     const settingsIcon = document.getElementById('settings-icon');
     if (settingsIcon) {
@@ -648,10 +648,10 @@ function loadAppImages() {
     // Fallback: try to load with relative paths
     const appLogo = document.getElementById('app-logo');
     if (appLogo) appLogo.src = '../../assets/logo_m.png';
-    
+
     const captureIcon = document.getElementById('capture-icon');
     if (captureIcon) captureIcon.src = '../../assets/screenshot-64.png';
-    
+
     const settingsIcon = document.getElementById('settings-icon');
   if (settingsIcon) settingsIcon.src = '../../assets/settings-94.png';
   }
@@ -660,16 +660,16 @@ function loadAppImages() {
 // Check system readiness and show warnings if needed
 async function checkSystemReadiness() {
   const config = loadConfig();
-  
+
   // If onboarding wasn't completed, this shouldn't run the main app
   if (!config.onboarding_completed) {
     displayHints('⚠️ Please complete the initial setup first. Go to the app menu and select "Run Setup Again".');
     return;
   }
-  
+
   // Check if AI provider is available
   await checkAIProviderStatus();
-  
+
   // Check OCR availability
   await checkOCRStatus();
 }
@@ -677,7 +677,7 @@ async function checkSystemReadiness() {
 // Check AI Provider status
 async function checkAIProviderStatus() {
   const config = loadConfig();
-  
+
   if (config.provider === 'ollama') {
     try {
       await axios.get('http://localhost:11434/api/tags', { timeout: 3000 });
@@ -717,10 +717,17 @@ async function checkAIProviderStatus() {
 // Check OCR status
 async function checkOCRStatus() {
   const tesseractAvailable = await checkTesseractAvailable();
-  
+
   if (!tesseractAvailable) {
-    console.warn('Tesseract OCR not available');
-    // Don't show warning immediately, only when user tries to process an image
+    // Native tesseract not present; we'll rely on Tesseract.js node build
+    let nodeWorkersOk = true;
+    try { require('worker_threads'); } catch { nodeWorkersOk = false; }
+
+    if (!nodeWorkersOk) {
+      console.warn('OCR fallback warning: Node worker_threads not available. Built-in OCR may not start on this system.');
+    } else {
+      console.log('OCR fallback: Using Tesseract.js (Node build)');
+    }
   }
 }
 
@@ -743,8 +750,9 @@ function updateProvider(provider, model) {
 // Show/hide loading overlay
 function showLoading(show = true, text = 'Processing...') {
   const overlay = document.getElementById('loading-overlay');
+
   const loadingText = document.getElementById('loading-text');
-  
+
   if (overlay) {
     if (show) {
       overlay.classList.remove('hidden');
@@ -762,7 +770,7 @@ function displayHints(hintsText) {
 
   // Clear existing content
   hintsDisplay.innerHTML = '';
-  
+
   if (!hintsText || hintsText.trim().startsWith('[') || hintsText.includes('Error')) {
     // Show error message
     const errorDiv = document.createElement('div');
@@ -776,40 +784,42 @@ function displayHints(hintsText) {
   }
 
   const lines = hintsText.split('\n').filter(line => line.trim());
-  
+  const parsedHints = [];
+
   lines.forEach(line => {
     const trimmed = line.trim();
     if (!trimmed) return;
 
     const hintMatch = trimmed.match(/^(Hint\s+\d+:)\s*(.*)$/i);
-    
+
     if (hintMatch) {
       // This is a hint line
       const hintDiv = document.createElement('div');
       hintDiv.className = 'hint-item fade-in';
-      
+
       const labelDiv = document.createElement('div');
       labelDiv.className = 'hint-label';
       labelDiv.textContent = hintMatch[1];
-      
+
       const textDiv = document.createElement('div');
       textDiv.className = 'hint-text';
       textDiv.textContent = hintMatch[2];
-      
+
       hintDiv.appendChild(labelDiv);
       hintDiv.appendChild(textDiv);
       hintsDisplay.appendChild(hintDiv);
-    } else if (trimmed.toLowerCase().includes('now try') || 
+      parsedHints.push({ label: hintMatch[1], text: hintMatch[2] });
+    } else if (trimmed.toLowerCase().includes('now try') ||
                trimmed.toLowerCase().includes('work carefully') ||
                trimmed.toLowerCase().includes('complete')) {
       // This is encouragement text
       const encDiv = document.createElement('div');
       encDiv.className = 'encouragement fade-in';
-      
+
       const encText = document.createElement('div');
       encText.className = 'encouragement-text';
       encText.textContent = trimmed;
-      
+
       encDiv.appendChild(encText);
       hintsDisplay.appendChild(encDiv);
     } else {
@@ -820,7 +830,95 @@ function displayHints(hintsText) {
       textDiv.textContent = trimmed;
       hintsDisplay.appendChild(textDiv);
     }
+  // Place one action bar for the entire hint set
+  if (parsedHints.length) {
+    const footer = document.createElement('div');
+    footer.className = 'hints-footer fade-in';
+    const qText = (window.currentQuestionData?.questionText || window.currentQuestionData?.answerText || '') || '';
+    footer.appendChild(createHintActions({ hints: parsedHints, questionText: qText }));
+    hintsDisplay.appendChild(footer);
+    if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
+  }
+
   });
+}
+
+// Build tiny action bar for a hint (used by displayHints)
+function createHintActions({ hints, questionText }) {
+  const bar = document.createElement('div');
+  bar.className = 'hint-actions';
+
+  const allText = hints.map(h => `${h.label} ${h.text}`).join('\n');
+
+  const mkBtn = (action, title, iconName) => {
+    const b = document.createElement('button');
+    b.className = 'icon-btn';
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    b.dataset.action = action;
+    b.innerHTML = `<i data-lucide="${iconName}"></i>`;
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        switch(action){
+          case 'copy':
+            await navigator.clipboard.writeText(allText);
+            updateStatus('All hints copied');
+            break;
+          case 'speak': {
+            const u = new SpeechSynthesisUtterance(allText);
+            window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+            updateStatus('Speaking all hints...');
+            break; }
+          case 'like':
+          case 'dislike':
+            await logActivity('review', action, { total_hints: hints.length, total_length: allText.length });
+            updateStatus(action === 'like' ? 'Marked helpful' : 'Marked unhelpful');
+            break;
+          case 'regen': {
+            if (!currentQuestionData) { updateStatus('Nothing to regenerate'); break; }
+            showLoading(true, 'Regenerating...');
+            const start = Date.now();
+            try {
+              const h = await generateHints(
+                currentQuestionData.answerText ? currentQuestionData.answerText : currentQuestionData.questionText,
+                currentQuestionData.metadata?.question_type || 'text',
+                currentQuestionData.metadata?.difficulty || 'Medium',
+                currentQuestionData.imageData,
+                start
+              );
+              displayHints(h);
+            } finally { showLoading(false); }
+            break; }
+          case 'share': {
+            const q = questionText || '';
+            const content = q ? `Query:\n${q}\n\nHints:\n${allText}` : `Hints:\n${allText}`;
+            if (navigator.share) {
+              try { await navigator.share({ text: content }); } catch {}
+            } else {
+              await navigator.clipboard.writeText(content);
+              updateStatus('Copied to clipboard for sharing');
+            }
+            break; }
+        }
+      } catch(err){ updateStatus('Action failed'); }
+    });
+    bar.appendChild(b);
+  };
+  // Icons: copy, speak, like, dislike, regenerate, share (Lucide)
+  mkBtn('copy','Copy all hints','clipboard');
+  mkBtn('speak','Speak all hints','volume-2');
+  mkBtn('like','Liked the hints','thumbs-up');
+  mkBtn('dislike','Disliked the hints','thumbs-down');
+  mkBtn('regen','Regenerate hints','refresh-ccw');
+  mkBtn('share','Share','share-2');
+
+  // Render Lucide icons if available
+  if (window.lucide && window.lucide.createIcons) {
+    window.lucide.createIcons();
+  }
+
+  return bar;
 }
 
 // Classify question type (simplified version of Python logic)
@@ -891,7 +989,7 @@ async function queryOllama(prompt, model) {
       prompt: prompt,
       stream: false
     });
-    
+
     return response.data.response || '[LLM Error] Empty response from Ollama';
   } catch (error) {
     if (error.code === 'ECONNREFUSED') {
@@ -923,7 +1021,7 @@ async function queryGemini(prompt, model, apiKey) {
 
     const parts = candidates[0]?.content?.parts || [];
     const texts = parts.map(part => part.text).filter(Boolean);
-    
+
     return texts.join('\n').trim() || '[LLM Error] Empty response from Gemini';
   } catch (error) {
     if (error.response?.status === 404 || error.response?.status === 403) {
@@ -940,14 +1038,14 @@ async function queryGemini(prompt, model, apiKey) {
 async function generateHints(text, qtype, difficulty, imageData = null, processingStartTime = null) {
   const prompt = buildPrompt(text, qtype, difficulty);
   const config = currentConfig;
-  
+
   let hints;
   let processingTime = null;
-  
+
   if (processingStartTime) {
     processingTime = Date.now() - processingStartTime;
   }
-  
+
   if (config.provider === 'ollama') {
     hints = await queryOllama(prompt, config.ollama_model);
   } else if (config.provider === 'gemini') {
@@ -960,7 +1058,7 @@ async function generateHints(text, qtype, difficulty, imageData = null, processi
   } else {
     hints = '[Setup] No valid AI provider configured.';
   }
-  
+
   // Store current question data for potential saving
   currentQuestionData = {
     questionText: text,
@@ -974,7 +1072,7 @@ async function generateHints(text, qtype, difficulty, imageData = null, processi
     },
     processingTime: processingTime
   };
-  
+
   // Auto-save Q&A if user is authenticated and hints are valid
   if (userInfo && hints && !hints.startsWith('[') && !hints.includes('Error')) {
     setTimeout(async () => {
@@ -988,7 +1086,7 @@ async function generateHints(text, qtype, difficulty, imageData = null, processi
       );
     }, 100); // Small delay to ensure UI is updated first
   }
-  
+
   return hints;
 }
 
@@ -998,44 +1096,65 @@ function checkTesseractAvailable() {
     const tesseractProcess = spawn('tesseract', ['--version'], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
-    
+
     tesseractProcess.on('close', (code) => {
       resolve(code === 0);
     });
-    
+
     tesseractProcess.on('error', () => {
       resolve(false);
     });
   });
 }
 
-// Fallback OCR using Tesseract.js with proper configuration for Electron
+// Fallback OCR using Tesseract.js with robust Node/Electron configuration
 async function extractTextWithTesseractJS(imageBuffer) {
   try {
-    updateStatus('Extracting text using fallback OCR...');
-    
-    // Dynamic import to avoid initial loading issues
-    const Tesseract = require('tesseract.js');
+    updateStatus('Extracting text using built-in OCR...');
+
     const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
-    // Prefer local tessdata in production if available; otherwise allow default CDN
-    const prodLangDir = path.join(process.resourcesPath, 'assets', 'tessdata');
-    const langPath = (!isDev && fs.existsSync(path.join(prodLangDir, 'eng.traineddata'))) ? prodLangDir : undefined;
 
-    // Configure Tesseract.js for Node.js/Electron environment
+    // 1) Prefer the Node build to avoid DOM Worker in Electron renderers
+    let Tesseract;
+    try {
+      // Force Node entry to ensure worker_threads (not window.Worker)
+      Tesseract = require('tesseract.js/dist/tesseract.node.js');
+    } catch (e) {
+      // Fallback to default import if node build path is unavailable
+      Tesseract = require('tesseract.js');
+    }
+
+    // 2) Resolve local tessdata if bundled to avoid remote downloads
+    const prodLangDir = path.join(process.resourcesPath || path.join(__dirname, '..', '..'), 'assets', 'tessdata');
+    const useLocalLang = !isDev && fs.existsSync(path.join(prodLangDir, 'eng.traineddata'));
+
     const recognizeOptions = {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          updateStatus(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+      logger: (m) => {
+        if (m?.status === 'recognizing text') {
+          updateStatus(`OCR Progress: ${Math.round((m.progress || 0) * 100)}%`);
         }
-      }
+      },
+      // Important for Electron: avoid blob URL workers when browser path is used
+      workerBlobURL: false
     };
-    if (langPath) recognizeOptions.langPath = langPath;
+    if (useLocalLang) recognizeOptions.langPath = prodLangDir;
 
+    // 3) Execute recognition
     const { data: { text } } = await Tesseract.recognize(imageBuffer, 'eng', recognizeOptions);
-    
-    return text.replace(/\s+/g, ' ').trim();
+    return String(text || '').replace(/\s+/g, ' ').trim();
   } catch (error) {
-    throw new Error(`Fallback OCR failed: ${error.message}`);
+    // Detect common Worker construction failures and retry once with explicit Node build
+    const msg = String(error?.message || error);
+    if (/Failed to construct 'Worker'|worker.*not support|V8 platform/i.test(msg)) {
+      try {
+        const TesseractNode = require('tesseract.js/dist/tesseract.node.js');
+        const { data: { text } } = await TesseractNode.recognize(imageBuffer, 'eng', { workerBlobURL: false });
+        return String(text || '').replace(/\s+/g, ' ').trim();
+      } catch (e2) {
+        throw new Error(`Worker-init failed in this environment. ${e2.message}`);
+      }
+    }
+    throw new Error(`Fallback OCR failed: ${msg}`);
   }
 }
 
@@ -1043,10 +1162,10 @@ async function extractTextWithTesseractJS(imageBuffer) {
 async function extractTextFromImage(imageBuffer) {
   try {
     updateStatus('Extracting text from image...');
-    
+
     // First, try native Tesseract
     const tesseractAvailable = await checkTesseractAvailable();
-    
+
     if (tesseractAvailable) {
       return await extractTextWithNativeTesseract(imageBuffer);
     } else {
@@ -1054,7 +1173,7 @@ async function extractTextFromImage(imageBuffer) {
   updateStatus('Using built-in OCR (no system Tesseract)...');
   return await extractTextWithTesseractJS(imageBuffer);
     }
-    
+
   } catch (error) {
     return `[OCR Error] ${error.message}`;
   }
@@ -1065,27 +1184,27 @@ async function extractTextWithNativeTesseract(imageBuffer) {
   // Create temporary file for the image
   const tempDir = os.tmpdir();
   const tempImagePath = path.join(tempDir, `hintify_temp_${Date.now()}.png`);
-  
+
   // Write image buffer to temporary file
   fs.writeFileSync(tempImagePath, imageBuffer);
-  
+
   return new Promise((resolve, reject) => {
     // Use native tesseract command
     const tesseractProcess = spawn('tesseract', [tempImagePath, 'stdout'], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
-    
+
     let outputText = '';
     let errorText = '';
-    
+
     tesseractProcess.stdout.on('data', (data) => {
       outputText += data.toString();
     });
-    
+
     tesseractProcess.stderr.on('data', (data) => {
       errorText += data.toString();
     });
-    
+
     tesseractProcess.on('close', (code) => {
       // Clean up temporary file
       try {
@@ -1093,7 +1212,7 @@ async function extractTextWithNativeTesseract(imageBuffer) {
       } catch (cleanupError) {
         console.warn('Failed to cleanup temp file:', cleanupError.message);
       }
-      
+
       if (code === 0) {
         const cleanText = outputText.replace(/\s+/g, ' ').trim();
         resolve(cleanText);
@@ -1101,7 +1220,7 @@ async function extractTextWithNativeTesseract(imageBuffer) {
         reject(new Error(`Tesseract failed: ${errorText || 'Unknown error'}`));
       }
     });
-    
+
     tesseractProcess.on('error', (error) => {
       // Clean up temporary file
       try {
@@ -1109,7 +1228,7 @@ async function extractTextWithNativeTesseract(imageBuffer) {
       } catch (cleanupError) {
         console.warn('Failed to cleanup temp file:', cleanupError.message);
       }
-      
+
       reject(error);
     });
   });
@@ -1145,12 +1264,12 @@ async function processClipboardImage() {
   if (!imageBuffer) {
     updateStatus('No image found in clipboard');
     displayHints('⚠️ No image found in clipboard. Please copy an image first.');
-    
+
     // Log clipboard failure
     await logActivity('clipboard', 'no_image_found');
     return;
   }
-  
+
   // Log successful clipboard image retrieval
   await logActivity('clipboard', 'image_found', {
     image_size: imageBuffer.length
@@ -1162,12 +1281,12 @@ async function processClipboardImage() {
 // Process image (main processing function)
 async function processImage(imageBuffer) {
   if (isProcessing) return;
-  
+
   isProcessing = true;
   const processingStartTime = Date.now();
   showLoading(true, 'Processing image...');
   updateStatus('Processing image...');
-  
+
   // Log activity start
   await logActivity('image_processing', 'started', {
     image_size: imageBuffer.length,
@@ -1177,20 +1296,32 @@ async function processImage(imageBuffer) {
   try {
     // Extract text from image
     const text = await extractTextFromImage(imageBuffer);
-    
+
     if (!text || text.startsWith('[OCR Error]') || text.trim().length === 0) {
-      const errorMsg = text?.startsWith('[OCR Error]') ? text : '⚠️ No text found in the image.';
-      displayHints(errorMsg);
-      
+      const rawMsg = text?.startsWith('[OCR Error]') ? text : '⚠️ No text found in the image.';
+      let userMsg = rawMsg;
+      if (/Failed to construct 'Worker'|V8 platform|worker.*not support|tesseract.*not found/i.test(rawMsg)) {
+        userMsg = [
+          '⚠️ OCR could not start on this system.',
+          '',
+          'Try one of the following:',
+          '• Install native Tesseract OCR (recommended) and restart the app',
+          '• Or update Hintify to the latest version',
+          '',
+          `Details: ${rawMsg}`
+        ].join('\n');
+      }
+      displayHints(userMsg);
+
       // Log OCR failure
       await logActivity('ocr', 'failed', {
         error: errorMsg,
         processing_time_ms: Date.now() - processingStartTime
       });
-      
+
       return;
     }
-    
+
     // Log successful OCR
     await logActivity('ocr', 'completed', {
       text_length: text.length,
@@ -1200,17 +1331,17 @@ async function processImage(imageBuffer) {
     // Classify question
     const qtype = classifyQuestion(text);
     const difficulty = detectDifficulty(text);
-    
+
     updateStatus(`Generating hints... (${qtype}, ${difficulty})`);
     showLoading(true, 'Generating hints...');
 
     // Generate hints with processing time tracking
     const hints = await generateHints(text, qtype, difficulty, imageBuffer.toString('base64'), processingStartTime);
-    
+
     // Display results
     displayHints(hints);
     updateStatus('Ready');
-    
+
     // Log successful completion
     await logActivity('image_processing', 'completed', {
       question_type: qtype,
@@ -1219,33 +1350,65 @@ async function processImage(imageBuffer) {
       hints_length: hints.length,
       total_processing_time_ms: Date.now() - processingStartTime
     });
-    
+
   } catch (error) {
     console.error('Processing error:', error);
     displayHints(`[Error] ${error.message}`);
     updateStatus('Error occurred');
-    
+
     // Log processing error
     await logActivity('image_processing', 'failed', {
       error: error.message,
       processing_time_ms: Date.now() - processingStartTime
     });
-    
+
   } finally {
     isProcessing = false;
     showLoading(false);
   }
 }
 
+// Prime macOS Screen Recording permission by briefly requesting a desktop media stream
+async function ensureScreenRecordingPermission() {
+  try {
+    if (process.platform !== 'darwin') return;
+    const primed = store.get('screen_permission_primed', false);
+    if (primed) return;
+
+    // Try to obtain a minimal screen media stream which will register the app
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
+    if (!sources || !sources.length) return;
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: sources[0].id
+        }
+      }
+    });
+
+    // Immediately stop to avoid any capture; this just primes TCC registration
+    stream.getTracks().forEach(t => t.stop());
+    store.set('screen_permission_primed', true);
+  } catch (err) {
+    // Ignore; the attempt is sufficient to get the app listed in System Settings
+    // Users can grant permission there and retry capture
+  }
+}
+
 // Trigger screenshot capture
-function triggerCapture() {
+async function triggerCapture() {
   updateStatus('Waiting for screenshot...');
-  
-  // On macOS, trigger screenshot to clipboard
+
+  // On macOS, first ensure the app is registered in Screen Recording permissions
   if (process.platform === 'darwin') {
+    await ensureScreenRecordingPermission();
+
     const { spawn } = require('child_process');
     const capture = spawn('screencapture', ['-i', '-c']);
-    
+
     capture.on('close', (code) => {
       if (code === 0) {
         // Wait a moment then process clipboard
@@ -1256,7 +1419,10 @@ function triggerCapture() {
         updateStatus('Screenshot cancelled');
       }
     });
-  } else if (process.platform === 'win32') {
+    return;
+  }
+
+  if (process.platform === 'win32') {
     // On Windows, we could use PowerShell or other methods
     // For now, just show a message
     updateStatus('Please use Windows Snipping Tool and copy to clipboard');
@@ -1271,16 +1437,16 @@ function triggerCapture() {
 // Initialize the app with async authentication check
 async function initializeApp() {
   console.log('🚀 Initializing Hintify SnapAssist AI...');
-  
+
   // Load configuration
   const config = loadConfig();
-  
+
   // Apply theme
   applyTheme(config.theme);
-  
+
   // Load images with proper paths
   loadAppImages();
-  
+
   // Check authentication status (now async)
   const isAuthenticated = await checkAuthStatus();
 
@@ -1331,13 +1497,13 @@ async function initializeApp() {
     console.log('🔄 Fallback - showing guest mode options');
     displayGuestModeMessage();
   }
-  
+
   // Update provider display
   updateProvider(config.provider, config.provider === 'ollama' ? config.ollama_model : config.gemini_model);
-  
+
   // Set up event listeners
   setupEventListeners();
-  
+
   updateStatus('Ready');
 }
 
@@ -1346,17 +1512,17 @@ function setupEventListeners() {
   const captureBtn = document.getElementById('capture-btn');
   const settingsBtn = document.getElementById('settings-btn');
   const authBtn = document.getElementById('auth-btn');
-  
+
   if (captureBtn) {
     captureBtn.addEventListener('click', triggerCapture);
   }
-  
+
   if (settingsBtn) {
     settingsBtn.addEventListener('click', () => {
       ipcRenderer.send('open-settings');
     });
   }
-  
+
   if (authBtn) {
     authBtn.addEventListener('click', handleSignIn);
   }
@@ -1365,11 +1531,11 @@ function setupEventListeners() {
   ipcRenderer.on('show-sign-in', () => {
     handleSignIn();
   });
-  
+
   // Setup account menu and modals
   setupAccountMenu();
   setupModals();
-  
+
   // Account section event listeners
   const viewProfileBtn = document.getElementById('view-profile-btn');
   if (viewProfileBtn) {
@@ -1378,7 +1544,7 @@ function setupEventListeners() {
       showProfileModal();
     });
   }
-  
+
   const accountSettingsBtn = document.getElementById('account-settings-btn');
   if (accountSettingsBtn) {
     accountSettingsBtn.addEventListener('click', () => {
@@ -1386,7 +1552,7 @@ function setupEventListeners() {
       showAccountSettingsModal();
     });
   }
-  
+
   const syncDataBtn = document.getElementById('sync-data-btn');
   if (syncDataBtn) {
     syncDataBtn.addEventListener('click', () => {
@@ -1394,37 +1560,37 @@ function setupEventListeners() {
       handleSyncData();
     });
   }
-  
+
   const forceSyncBtn = document.getElementById('force-sync-btn');
   if (forceSyncBtn) {
     forceSyncBtn.addEventListener('click', handleSyncData);
   }
-  
+
   const clearLocalDataBtn = document.getElementById('clear-local-data-btn');
   if (clearLocalDataBtn) {
     clearLocalDataBtn.addEventListener('click', handleClearLocalData);
   }
-  
+
   // User menu functionality
   const userMenuBtn = document.getElementById('user-menu-btn');
   const userDropdown = document.getElementById('user-dropdown');
-  
+
   if (userMenuBtn && userDropdown) {
     userMenuBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       userDropdown.classList.toggle('hidden');
     });
-    
+
     // Close dropdown when clicking outside
     document.addEventListener('click', () => {
       userDropdown.classList.add('hidden');
     });
-    
+
     userDropdown.addEventListener('click', (e) => {
       e.stopPropagation();
     });
   }
-  
+
   // Data transfer button
   const transferDataBtn = document.getElementById('transfer-data-btn');
   if (transferDataBtn) {
@@ -1433,7 +1599,7 @@ function setupEventListeners() {
       transferDataToPortal();
     });
   }
-  
+
   // Export buttons
   const exportJsonBtn = document.getElementById('export-json-btn');
   if (exportJsonBtn) {
@@ -1442,7 +1608,7 @@ function setupEventListeners() {
       exportUserData('json');
     });
   }
-  
+
   const exportCsvBtn = document.getElementById('export-csv-btn');
   if (exportCsvBtn) {
     exportCsvBtn.addEventListener('click', () => {
@@ -1450,7 +1616,7 @@ function setupEventListeners() {
       exportUserData('csv');
     });
   }
-  
+
   // View history button
   const viewHistoryBtn = document.getElementById('view-history-btn');
   if (viewHistoryBtn) {
@@ -1459,7 +1625,7 @@ function setupEventListeners() {
       showHistoryModal();
     });
   }
-  
+
   // Logout button
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
@@ -1468,17 +1634,17 @@ function setupEventListeners() {
       handleLogout();
     });
   }
-  
+
   // History modal functionality
   const historyModal = document.getElementById('history-modal');
   const closeHistoryModal = document.getElementById('close-history-modal');
-  
+
   if (closeHistoryModal) {
     closeHistoryModal.addEventListener('click', () => {
       historyModal.classList.add('hidden');
     });
   }
-  
+
   if (historyModal) {
     historyModal.addEventListener('click', (e) => {
       if (e.target === historyModal) {
@@ -1490,17 +1656,17 @@ function setupEventListeners() {
   // Set up IPC listeners
   ipcRenderer.on('trigger-capture', triggerCapture);
   ipcRenderer.on('process-clipboard', processClipboardImage);
-  
+
   ipcRenderer.on('config-updated', (event, newConfig) => {
     currentConfig = { ...currentConfig, ...newConfig };
     applyTheme(newConfig.theme);
     updateProvider(newConfig.provider, newConfig.provider === 'ollama' ? newConfig.ollama_model : newConfig.gemini_model);
   });
-  
+
 // Listen for authentication updates
   ipcRenderer.on('auth-status-updated', (event, authData) => {
     console.log('🔄 Auth status updated:', authData);
-    
+
     if (authData.authenticated && authData.user) {
       console.log('✅ User authenticated via Supabase, updating UI immediately');
 
@@ -1533,7 +1699,7 @@ function setupEventListeners() {
         hasImage: !!(authData.user.imageUrl || authData.user.image_url),
         provider: authData.user.provider
       });
-      
+
     } else if (authData.error) {
       console.log('❌ Authentication failed:', authData.error);
 
@@ -1555,7 +1721,7 @@ function setupEventListeners() {
       updateStatus('Ready');
     }
   });
-  
+
   // Listen for sign-in request from menu
   ipcRenderer.on('show-sign-in', () => {
     console.log('🔐 Sign-in requested from menu');
@@ -1605,7 +1771,7 @@ function setupAccountMenu() {
 function showProfileModal() {
   const modal = document.getElementById('profile-modal');
   if (!modal || !userInfo) return;
-  
+
   // Update profile modal with user data
   const profileAvatar = document.getElementById('profile-avatar');
   const profileName = document.getElementById('profile-name');
@@ -1616,7 +1782,7 @@ function showProfileModal() {
   const profileCreated = document.getElementById('profile-created');
   const profileLastSignin = document.getElementById('profile-last-signin');
   const profileSyncStatus = document.getElementById('profile-sync-status');
-  
+
   if (profileAvatar) {
     profileAvatar.src = userInfo.image_url || userInfo.imageUrl || '../../assets/logo_m.png';
   }
@@ -1650,7 +1816,7 @@ function showProfileModal() {
   if (profileSyncStatus) {
     profileSyncStatus.textContent = userInfo.sync_status || 'Active';
   }
-  
+
   modal.classList.remove('hidden');
   console.log('👤 Profile modal opened');
 }
@@ -1659,7 +1825,7 @@ function showProfileModal() {
 function showAccountSettingsModal() {
   const modal = document.getElementById('account-settings-modal');
   if (!modal || !userInfo) return;
-  
+
   modal.classList.remove('hidden');
   console.log('⚙️ Account settings modal opened');
 }
@@ -1679,13 +1845,13 @@ function setupModals() {
   if (closeProfileBtn) {
     closeProfileBtn.addEventListener('click', () => closeModal('profile-modal'));
   }
-  
-  // Account settings modal  
+
+  // Account settings modal
   const closeAccountSettingsBtn = document.getElementById('close-account-settings-modal');
   if (closeAccountSettingsBtn) {
     closeAccountSettingsBtn.addEventListener('click', () => closeModal('account-settings-modal'));
   }
-  
+
   // Close modals when clicking outside
   ['profile-modal', 'account-settings-modal'].forEach(modalId => {
     const modal = document.getElementById(modalId);
@@ -1705,15 +1871,15 @@ async function handleSyncData() {
     alert('Please sign in first to sync your data.');
     return;
   }
-  
+
   try {
     showLoading(true, 'Syncing account data...');
-    
+
     // Call the sync function through IPC
     const result = await ipcRenderer.invoke('sync-account-data');
-    
+
     showLoading(false);
-    
+
     if (result.success) {
       alert('Account data synced successfully!');
       // Update the sync status in UI
@@ -1731,25 +1897,25 @@ async function handleSyncData() {
 // Handle clear local data
 async function handleClearLocalData() {
   if (!userInfo) return;
-  
+
   const confirmed = confirm(
     'Are you sure you want to clear all local data? This action cannot be undone. Your data in the Portal will remain safe.'
   );
-  
+
   if (!confirmed) return;
-  
+
   try {
     showLoading(true, 'Clearing local data...');
-    
+
     // Sign out user (which clears data)
   ipcRenderer.send('user-logged-out');
-    
+
     showLoading(false);
-    
+
     // Reset UI
     userInfo = null;
     updateAuthUI(false);
-    
+
     alert('Local data cleared successfully. Please sign in again.');
   } catch (error) {
     showLoading(false);
@@ -1862,15 +2028,15 @@ function displayAuthenticationMessage() {
 // Start clipboard monitoring (simplified)
 function startClipboardMonitor() {
   let lastImageHash = null;
-  
+
   setInterval(() => {
     if (isProcessing) return;
-    
+
     const imageBuffer = getClipboardImage();
     if (imageBuffer) {
       const crypto = require('crypto');
       const currentHash = crypto.createHash('md5').update(imageBuffer).digest('hex');
-      
+
       if (currentHash !== lastImageHash) {
         lastImageHash = currentHash;
         // Auto-process new clipboard images (optional behavior)

@@ -321,15 +321,47 @@ function runTerminalCommand(command) {
 
 // Check permissions (Step 2)
 async function checkPermissions() {
-    if (isMac) {
-        await checkScreenRecordingPermission();
-        await checkAccessibilityPermission();
-    } else {
-        // For Windows/Linux, permissions are generally handled differently
-        document.getElementById('screen-status').innerHTML = '<div class="status-success">✓ Available</div>';
-        document.getElementById('screen-permission').classList.add('success');
+    // Smart, on-demand permissions: do not request during onboarding
+    try {
+        const screenStatus = document.getElementById('screen-status');
+        const screenItem = document.getElementById('screen-permission');
+        const screenDetails = document.getElementById('screen-details');
+        const screenBtn = document.getElementById('screen-permission-btn');
+
+        const accStatus = document.getElementById('accessibility-status');
+        const accItem = document.getElementById('accessibility-permission');
+        const accDetails = document.getElementById('accessibility-details');
+        const accBtn = document.getElementById('accessibility-permission-btn');
+
+        // Communicate that permissions will be requested when needed
+        if (screenStatus) screenStatus.innerHTML = '<div class="status-warning">Will be requested on first use</div>';
+        if (accStatus) accStatus.innerHTML = '<div class="status-warning">Will be requested on first use</div>';
+
+        // Visually mark as OK to continue without prompting now
+        screenItem?.classList.remove('error');
+        screenItem?.classList.add('success');
+        accItem?.classList.remove('error');
+        accItem?.classList.add('success');
+
+        // Hide extra details and action buttons during onboarding
+        if (screenDetails) screenDetails.style.display = 'none';
+        if (screenBtn) screenBtn.style.display = 'none';
+        if (accDetails) accDetails.style.display = 'none';
+        if (accBtn) accBtn.style.display = 'none';
+
+        // Mark as deferred-granted so the user can continue
         setupProgress.permissions.screen = true;
+        if (isMac) {
+            // Accessibility will be requested if an action actually needs it
+            setupProgress.permissions.accessibility = true;
+        }
+    } catch (e) {
+        // If anything fails, still allow skipping
+        setupProgress.permissions.screen = true;
+        if (isMac) setupProgress.permissions.accessibility = true;
     }
+
+    updatePermissionsStep();
 }
 
 // Check screen recording permission (macOS) with enhanced feedback

@@ -87,6 +87,32 @@ body {
   text-align: center;
 }
 
+/* Glass polish */
+.theme-glass .settings-header,
+.theme-glass .settings-footer {
+  backdrop-filter: saturate(120%) blur(16px);
+  background-color: color-mix(in srgb, var(--panel-bg) 85%, transparent);
+  border-color: color-mix(in srgb, var(--border) 60%, transparent);
+}
+.theme-glass .settings-content {
+  backdrop-filter: saturate(110%) blur(10px);
+}
+
+/* User card in Settings */
+.user-card {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px; padding:16px; margin:0 0 20px 0;
+  border:1px solid var(--border); border-radius:12px; background: var(--hover-bg);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.user-left{ display:flex; align-items:center; gap:12px; }
+.user-card .avatar-wrap{ width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--border); background: radial-gradient(120% 120% at 30% 20%, rgba(124,58,237,0.18), rgba(0,0,0,0) 60%); }
+.user-card .user-avatar{ width:34px; height:34px; border-radius:50%; object-fit:cover; }
+.user-meta .user-name{ font-weight:600; font-size:14px; }
+.user-meta .user-email{ font-size:12px; opacity:.7; }
+.user-actions{ display:flex; gap:8px; }
+
 .settings-header h1 {
   font-family: var(--font-family-display);
   font-size: 24px;
@@ -311,13 +337,13 @@ body {
 }
 
 @keyframes fadeIn {
-  from { 
-    opacity: 0; 
-    transform: translateX(-50%) translateY(10px); 
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
   }
-  to { 
-    opacity: 1; 
-    transform: translateX(-50%) translateY(0); 
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 }
 
@@ -351,19 +377,19 @@ body {
   .settings-header {
     padding: 16px;
   }
-  
+
   .settings-content {
     padding: 16px;
   }
-  
+
   .settings-footer {
     padding: 16px;
   }
-  
+
   .button-group {
     flex-direction: column;
   }
-  
+
   .shortcut-item {
     flex-direction: column;
     align-items: flex-start;

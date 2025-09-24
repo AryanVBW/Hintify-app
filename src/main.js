@@ -1,5 +1,5 @@
 const electron = require('electron');
-const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol } = electron;
+const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol, screen } = electron;
 const path = require('path');
 const Store = require('electron-store');
 
@@ -473,6 +473,8 @@ function createMainWindow() {
     // Allow smaller minimum sizes so the overlay can be narrowed as needed
     minWidth: 320,
     minHeight: 300,
+    alwaysOnTop: true,
+    fullscreenable: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -484,6 +486,17 @@ function createMainWindow() {
     title: 'Hintify SnapAssist AI',
     show: false // Don't show until ready
   });
+
+  // Ensure overlay stays on top of all apps
+  try {
+    const level = process.platform === 'darwin' ? 'screen-saver' : 'normal';
+    mainWindow.setAlwaysOnTop(true, level);
+    // Keep visible across workspaces and on fullscreen spaces
+    if (mainWindow.setVisibleOnAllWorkspaces) {
+      mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
+  } catch {}
+
 
   // Load the main HTML file
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -536,12 +549,20 @@ function createSettingsWindow() {
     return;
   }
 
+  const display = screen.getPrimaryDisplay();
+  const { width: sw, height: sh } = display.workAreaSize || { width: 1000, height: 800 };
+
   settingsWindow = new BrowserWindow({
-    width: 460,
-    height: 500,
-    resizable: false,
-    parent: mainWindow,
-    modal: true,
+    width: Math.max(sw - 80, 900),
+    height: Math.max(sh - 80, 650),
+    resizable: true,
+    center: true,
+    parent: null,
+    modal: false,
+    transparent: process.platform === 'darwin',
+    backgroundColor: process.platform === 'darwin' ? '#00000000' : undefined,
+    vibrancy: process.platform === 'darwin' ? 'sidebar' : undefined,
+    visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -550,6 +571,13 @@ function createSettingsWindow() {
   icon: resolveAsset('logo_m.png'),
     title: 'Settings - Hintify SnapAssist AI'
   });
+
+  // Make settings also float above the app for a focused experience
+  try {
+    const level = process.platform === 'darwin' ? 'floating' : 'normal';
+    settingsWindow.setAlwaysOnTop(true, level);
+  } catch {}
+
 
   settingsWindow.loadFile(path.join(__dirname, 'renderer', 'settings.html'));
 
