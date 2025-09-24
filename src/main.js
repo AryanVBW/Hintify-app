@@ -4,7 +4,7 @@ const path = require('path');
 const Store = require('electron-store');
 
 // Load environment variables first
-require('dotenv').config({ 
+require('dotenv').config({
   path: path.resolve(__dirname, '../.env.local')
 });
 
@@ -16,6 +16,15 @@ const SupabaseService = require('./services/SupabaseService');
 
 // Initialize electron-store for persistent settings
 const store = new Store();
+
+// Optional auto-updater (loaded only if dependency is installed)
+let autoUpdater = null;
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+  console.log('AutoUpdater module loaded');
+} catch (e) {
+  console.warn('electron-updater not installed; auto-update disabled in this build');
+}
 
 // Initialize services with error handling
 let authService, dbService, portalService, supabaseService;
@@ -29,7 +38,7 @@ try {
 } catch (error) {
   console.error('❌ Failed to initialize services:', error.message);
   console.log('The app will continue without database functionality.');
-  
+
   // Create mock services to prevent crashes
   authService = {
     processAuthentication: async () => ({ user: null, session: null }),
@@ -117,16 +126,16 @@ function registerIpcHandlers() {
   ipcMain.on('onboarding-completed', (event, config) => {
     console.log('✅ Onboarding completed with config:', config);
     saveConfig(config);
-    
+
     if (onboardingWindow && !onboardingWindow.isDestroyed()) {
       onboardingWindow.close();
     }
-    
+
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('config-updated', config);
       mainWindow.show();
       mainWindow.focus();
-      
+
       // After onboarding, check if user needs to authenticate
       const authStatus = checkAuthStatus();
       if (!authStatus.authenticated) {
@@ -160,52 +169,52 @@ function registerIpcHandlers() {
         userId: authResult.user.id,
         sessionId: authResult.session.id
       });
-      
+
       // Merge normalized user info back to store
       const finalUserInfo = { ...userInfo, id: authResult.user.id };
       store.set('user_authenticated', true);
       store.set('user_info', finalUserInfo);
       store.set('last_auth_time', new Date().toISOString());
-      
+
     } catch (dbError) {
       console.error('❌ Failed to persist auth in database:', dbError?.message || dbError);
-      
+
       // Still persist minimal local state so app can proceed
       // This ensures the app works even if database is unavailable
       store.set('user_authenticated', true);
       store.set('user_info', userInfo);
       store.set('last_auth_time', new Date().toISOString());
-      
+
       // Log the database error for debugging
       console.warn('⚠️ App will continue with local authentication only');
     }
-    
+
     // Auth window no longer used - authentication now handled via browser
-    
+
     // Notify main window of auth status change
     if (mainWindow && !mainWindow.isDestroyed()) {
       const finalUserInfo = store.get('user_info');
       console.log('📡 Notifying main window of authentication success...');
-      
+
       mainWindow.webContents.send('auth-status-updated', {
         authenticated: true,
         user: finalUserInfo,
         timestamp: new Date().toISOString()
       });
     }
-    
+
     // Show main window
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
       mainWindow.focus();
       console.log('🖥️ Main window focused');
     }
-    
+
     console.log('🎉 Authentication completed successfully via Supabase');
-    
+
   } catch (error) {
     console.error('❌ Authentication processing failed:', error);
-    
+
     // Send error notification to main window
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('auth-status-updated', {
@@ -214,7 +223,7 @@ function registerIpcHandlers() {
         timestamp: new Date().toISOString()
       });
     }
-    
+
     // Clear any partial authentication data
     store.set('user_authenticated', false);
     store.delete('user_info');
@@ -308,16 +317,16 @@ function registerIpcHandlers() {
 
   ipcMain.on('user-logged-out', async () => {
   console.log('🚪 User logged out');
-  
+
   try {
     // Sign out through AuthService
     await authService.signOut();
-    
+
     // Clear stored auth data
     store.set('user_authenticated', false);
     store.delete('user_info');
     store.delete('last_auth_time');
-    
+
     console.log('✅ User signed out and session ended');
   } catch (error) {
     console.error('❌ Sign out error:', error);
@@ -330,7 +339,7 @@ function registerIpcHandlers() {
     const authStatus = authService.getAuthStatus();
     const storedAuth = store.get('user_authenticated', false);
     const userInfo = store.get('user_info', null);
-    
+
     return {
       success: true,
       authenticated: authStatus.authenticated && storedAuth,
@@ -397,7 +406,7 @@ function registerIpcHandlers() {
       data.metadata,
       data.processingTime
     );
-    
+
     return { success: true, ...result };
   } catch (error) {
     console.error('Failed to save question/answer:', error);
@@ -450,6 +459,42 @@ function registerIpcHandlers() {
 });
 
   // Log activity
+
+  // Auto-update IPC handlers
+  ipcMain.handle('check-for-updates', async () => {
+    if (!autoUpdater) return { supported: false };
+    try {
+      await autoUpdater.checkForUpdates();
+      return { supported: true, started: true };
+    } catch (e) {
+      return { supported: true, started: false, error: e?.message || String(e) };
+    }
+  });
+
+  ipcMain.on('download-update', () => {
+    if (!autoUpdater) return;
+    try { autoUpdater.downloadUpdate(); } catch (e) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-error', { message: e?.message || String(e) });
+      }
+    }
+  });
+
+  ipcMain.on('install-update', () => {
+    if (!autoUpdater) return;
+    try { autoUpdater.quitAndInstall(false, true); } catch (e) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-error', { message: e?.message || String(e) });
+      }
+    }
+  });
+
+  // Allow renderer to temporarily dismiss update prompts
+  ipcMain.on('dismiss-update', (_e, ms) => {
+    try { store.set('update_dismissed_until', Date.now() + (Number(ms) || 0)); } catch {}
+  });
+
+
   ipcMain.handle('log-activity', async (event, featureName, action, details) => {
     try {
       await authService.logActivity(featureName, action, details);
@@ -463,7 +508,7 @@ function registerIpcHandlers() {
 
 function createMainWindow() {
   const config = loadConfig();
-  
+
   // Create the browser window
   mainWindow = new BrowserWindow({
     width: config.windowBounds.width,
@@ -505,6 +550,18 @@ function createMainWindow() {
   // Handle window ready-to-show
   mainWindow.once('ready-to-show', () => {
     // Ensure dock icon set on macOS
+
+function performMigrations(fromVersion, toVersion) {
+  try {
+    console.log(`🔄 Performing migrations from ${fromVersion} to ${toVersion}...`);
+    // Add data/schema migrations here as needed in future versions
+    // Currently no-op
+    console.log('✅ Migrations complete');
+  } catch (e) {
+    console.warn('⚠️ Migration error:', e?.message || e);
+  }
+}
+
     if (process.platform === 'darwin') {
       try {
         const dockImg = nativeImage.createFromPath(resolveAsset('logo_m.png'));
@@ -512,7 +569,7 @@ function createMainWindow() {
       } catch {}
     }
     mainWindow.show();
-    
+
     // Focus the window
     if (isDevelopment) {
       mainWindow.webContents.openDevTools();
@@ -589,7 +646,7 @@ function createOnboardingWindow() {
 
   onboardingWindow.once('ready-to-show', () => {
     onboardingWindow.show();
-    
+
     if (isDevelopment) {
       onboardingWindow.webContents.openDevTools();
     }
@@ -614,13 +671,13 @@ function createOnboardingWindow() {
 function checkAuthStatus() {
   const isAuthenticated = store.get('user_authenticated', false);
   const userInfo = store.get('user_info', null);
-  
+
   console.log('🔍 Auth status check:', {
     isAuthenticated,
     hasUserInfo: !!userInfo,
     userEmail: userInfo?.email
   });
-  
+
   return {
     authenticated: isAuthenticated,
     user: userInfo
@@ -629,7 +686,7 @@ function checkAuthStatus() {
 
 function createMenuTemplate() {
   const authStatus = checkAuthStatus();
-  
+
   const template = [
     {
       label: app.getName(),
@@ -663,7 +720,7 @@ function createMenuTemplate() {
             // Clear auth data
             store.set('user_authenticated', false);
             store.delete('user_info');
-            
+
             // Notify main window
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('auth-status-updated', {
@@ -791,6 +848,26 @@ function createMenuTemplate() {
       label: 'Help',
       submenu: [
         {
+          label: 'Check for Updates…',
+          click: () => {
+            try {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('update-status', { status: 'checking' });
+              }
+              if (autoUpdater) {
+                autoUpdater.checkForUpdates();
+              } else if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('update-status', { status: 'unsupported' });
+              }
+            } catch (e) {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('update-error', { message: e?.message || String(e) });
+              }
+            }
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'Learn More',
           click: () => shell.openExternal('https://github.com/AryanVBW/Hintify')
         },
@@ -808,7 +885,7 @@ function createMenuTemplate() {
 function registerGlobalShortcuts() {
   // Register global shortcut for screenshot capture
   const captureShortcut = process.platform === 'darwin' ? 'Cmd+Shift+H' : 'Ctrl+Shift+H';
-  
+
   globalShortcut.register(captureShortcut, () => {
     if (mainWindow) {
       mainWindow.webContents.send('trigger-capture');
@@ -975,8 +1052,81 @@ async function processDeepLinkAuth(tokens) {
         source: 'deeplink'
       });
     }
+// Auto-update setup (uses electron-updater if available)
+function setupAutoUpdater() {
+  if (!autoUpdater) {
+    return;
+  }
 
-    console.log('✅ Deep link authentication processed successfully');
+  try {
+    // Configure updater
+    autoUpdater.autoDownload = false; // we'll download when user clicks
+    autoUpdater.allowDowngrade = false;
+    // Authorize requests if using a private GitHub repo
+    if (process.env.GH_TOKEN) {
+      try { autoUpdater.requestHeaders = { Authorization: `token ${process.env.GH_TOKEN}` }; } catch {}
+    }
+
+    // Forward updater events to renderer
+    autoUpdater.on('checking-for-update', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-status', { status: 'checking' });
+      }
+    });
+
+    autoUpdater.on('update-available', (info) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-available', {
+          version: info?.version,
+          releaseName: info?.releaseName,
+          releaseNotes: info?.releaseNotes
+        });
+      }
+    });
+
+    autoUpdater.on('update-not-available', (info) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-not-available', { currentVersion: app.getVersion() });
+      }
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.error('AutoUpdater error:', err);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-error', { message: err?.message || String(err) });
+      }
+    });
+
+    autoUpdater.on('download-progress', (progress) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-download-progress', {
+          percent: progress?.percent || 0,
+          transferred: progress?.transferred,
+          total: progress?.total,
+          bytesPerSecond: progress?.bytesPerSecond
+        });
+      }
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-downloaded', { version: info?.version });
+      }
+      // Small delay to allow UI to update, then install
+      setTimeout(() => {
+        try { autoUpdater.quitAndInstall(false, true); } catch {}
+      }, 1200);
+    });
+
+    // Periodic checks (every 6 hours)
+    setInterval(() => {
+      try { autoUpdater.checkForUpdates(); } catch (e) {}
+    }, 6 * 60 * 60 * 1000);
+  } catch (e) {
+    console.warn('Failed to initialize auto-updater:', e?.message || e);
+  }
+}
+
 
   } catch (error) {
     console.error('❌ Error processing deep link authentication:', error);
@@ -989,13 +1139,13 @@ function setupApp() {
   const authStatus = checkAuthStatus();
   const config = loadConfig();
   const isFirstRun = !config.onboarding_completed;
-  
+
   console.log('🚀 App setup:', {
     isAuthenticated: authStatus.authenticated,
     isFirstRun,
     onboardingCompleted: config.onboarding_completed
   });
-  
+
   // Initialize authentication from storage
   authService.initializeFromStorage(store).then(authInitialized => {
     if (authInitialized) {
@@ -1004,10 +1154,10 @@ function setupApp() {
   }).catch(error => {
     console.error('❌ Failed to initialize authentication:', error);
   });
-  
+
   // Create main window
   createMainWindow();
-  
+
   // Priority order:
   // 1. First-time users see onboarding (regardless of auth)
   // 2. Authenticated users see main app
@@ -1040,7 +1190,7 @@ function setupApp() {
 
   // Register global shortcuts
   registerGlobalShortcuts();
-  
+
   // Start periodic sync of pending data transfers
   setInterval(async () => {
     try {
@@ -1109,6 +1259,28 @@ app.whenReady().then(() => {
 
   setupApp();
 
+  // Run migrations on version change
+  try {
+    const currentVersion = app.getVersion();
+    const lastVersion = store.get('last_run_version');
+    if (lastVersion && lastVersion !== currentVersion) {
+      performMigrations(lastVersion, currentVersion);
+    }
+    store.set('last_run_version', currentVersion);
+  } catch {}
+
+  // Initialize auto-updater and perform an initial check (if not dismissed recently)
+  setupAutoUpdater();
+  try {
+    if (autoUpdater) {
+      const dismissedUntil = store.get('update_dismissed_until', 0);
+      if (!dismissedUntil || Date.now() > dismissedUntil) {
+        autoUpdater.checkForUpdates();
+      }
+    }
+  } catch {}
+
+
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1130,6 +1302,8 @@ app.on('will-quit', () => {
 });
 
 app.on('activate', () => {
+
+
   if (mainWindow === null) {
     createMainWindow();
   }

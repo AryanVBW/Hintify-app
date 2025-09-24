@@ -28,6 +28,23 @@
             </div>
         </div>
 
+        <!-- Update banner -->
+        <div id="update-banner" class="update-banner hidden" aria-live="polite">
+            <div class="update-info">
+                <span class="update-title">A new version is available</span>
+                <span id="update-version" class="update-version"></span>
+            </div>
+            <div class="update-actions">
+                <button id="update-now-btn" class="btn btn-primary">Update Now</button>
+                <button id="dismiss-update-btn" class="btn btn-secondary">Later</button>
+            </div>
+            <div id="update-progress" class="update-progress hidden">
+                <div class="progress-bar"><div id="update-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                <span id="update-progress-text" class="progress-text">Preparing...</span>
+            </div>
+        </div>
+
+
         <!-- Main content area -->
         <div class="content-area">
             <div class="text-container">
@@ -205,7 +222,7 @@
                 <button id="close-app-settings-modal" class="modal-close">&times;</button>
             </div>
             <div class="modal-body" style="padding: 0; height: calc(100% - 56px);">
-                <iframe id="app-settings-iframe" src="about:blank" style="border:0; width:100%; height:100%;"></iframe>
+                <iframe id="app-settings-iframe" src="about:blank" style="border:0; width:100%; height:100%;" title="App Settings"></iframe>
             </div>
         </div>
     </div>
