@@ -1,6 +1,6 @@
 {
   "name": "hintify-snapassist-ai",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Hintify SnapAssist AI – Your intelligent study companion for instant homework hints and guidance",
   "main": "src/main.js",
   "author": {
