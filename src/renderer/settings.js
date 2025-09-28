@@ -10,7 +10,8 @@ const defaultConfig = {
   provider: 'ollama',
   ollama_model: 'granite3.2-vision:2b',
   gemini_model: 'gemini-2.0-flash',
-  theme: 'dark'
+  theme: 'dark',
+  advanced_mode: false
 };
 
 // DOM elements
@@ -64,7 +65,12 @@ async function refreshUserCard() {
     if (elements.userEmail) elements.userEmail.textContent = isAuthed ? (status.user.email || '') : (isGuest ? 'Guest Mode' : 'Using app without account');
     if (elements.userAvatar) {
       const avatarUrl = status?.user?.avatar || status?.user?.imageUrl || status?.user?.image_url || '';
-      if (isAuthed && avatarUrl) elements.userAvatar.src = avatarUrl; else elements.userAvatar.removeAttribute('src');
+      if (isAuthed && avatarUrl) {
+        elements.userAvatar.src = avatarUrl;
+      } else {
+        // Show a pleasant default avatar for guest users
+        elements.userAvatar.src = '../../assets/logo_m.png';
+      }
     }
     if (elements.signInBtn && elements.signOutBtn) {
       elements.signInBtn.classList.toggle('hidden', isAuthed);
@@ -169,7 +175,8 @@ function saveSettings() {
     provider: elements.providerSelect.value,
     ollama_model: elements.ollamaModel.value.trim() || 'granite3.2-vision:2b',
     gemini_model: elements.geminiModel.value,
-    theme: elements.themeSelect.value
+    theme: elements.themeSelect.value,
+    advanced_mode: !!elements.advancedModeToggle?.checked
   };
 
   // Save Gemini API key separately if provided
@@ -266,6 +273,7 @@ function loadForm() {
   elements.ollamaModel.value = config.ollama_model;
   elements.geminiModel.value = config.gemini_model;
   elements.themeSelect.value = config.theme;
+  if (elements.advancedModeToggle) elements.advancedModeToggle.checked = !!config.advanced_mode;
 
   // Load Gemini API key
   const geminiApiKey = store.get('gemini_api_key') || '';
@@ -287,6 +295,7 @@ function initializeSettings() {
     geminiModel: document.getElementById('gemini-model'),
     geminiApiKey: document.getElementById('gemini-api-key'),
     themeSelect: document.getElementById('theme-select'),
+  advancedModeToggle: document.getElementById('advanced-mode-toggle'),
     cancelBtn: document.getElementById('cancel-btn'),
     testConnectionBtn: document.getElementById('test-connection-btn'),
     saveBtn: document.getElementById('save-btn'),
@@ -365,6 +374,17 @@ function initializeSettings() {
   if (elements.themeSelect) {
     elements.themeSelect.addEventListener('change', (e) => {
       applyTheme(e.target.value);
+    });
+  }
+
+  // Advanced mode info tip when toggled
+  if (elements.advancedModeToggle) {
+    elements.advancedModeToggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        showStatus('Advanced Hint Mode enabled: screenshots will be sent directly to the AI (vision).', 'success', 2500);
+      } else {
+        showStatus('Advanced Hint Mode disabled: using OCR → text prompts.', 'info', 2000);
+      }
     });
   }
 

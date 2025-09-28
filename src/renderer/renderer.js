@@ -20,7 +20,9 @@ const defaultConfig = {
   provider: 'gemini',
   ollama_model: 'granite3.2-vision:2b',
   gemini_model: 'gemini-2.0-flash',
-  theme: 'dark'
+  theme: 'dark',
+  // When enabled, screenshots are sent directly to the AI model (vision) without OCR
+  advanced_mode: false
 };
 
 // Load configuration
@@ -47,6 +49,11 @@ function saveConfig(config) {
 // Apply theme to body
 function applyTheme(theme) {
   document.body.className = `theme-${theme || 'dark'}`;
+}
+
+// Platform-aware modifier key label for shortcuts
+function getModKeyLabel() {
+  try { return process.platform === 'darwin' ? 'Cmd' : 'Ctrl'; } catch { return 'Ctrl'; }
 }
 
 // Check authentication status with enhanced validation
@@ -642,34 +649,78 @@ function loadAppImages() {
     const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
     const basePath = isDev ? '../../assets/' : (process.resourcesPath + '/assets/');
 
+    const assetUrl = (filename) => {
+      if (isDev) return `../../assets/${filename}`;
+      try {
+        const full = path.join(basePath, filename);
+        // Convert to file:// URL for absolute paths
+        if (/^[A-Za-z]:\\/.test(full)) {
+          // Windows path -> file URL
+          return 'file:///' + full.replace(/\\/g, '/');
+        }
+        if (full.startsWith('/')) return `file://${full}`;
+        return full;
+      } catch { return `../../assets/${filename}`; }
+    };
+    const setWithFallback = (img, filename) => {
+      if (!img) return;
+      img.onerror = () => {
+        try { img.src = `../../assets/${filename}`; } catch {}
+      };
+      img.src = assetUrl(filename);
+    };
+
     // Set logo image
     const appLogo = document.getElementById('app-logo');
-    if (appLogo) {
-      appLogo.src = path.join(basePath, 'logo_m.png');
-    }
+    setWithFallback(appLogo, 'logo_m.png');
 
-    // Set capture button icon
+    // Render Lucide icons if available; otherwise fallback to PNGs
     const captureIcon = document.getElementById('capture-icon');
     if (captureIcon) {
-      captureIcon.src = path.join(basePath, 'screenshot-64.png');
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons({ icons: { camera: window.lucide.icons?.camera } });
+      } else {
+        // Fallback to image source if Lucide isn't loaded
+        if (captureIcon.tagName.toLowerCase() === 'img') {
+          setWithFallback(captureIcon, 'screenshot-64.png');
+        } else {
+          // Replace <i> with <img>
+          const img = document.createElement('img');
+          img.id = 'capture-icon';
+          img.className = 'btn-icon';
+          img.alt = 'Capture';
+          setWithFallback(img, 'screenshot-64.png');
+          captureIcon.replaceWith(img);
+        }
+      }
     }
 
-    // Set settings button icon
     const settingsIcon = document.getElementById('settings-icon');
     if (settingsIcon) {
-      settingsIcon.src = path.join(basePath, 'settings-94.png');
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons({ icons: { settings: window.lucide.icons?.settings } });
+      } else {
+        if (settingsIcon.tagName.toLowerCase() === 'img') {
+          setWithFallback(settingsIcon, 'settings-94.png');
+        } else {
+          const img = document.createElement('img');
+          img.id = 'settings-icon';
+          img.className = 'btn-icon';
+          img.alt = 'Settings';
+          setWithFallback(img, 'settings-94.png');
+          settingsIcon.replaceWith(img);
+        }
+      }
     }
   } catch (error) {
     console.error('Error loading app images:', error);
     // Fallback: try to load with relative paths
     const appLogo = document.getElementById('app-logo');
     if (appLogo) appLogo.src = '../../assets/logo_m.png';
-
     const captureIcon = document.getElementById('capture-icon');
-    if (captureIcon) captureIcon.src = '../../assets/screenshot-64.png';
-
+    if (captureIcon && captureIcon.tagName.toLowerCase() === 'img') captureIcon.src = '../../assets/screenshot-64.png';
     const settingsIcon = document.getElementById('settings-icon');
-  if (settingsIcon) settingsIcon.src = '../../assets/settings-94.png';
+    if (settingsIcon && settingsIcon.tagName.toLowerCase() === 'img') settingsIcon.src = '../../assets/settings-94.png';
   }
 }
 
@@ -753,6 +804,18 @@ function updateStatus(text) {
   if (statusEl) {
     statusEl.textContent = text;
   }
+}
+
+// Update mode toggle UI (bottom status bar)
+function syncModeToggleUI(cfg) {
+  try {
+    const input = document.getElementById('mode-toggle');
+    const label = document.getElementById('mode-toggle-text');
+    if (!input || !label) return;
+    input.checked = !!cfg.advanced_mode;
+    label.textContent = cfg.advanced_mode ? 'Advanced Mode' : 'Standard Mode';
+    label.title = cfg.advanced_mode ? 'Advanced Mode (Direct Vision): send screenshots to the AI without OCR' : 'Standard Mode (OCR): extract text first, then ask the AI';
+  } catch {}
 }
 
 // Update provider text
@@ -1166,6 +1229,32 @@ Output format (TEXT ONLY):
 Hint 1: ...\nHint 2: ...\nHint 3: ...\n(Hint 4..6 if useful)\n<encouragement line>`;
 }
 
+// Specialized prompt for direct image hinting (no OCR)
+function buildImageHintPrompt() {
+  return `You are SnapAssist AI, a study buddy for students.
+
+You will receive a screenshot of a problem/question. Your job is to provide ONLY hints without solving it or revealing the final answer.
+
+Rules:
+- Do NOT give the final numeric value or the exact option letter.
+- Do NOT fully solve the problem.
+- Provide 3–5 concise, progressively deeper hints.
+
+Formatting:
+Hint 1: ...
+Hint 2: ...
+Hint 3: ...
+(Hint 4 and Hint 5 if helpful)
+
+Guidance:
+- Start from concept → formula → setup → approach → final nudge.
+- Prefer LaTeX for math, using $...$ for inline and $$...$$ for blocks (e.g., $\\frac{dy}{dx}$, $$\\int x^2\\,dx$$, matrices with \\begin{bmatrix}..\\end{bmatrix}).
+- For chemistry, you may use \\ce{...} notation.
+- Keep hints short (under 2 sentences each) but helpful.
+
+End with a one-line encouragement (e.g., "Now try the final step yourself.")`;
+}
+
 
 // Query Ollama
 async function queryOllama(prompt, model) {
@@ -1180,6 +1269,28 @@ async function queryOllama(prompt, model) {
   } catch (error) {
     if (error.code === 'ECONNREFUSED') {
       return '[Setup] Ollama not running. Please start Ollama first.';
+    }
+    return `[LLM Error] ${error.message}`;
+  }
+}
+
+// Query Ollama with an image (vision models)
+async function queryOllamaWithImage(prompt, model, imageBuffer) {
+  try {
+    const base64 = Buffer.from(imageBuffer).toString('base64');
+    const response = await axios.post('http://localhost:11434/api/generate', {
+      model,
+      prompt,
+      images: [base64],
+      stream: false
+    });
+    return response.data.response || '[LLM Error] Empty response from Ollama (vision)';
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED') {
+      return '[Setup] Ollama not running. Please start Ollama first.';
+    }
+    if (error.response?.status === 400 || error.response?.status === 404) {
+      return '[Setup] The selected Ollama model may not support images. Try a vision-capable model (e.g., granite3.2-vision:2b, llava, llama3.2-vision) or switch provider in Settings.';
     }
     return `[LLM Error] ${error.message}`;
   }
@@ -1220,6 +1331,39 @@ async function queryGemini(prompt, model, apiKey) {
   }
 }
 
+// Query Gemini with an image (vision). Falls back to a known multimodal model if needed.
+async function queryGeminiWithImage(prompt, model, apiKey, imageBuffer) {
+  async function callModel(m) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`;
+    const base64 = Buffer.from(imageBuffer).toString('base64');
+    const body = {
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: 'image/png', data: base64 } },
+          { text: prompt }
+        ]
+      }]
+    };
+    const resp = await axios.post(url, body, { headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey } });
+    const candidates = resp.data.candidates || [];
+    const parts = candidates[0]?.content?.parts || [];
+    const texts = parts.map(p => p.text).filter(Boolean);
+    return texts.join('\n').trim() || '[LLM Error] Empty response from Gemini (vision)';
+  }
+  try {
+    return await callModel(model);
+  } catch (error) {
+    // If model doesn't support images, try a known multimodal fallback
+    if (error.response?.status === 404 || error.response?.status === 400 || error.response?.status === 403) {
+      const fallback = 'gemini-1.5-flash';
+      if (model !== fallback) {
+        try { return await callModel(fallback); } catch (e2) { return `[LLM Error] ${e2.message}`; }
+      }
+    }
+    return `[LLM Error] ${error.message}`;
+  }
+}
+
 // Generate hints using AI
 async function generateHints(text, qtype, difficulty, imageData = null, processingStartTime = null) {
   const prompt = buildPrompt(text, qtype, difficulty);
@@ -1249,7 +1393,8 @@ async function generateHints(text, qtype, difficulty, imageData = null, processi
   currentQuestionData = {
     questionText: text,
     answerText: hints,
-    questionType: qtype === 'text' ? 'text' : 'image_ocr',
+    // Determine question type based on whether image data was used
+    questionType: imageData ? 'image_ocr' : 'text',
     imageData: imageData,
     metadata: {
       difficulty: difficulty,
@@ -1274,6 +1419,118 @@ async function generateHints(text, qtype, difficulty, imageData = null, processi
   }
 
   return hints;
+}
+
+// Generate hints directly from image (Advanced Mode: no OCR)
+async function generateHintsFromImageDirect(imageBuffer, processingStartTime = null) {
+  const prompt = buildImageHintPrompt();
+  const config = currentConfig;
+
+  let hints;
+  let processingTime = null;
+  if (processingStartTime) processingTime = Date.now() - processingStartTime;
+
+  if (config.provider === 'ollama') {
+    hints = await queryOllamaWithImage(prompt, config.ollama_model, imageBuffer);
+  } else if (config.provider === 'gemini') {
+    const apiKey = store.get('gemini_api_key') || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      hints = '[Setup] Gemini API key not set. Please configure in Settings.';
+    } else {
+      hints = await queryGeminiWithImage(prompt, config.gemini_model, apiKey, imageBuffer);
+    }
+  } else {
+    hints = '[Setup] No valid AI provider configured.';
+  }
+
+  // Update current question context for saving/sharing
+  currentQuestionData = {
+    questionText: '[Screenshot input]',
+    answerText: hints,
+    questionType: 'image_direct',
+    imageData: Buffer.from(imageBuffer).toString('base64'),
+    metadata: {
+      difficulty: 'Unknown',
+      question_type: 'Unknown',
+      source: 'advanced_mode_image',
+      timestamp: new Date().toISOString()
+    },
+    processingTime
+  };
+
+  // Auto-save if user is authenticated and hints look valid
+  if (userInfo && hints && !hints.startsWith('[') && !hints.includes('Error')) {
+    setTimeout(async () => {
+      await saveQuestionAnswer(
+        currentQuestionData.questionText,
+        currentQuestionData.answerText,
+        currentQuestionData.questionType,
+        currentQuestionData.imageData,
+        currentQuestionData.metadata,
+        currentQuestionData.processingTime
+      );
+    }, 100);
+  }
+
+  return hints;
+}
+
+// Smart clipboard processing: image if available, otherwise text
+async function processClipboardSmart() {
+  if (isProcessing) {
+    updateStatus('Already processing...');
+    return;
+  }
+
+  try {
+    // Try image first
+    const imageBuffer = getClipboardImage();
+    if (imageBuffer && imageBuffer.length) {
+      await logActivity('clipboard', 'image_found', { image_size: imageBuffer.length });
+      return await processImage(imageBuffer);
+    }
+
+    // Fallback to text
+    const text = (clipboard.readText?.() || '').trim();
+    if (text) {
+      await logActivity('clipboard', 'text_found', { length: text.length });
+      const processingStartTime = Date.now();
+      const qtype = classifyQuestion(text);
+      const difficulty = detectDifficulty(text);
+      updateStatus(`Generating hints... (${qtype}, ${difficulty})`);
+      showLoading(true, 'Generating hints...');
+      try {
+        const hints = await generateHints(text, qtype, difficulty, null, processingStartTime);
+        displayHints(hints);
+        updateStatus('Ready');
+        await logActivity('text_processing', 'completed', {
+          question_type: qtype,
+          difficulty,
+          text_length: text.length,
+          total_processing_time_ms: Date.now() - processingStartTime
+        });
+      } catch (err) {
+        console.error('Text processing error:', err);
+        displayHints(`[Error] ${err.message}`);
+        updateStatus('Error occurred');
+        await logActivity('text_processing', 'failed', {
+          error: err.message,
+          processing_time_ms: Date.now() - processingStartTime
+        });
+      } finally {
+        showLoading(false);
+      }
+      return;
+    }
+
+    // Nothing useful found
+    updateStatus('Clipboard empty');
+    displayHints('⚠️ Clipboard does not contain an image or text. Copy a question or screenshot, then press Cmd/Ctrl+Shift+V.');
+    await logActivity('clipboard', 'empty');
+  } catch (e) {
+    console.error('Clipboard read error:', e);
+    displayHints(`[Error] Clipboard read failed: ${e.message}`);
+  }
 }
 
 // Check if native Tesseract is available
@@ -1480,62 +1737,70 @@ async function processImage(imageBuffer) {
   });
 
   try {
-    // Extract text from image
-    const text = await extractTextFromImage(imageBuffer);
+    if (currentConfig.advanced_mode) {
+      // Advanced Mode: send image directly to the LLM (no OCR)
+      updateStatus('Generating hints (Advanced Mode)...');
+      showLoading(true, 'Generating hints...');
+      const hints = await generateHintsFromImageDirect(imageBuffer, processingStartTime);
+      displayHints(hints);
+      updateStatus('Ready');
+      await logActivity('image_processing', 'completed', {
+        question_type: 'image_direct',
+        difficulty: 'Unknown',
+        ocr_skipped: true,
+        hints_length: (hints || '').length,
+        total_processing_time_ms: Date.now() - processingStartTime
+      });
+    } else {
+      // Standard Mode: OCR then text-only prompting
+      const text = await extractTextFromImage(imageBuffer);
 
-    if (!text || text.startsWith('[OCR Error]') || text.trim().length === 0) {
-      const rawMsg = text?.startsWith('[OCR Error]') ? text : '⚠️ No text found in the image.';
-      let userMsg = rawMsg;
-      if (/Failed to construct 'Worker'|V8 platform|worker.*not support|tesseract.*not found/i.test(rawMsg)) {
-        userMsg = [
-          '⚠️ OCR could not start on this system.',
-          '',
-          'Try one of the following:',
-          '• Install native Tesseract OCR (recommended) and restart the app',
-          '• Or update Hintify to the latest version',
-          '',
-          `Details: ${rawMsg}`
-        ].join('\n');
+      if (!text || text.startsWith('[OCR Error]') || text.trim().length === 0) {
+        const rawMsg = text?.startsWith('[OCR Error]') ? text : '⚠️ No text found in the image.';
+        let userMsg = rawMsg;
+        if (/Failed to construct 'Worker'|V8 platform|worker.*not support|tesseract.*not found/i.test(rawMsg)) {
+          userMsg = [
+            '⚠️ OCR could not start on this system.',
+            '',
+            'Try one of the following:',
+            '• Install native Tesseract OCR (recommended) and restart the app',
+            '• Or update Hintify to the latest version',
+            '',
+            `Details: ${rawMsg}`
+          ].join('\n');
+        }
+        displayHints(userMsg);
+
+        await logActivity('ocr', 'failed', {
+          error: rawMsg,
+          processing_time_ms: Date.now() - processingStartTime
+        });
+        return;
       }
-      displayHints(userMsg);
 
-      // Log OCR failure
-      await logActivity('ocr', 'failed', {
-        error: errorMsg,
+      await logActivity('ocr', 'completed', {
+        text_length: text.length,
         processing_time_ms: Date.now() - processingStartTime
       });
 
-      return;
+      const qtype = classifyQuestion(text);
+      const difficulty = detectDifficulty(text);
+
+      updateStatus(`Generating hints... (${qtype}, ${difficulty})`);
+      showLoading(true, 'Generating hints...');
+
+      const hints = await generateHints(text, qtype, difficulty, imageBuffer.toString('base64'), processingStartTime);
+      displayHints(hints);
+      updateStatus('Ready');
+
+      await logActivity('image_processing', 'completed', {
+        question_type: qtype,
+        difficulty: difficulty,
+        text_length: text.length,
+        hints_length: (hints || '').length,
+        total_processing_time_ms: Date.now() - processingStartTime
+      });
     }
-
-    // Log successful OCR
-    await logActivity('ocr', 'completed', {
-      text_length: text.length,
-      processing_time_ms: Date.now() - processingStartTime
-    });
-
-    // Classify question
-    const qtype = classifyQuestion(text);
-    const difficulty = detectDifficulty(text);
-
-    updateStatus(`Generating hints... (${qtype}, ${difficulty})`);
-    showLoading(true, 'Generating hints...');
-
-    // Generate hints with processing time tracking
-    const hints = await generateHints(text, qtype, difficulty, imageBuffer.toString('base64'), processingStartTime);
-
-    // Display results
-    displayHints(hints);
-    updateStatus('Ready');
-
-    // Log successful completion
-    await logActivity('image_processing', 'completed', {
-      question_type: qtype,
-      difficulty: difficulty,
-      text_length: text.length,
-      hints_length: hints.length,
-      total_processing_time_ms: Date.now() - processingStartTime
-    });
 
   } catch (error) {
     console.error('Processing error:', error);
@@ -1656,15 +1921,18 @@ async function initializeApp() {
     updateAuthUI(false, null, true);
     const hintsDisplay = document.getElementById('hints-display');
     if (hintsDisplay) {
+      const mod = getModKeyLabel();
       hintsDisplay.innerHTML = `
         <div class="hint-item guest-mode-compact">
           <div class="hint-label">🚀 Welcome Back!</div>
           <div class="hint-text">
             You're continuing in guest mode. All core features are available:
             <br><br>
-            • Capture screenshots with the 📸 button or <strong>Ctrl+Shift+S</strong>
+            • Capture screenshots with the 📸 button or <strong>${mod}+Shift+S</strong>
             <br>
-            • Process clipboard images with <strong>Ctrl+Shift+V</strong>
+            • Process clipboard <em>text or images</em> with <strong>${mod}+Shift+V</strong>
+            <br>
+            • Bring up the app quickly with the global hotkey <strong>${mod}+Shift+H</strong>
             <br>
             • Get AI-powered hints without spoiling answers
             <br><br>
@@ -1687,6 +1955,9 @@ async function initializeApp() {
   // Update provider display
   updateProvider(config.provider, config.provider === 'ollama' ? config.ollama_model : config.gemini_model);
 
+  // Sync bottom-bar mode toggle
+  syncModeToggleUI(config);
+
   // Set up event listeners
   setupEventListeners();
 
@@ -1698,6 +1969,8 @@ function setupEventListeners() {
   const captureBtn = document.getElementById('capture-btn');
   const settingsBtn = document.getElementById('settings-btn');
   const authBtn = document.getElementById('auth-btn');
+  const modeToggle = document.getElementById('mode-toggle');
+  const modeToggleText = document.getElementById('mode-toggle-text');
 
   if (captureBtn) {
     captureBtn.addEventListener('click', triggerCapture);
@@ -1709,6 +1982,22 @@ function setupEventListeners() {
 
   if (authBtn) {
     authBtn.addEventListener('click', handleSignIn);
+  }
+
+  // Mode toggle handler
+  if (modeToggle) {
+    const applyToggle = (checked) => {
+      const newCfg = { advanced_mode: !!checked };
+      saveConfig(newCfg);
+      syncModeToggleUI({ ...currentConfig, ...newCfg });
+      updateStatus(checked ? 'Advanced Mode enabled' : 'Standard Mode enabled');
+    };
+    // Initialize text in case DOM changed later
+    syncModeToggleUI(currentConfig);
+    modeToggle.addEventListener('change', (e) => applyToggle(e.target.checked));
+    if (modeToggleText) {
+      // Clicking the label toggles input automatically; no extra handler needed
+    }
   }
 
   // If main process wants to show sign-in
@@ -1839,12 +2128,14 @@ function setupEventListeners() {
 
   // Set up IPC listeners
   ipcRenderer.on('trigger-capture', triggerCapture);
-  ipcRenderer.on('process-clipboard', processClipboardImage);
+  // Process clipboard (image or text)
+  ipcRenderer.on('process-clipboard', processClipboardSmart);
 
   ipcRenderer.on('config-updated', (event, newConfig) => {
     currentConfig = { ...currentConfig, ...newConfig };
     applyTheme(newConfig.theme);
     updateProvider(newConfig.provider, newConfig.provider === 'ollama' ? newConfig.ollama_model : newConfig.gemini_model);
+    syncModeToggleUI(currentConfig);
   });
 
 // Listen for authentication updates
@@ -1928,7 +2219,7 @@ function setupEventListeners() {
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
       e.preventDefault();
-      processClipboardImage();
+      processClipboardSmart();
     } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
       e.preventDefault();
       triggerCapture();
@@ -2143,6 +2434,7 @@ function displayGuestModeMessage() {
   const hintsDisplay = document.getElementById('hints-display');
   if (!hintsDisplay) return;
 
+  const mod = getModKeyLabel();
   hintsDisplay.innerHTML = `
     <div class="welcome-message">
       <h2>🎯 Welcome to Hintify SnapAssist AI</h2>
@@ -2150,8 +2442,9 @@ function displayGuestModeMessage() {
       <div class="instructions">
         <h3>How to Get Started:</h3>
         <ul>
-          <li>📸 <strong>Capture Screenshot:</strong> Click the camera button or press Ctrl+Shift+S</li>
-          <li>📋 <strong>Process Clipboard:</strong> Copy an image and press Ctrl+Shift+V</li>
+          <li>📸 <strong>Capture Screenshot:</strong> Click the camera button or press <strong>${mod}+Shift+S</strong></li>
+          <li>📋 <strong>Process Clipboard (Text or Image):</strong> Copy your question or screenshot and press <strong>${mod}+Shift+V</strong></li>
+          <li>⌨️ <strong>Global Hotkey:</strong> Open the app anytime with <strong>${mod}+Shift+H</strong></li>
           <li>🤖 <strong>Get AI Hints:</strong> Receive intelligent hints without spoiling the answer</li>
           <li>⚙️ <strong>Configure AI:</strong> Choose between local Ollama or cloud Gemini in settings</li>
         </ul>
@@ -2212,15 +2505,18 @@ function enableGuestMode() {
   // Show welcome message for guest mode (fix HTML rendering)
   const hintsDisplay = document.getElementById('hints-display');
   if (hintsDisplay) {
+    const mod = getModKeyLabel();
     hintsDisplay.innerHTML = `
       <div class="hint-item guest-mode-compact">
         <div class="hint-label">🎯 Guest Mode Activated</div>
         <div class="hint-text">
           You're now using Hintify SnapAssist AI in guest mode! All core features are available:
           <br><br>
-          • Capture screenshots with the 📸 button or <strong>Ctrl+Shift+S</strong>
+          • Capture screenshots with the 📸 button or <strong>${mod}+Shift+S</strong>
           <br>
-          • Process clipboard images with <strong>Ctrl+Shift+V</strong>
+          • Process clipboard <em>text or images</em> with <strong>${mod}+Shift+V</strong>
+          <br>
+          • Bring up the app quickly with the global hotkey <strong>${mod}+Shift+H</strong>
           <br>
           • Get AI-powered hints without spoiling answers
           <br><br>

@@ -23,11 +23,11 @@
             </div>
 
             <div class="action-buttons">
-                <button id="capture-btn" class="btn btn-primary" title="Capture Screenshot">
-                    <img id="capture-icon" src="" alt="Capture" class="btn-icon">
+                <button id="capture-btn" class="btn btn-primary" title="Capture Screenshot" aria-label="Capture Screenshot">
+                    <i id="capture-icon" data-lucide="camera" class="btn-icon" aria-hidden="true"></i>
                 </button>
-                <button id="settings-btn" class="btn btn-secondary" title="Settings">
-                    <img id="settings-icon" src="" alt="Settings" class="btn-icon">
+                <button id="settings-btn" class="btn btn-secondary" title="Settings" aria-label="Settings">
+                    <i id="settings-icon" data-lucide="settings" class="btn-icon" aria-hidden="true"></i>
                 </button>
 
             </div>
@@ -79,8 +79,11 @@
             <div class="status-section">
                 <span id="status-text">Ready</span>
             </div>
-            <div class="provider-section">
-                <span id="provider-text">Provider: Loading...</span>
+            <div class="status-section" style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                <label for="mode-toggle" class="mode-toggle-label" title="Toggle between Standard (OCR) and Advanced (Direct Vision) modes" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="mode-toggle" style="accent-color: var(--accent, #6ea8fe); cursor:pointer;">
+                    <span id="mode-toggle-text">Standard Mode</span>
+                </label>
             </div>
         </div>
     </div>

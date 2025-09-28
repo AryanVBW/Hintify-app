@@ -29,74 +29,98 @@
                 </div>
             </div>
 
-            <div class="setting-group">
-                <label for="provider-select">AI Provider</label>
-                <select id="provider-select">
-                    <option value="ollama">Ollama (Local)</option>
-                    <option value="gemini">Gemini (Cloud)</option>
-                </select>
-                <small>Choose between local Ollama or cloud-based Gemini AI</small>
-            </div>
+            <!-- AI Settings Card -->
+            <div class="card">
+                <h3>AI Settings</h3>
+                <div class="grid-2">
+                    <div class="setting-group">
+                        <label for="provider-select">AI Provider</label>
+                        <select id="provider-select">
+                            <option value="ollama">Ollama (Local)</option>
+                            <option value="gemini">Gemini (Cloud)</option>
+                        </select>
+                        <small>Choose between local Ollama or cloud-based Gemini AI</small>
+                    </div>
 
-            <div class="setting-group">
-                <label for="ollama-model">Ollama Model</label>
-                <input type="text" id="ollama-model" placeholder="granite3.2-vision:2b">
-                <small>Model to use with Ollama (e.g., granite3.2-vision:2b, llama3.2:3b)</small>
-            </div>
+                    <div class="setting-group">
+                        <label for="ollama-model">Ollama Model</label>
+                        <input type="text" id="ollama-model" placeholder="granite3.2-vision:2b">
+                        <small>Model to use with Ollama (e.g., granite3.2-vision:2b, llama3.2:3b)</small>
+                    </div>
 
-            <div class="setting-group">
-                <label for="gemini-model">Gemini Model</label>
-                <select id="gemini-model">
-                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                </select>
-                <small>Gemini model to use for AI responses</small>
-            </div>
+                    <div class="setting-group">
+                        <label for="gemini-model">Gemini Model</label>
+                        <select id="gemini-model">
+                            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                        </select>
+                        <small>Gemini model to use for AI responses</small>
+                    </div>
 
-            <div class="setting-group">
-                <label for="gemini-api-key">Gemini API Key</label>
-                <div class="api-key-group">
-                    <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key" autocomplete="off" spellcheck="false">
-                    <button type="button" id="paste-key-btn" class="btn btn-secondary" title="Paste from clipboard">📋</button>
-                    <button type="button" id="toggle-key-visibility" class="btn btn-secondary" title="Toggle visibility">👁</button>
+                    <div class="setting-group span-2">
+                        <label for="gemini-api-key">Gemini API Key</label>
+                        <div class="api-key-group">
+                            <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key" autocomplete="off" spellcheck="false">
+                            <button type="button" id="paste-key-btn" class="btn btn-secondary" title="Paste from clipboard">📋</button>
+                            <button type="button" id="toggle-key-visibility" class="btn btn-secondary" title="Toggle visibility">👁</button>
+                        </div>
+                        <small>
+                            Get your API key from
+                            <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
+                            <br>
+                            <em>Tip: Copy your API key, then click the 📋 button to paste it</em>
+                        </small>
+                    </div>
                 </div>
-                <small>
-                    Get your API key from
-                    <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
-                    <br>
-                    <em>Tip: Copy your API key, then click the 📋 button to paste it</em>
-                </small>
             </div>
 
-            <div class="setting-group">
-                <label for="theme-select">Theme</label>
-                <select id="theme-select">
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                    <option value="glass">Glass</option>
-                </select>
-                <small>Choose your preferred visual theme</small>
-            </div>
+            <!-- Appearance & Shortcuts Card -->
+            <div class="card">
+                <h3>Appearance & Shortcuts</h3>
+                <div class="grid-2">
+                    <div class="setting-group">
+                        <label for="theme-select">Theme</label>
+                        <select id="theme-select">
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                            <option value="glass">Glass</option>
+                        </select>
+                        <small>Choose your preferred visual theme</small>
+                    </div>
 
-            <div class="setting-group">
-                <label>Shortcuts</label>
-                <div class="shortcuts-info">
-                    <div class="shortcut-item">
-                        <span class="shortcut-key">Cmd+Shift+H</span>
-                        <span class="shortcut-desc">Global screenshot capture (macOS)</span>
+                    <div class="setting-group">
+                        <label for="advanced-mode-toggle">Advanced Hint Mode</label>
+                        <div>
+                            <input type="checkbox" id="advanced-mode-toggle">
+                            <label for="advanced-mode-toggle">Send screenshots directly to the AI (skip OCR)</label>
+                        </div>
+                        <small>
+                            Uses a vision-capable model to read the screenshot and generate hints. Recommended models:
+                            <em>gemini-1.5-flash</em> or Ollama vision models like <em>granite3.2-vision:2b</em>.
+                        </small>
                     </div>
-                    <div class="shortcut-item">
-                        <span class="shortcut-key">Ctrl+Shift+H</span>
-                        <span class="shortcut-desc">Global screenshot capture (Windows)</span>
-                    </div>
-                    <div class="shortcut-item">
-                        <span class="shortcut-key">Cmd/Ctrl+Shift+V</span>
-                        <span class="shortcut-desc">Process clipboard image</span>
-                    </div>
-                    <div class="shortcut-item">
-                        <span class="shortcut-key">Cmd/Ctrl+Shift+S</span>
-                        <span class="shortcut-desc">Screenshot selection</span>
+
+                    <div class="setting-group span-2">
+                        <label>Shortcuts</label>
+                        <div class="shortcuts-info">
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Cmd+Shift+H</span>
+                                <span class="shortcut-desc">Global screenshot capture (macOS)</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Ctrl+Shift+H</span>
+                                <span class="shortcut-desc">Global screenshot capture (Windows)</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Cmd/Ctrl+Shift+V</span>
+                                <span class="shortcut-desc">Process clipboard (Text or Image)</span>
+                            </div>
+                            <div class="shortcut-item">
+                                <span class="shortcut-key">Cmd/Ctrl+Shift+S</span>
+                                <span class="shortcut-desc">Screenshot selection</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

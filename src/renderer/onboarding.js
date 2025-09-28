@@ -62,14 +62,27 @@ function loadOnboardingLogo() {
     try {
         const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
         const basePath = isDev ? '../../assets/' : (process.resourcesPath + '/assets/');
+        const assetUrl = (filename) => {
+            if (isDev) return `../../assets/${filename}`;
+            try {
+                const full = path.join(basePath, filename);
+                if (/^[A-Za-z]:\\/.test(full)) {
+                    return 'file:///' + full.replace(/\\/g, '/');
+                }
+                if (full.startsWith('/')) return `file://${full}`;
+                return full;
+            } catch { return `../../assets/${filename}`; }
+        };
 
         const logo = document.getElementById('onboarding-logo');
         if (logo) {
-            logo.src = path.join(basePath, 'logo_m.png');
+            logo.onerror = () => { try { logo.src = '../../assets/logo_m.png'; } catch {} };
+            logo.src = assetUrl('logo_m.png');
         }
         const ocr = document.getElementById('ocr-icon');
         if (ocr) {
-            ocr.src = path.join(basePath, 'ocr-64.png');
+            ocr.onerror = () => { try { ocr.src = '../../assets/ocr-64.png'; } catch {} };
+            ocr.src = assetUrl('ocr-64.png');
         }
     } catch (error) {
         console.error('Error loading onboarding logo:', error);

@@ -178,7 +178,9 @@ body {
 .btn-icon {
   width: 18px;
   height: 18px;
+  display: inline-block;
 }
+.btn-icon svg { width: 18px; height: 18px; stroke-width: 2; }
 
 .btn-primary {
   background-color: var(--accent);
