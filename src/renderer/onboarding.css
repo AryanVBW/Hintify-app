@@ -3,8 +3,8 @@
     --bg-color: #0b1220;
     --surface-color: rgba(255, 255, 255, 0.04);
     --surface-strong: rgba(255, 255, 255, 0.06);
-    --primary-color: #6d5ce7; /* unified accent */
-    --primary-color-rgb: 109, 92, 231;
+    --primary-color: #0f766e; /* deep teal accent */
+    --primary-color-rgb: 15, 118, 110;
     --text-color: #e5e7eb;
     --muted-text: #94a3b8;
     --border-color: rgba(255, 255, 255, 0.08);
@@ -12,7 +12,11 @@
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
     --hover-color: rgba(255, 255, 255, 0.05);
+    --accent-bg: rgba(15, 118, 110, 0.15);
+    --accent-color: #ccfbf1;
 }
+
+html, body { height: 100%; }
 
 body {
     margin: 0;
@@ -90,6 +94,19 @@ body::after {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Full-screen variant: fills the window for better visibility */
+body.full-screen .onboarding-container {
+    max-width: none;
+    width: 100vw;
+    margin: 0;
+    padding: 24px 28px;
+    min-height: 100vh;
+    border-radius: 0;
+    border: none;
+    background: rgba(11, 18, 32, 0.55);
+    box-shadow: none;
+}
+
 .onboarding-header {
     text-align: center;
     margin-bottom: 24px;
@@ -131,7 +148,7 @@ body::after {
     transform: scale(1.08) rotate(3deg);
     box-shadow:
         0 25px 50px rgba(0, 0, 0, 0.6),
-        0 0 0 3px rgba(99, 102, 241, 0.3);
+    0 0 0 3px rgba(var(--primary-color-rgb), 0.3);
 }
 
 .onboarding-header h1 {
@@ -197,8 +214,8 @@ body::after {
 
 .step.active:not(:last-child)::after,
 .step.completed:not(:last-child)::after {
-    background: linear-gradient(90deg, #60a5fa, #a855f7);
-    box-shadow: 0 2px 10px rgba(168, 85, 247, 0.4);
+    background: var(--primary-color);
+    box-shadow: 0 2px 10px rgba(var(--primary-color-rgb), 0.35);
 }
 
 .step-number {
@@ -270,7 +287,7 @@ body::after {
     transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
     border-radius: 6px;
     position: relative;
-    box-shadow: 0 2px 10px rgba(168, 85, 247, 0.4);
+    box-shadow: 0 2px 10px rgba(var(--primary-color-rgb), 0.35);
 }
 
 .progress-fill::after {
@@ -295,13 +312,18 @@ body::after {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
-    max-height: calc(100vh - 300px);
+    max-height: none; /* allow the container to manage height */
+    height: auto;
     background: rgba(255, 255, 255, 0.02);
     backdrop-filter: blur(10px);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.05);
-    padding: 30px 30px 120px 30px;
+    padding: 30px 30px 120px 30px; /* bottom padding so sticky footer never overlays content */
     position: relative;
+}
+
+body.full-screen .onboarding-content {
+    border-radius: 16px;
 }
 
 /* Navigation Arrows */
@@ -322,7 +344,7 @@ body::after {
     height: 48px;
     border: none;
     border-radius: 50%;
-    background: rgba(132, 0, 255, 0.9);
+    background: rgba(var(--primary-color-rgb), 0.9);
     color: white;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -331,13 +353,13 @@ body::after {
     justify-content: center;
     pointer-events: auto;
     backdrop-filter: blur(10px);
-    box-shadow: 0 4px 20px rgba(132, 0, 255, 0.3);
+    box-shadow: 0 4px 20px rgba(var(--primary-color-rgb), 0.3);
 }
 
 .nav-arrow:hover {
-    background: rgba(132, 0, 255, 1);
+    background: rgba(var(--primary-color-rgb), 1);
     transform: scale(1.1);
-    box-shadow: 0 6px 25px rgba(132, 0, 255, 0.5);
+    box-shadow: 0 6px 25px rgba(var(--primary-color-rgb), 0.5);
 }
 
 .nav-arrow svg {
@@ -346,11 +368,11 @@ body::after {
 }
 
 .nav-arrow-left {
-    left: -24px;
+    left: 12px;
 }
 
 .nav-arrow-right {
-    right: -24px;
+    right: 12px;
 }
 
 .nav-arrow.hidden {
@@ -387,6 +409,17 @@ body::after {
     letter-spacing: -0.02em;
 }
 
+.step-content h2 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    margin: 0 0 16px 0;
+    background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.02em;
+}
+
 .setup-step > p {
     font-size: 1.2rem;
     font-weight: 500;
@@ -394,6 +427,20 @@ body::after {
     margin: 0 0 40px 0;
     line-height: 1.6;
     letter-spacing: 0.01em;
+}
+
+.step-content > p {
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #cbd5e1;
+    margin: 0 0 28px 0;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+}
+
+.step-content {
+    display: none;
+    animation: fadeIn 0.5s ease-out;
 }
 
 /* Dependency List */
@@ -416,7 +463,7 @@ body::after {
 }
 
 .dependency-item.error {
-    border-color: var(--error-color);
+    border-color: var(--danger-color);
 }
 
 .dependency-header {
@@ -516,7 +563,7 @@ body::after {
 
 .permission-item:hover {
     transform: translateY(-2px);
-    border-color: rgba(99, 102, 241, 0.4);
+    border-color: rgba(var(--primary-color-rgb), 0.4);
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
 }
 
@@ -699,7 +746,7 @@ body::after {
 
 .step-item:hover {
     background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(99, 102, 241, 0.3);
+    border-color: rgba(var(--primary-color-rgb), 0.3);
 }
 
 .step-item .step-number {
@@ -708,14 +755,14 @@ body::after {
     justify-content: center;
     width: 28px;
     height: 28px;
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    background: var(--primary-color);
     color: white;
     border-radius: 50%;
     font-size: 0.9rem;
     font-weight: 700;
     margin-right: 16px;
     flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 12px rgba(var(--primary-color-rgb), 0.3);
 }
 
 .step-text {
@@ -882,6 +929,58 @@ body::after {
     font-weight: 600;
 }
 
+/* Centered Completion Layout */
+.completion-center {
+    /* Take full available space in content area and center children */
+    min-height: calc(100% - 60px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding-top: 20px;
+}
+
+/* On the final step, actions should float center instead of sticky footer feel */
+.step-content#step-5-content .step-actions.centered-actions {
+    position: static;
+    margin-top: 24px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    justify-content: center;
+}
+
+/* Entrance animations for completion */
+@keyframes popIn {
+    0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+    60% { opacity: 1; transform: scale(1.02) translateY(0); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.animate-pop { animation: popIn 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@keyframes slideUpSoft {
+    0% { opacity: 0; transform: translateY(14px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up { animation: slideUpSoft 600ms ease-out both; }
+.delay-1 { animation-delay: 80ms; }
+.delay-2 { animation-delay: 160ms; }
+.delay-3 { animation-delay: 240ms; }
+
+/* CTA glow pulse for the Start button */
+@keyframes ctaGlow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    50% { box-shadow: 0 0 0 12px rgba(16, 185, 129, 0.0); }
+}
+
+#step-5-content #start-app {
+    animation: ctaGlow 2.4s ease-in-out infinite;
+}
+
 /* Step Actions */
 .step-actions {
     position: sticky;
@@ -950,13 +1049,13 @@ body::after {
 .btn-primary {
     background: var(--primary-color);
     color: white;
-    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 8px 25px rgba(var(--primary-color-rgb), 0.25);
     border-color: rgba(255, 255, 255, 0.16);
 }
 
 .btn-primary:hover:not(:disabled) {
     transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 12px 35px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 12px 35px rgba(var(--primary-color-rgb), 0.4);
     background: var(--primary-color);
 }
 
@@ -1034,7 +1133,7 @@ body::after {
 /* Responsive Design */
 @media (max-width: 768px) {
     .onboarding-container {
-        padding: 15px;
+        padding: 12px;
         max-height: 100vh;
         overflow-y: auto;
     }
@@ -1059,9 +1158,9 @@ body::after {
         display: none;
     }
 
-    .onboarding-content {
-        max-height: calc(100vh - 300px);
-    }
+    .onboarding-content { max-height: none; }
+
+    .nav-arrow { display: none; }
 }
 
 @media (max-height: 700px) {
@@ -1071,7 +1170,7 @@ body::after {
     }
 
     .onboarding-content {
-        max-height: calc(100vh - 200px);
+        max-height: none;
         overflow-y: auto;
     }
 
@@ -1089,6 +1188,12 @@ body::after {
     display: grid;
     gap: 20px;
     margin: 30px 0;
+}
+
+@media (min-width: 820px) {
+    .provider-options {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .provider-option {

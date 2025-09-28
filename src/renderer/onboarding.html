@@ -52,12 +52,12 @@
         <div class="onboarding-content">
             <!-- Navigation arrows -->
             <div class="onboarding-navigation">
-                <button id="nav-arrow-left" class="nav-arrow nav-arrow-left hidden" title="Previous Step">
+                <button id="nav-arrow-left" class="nav-arrow nav-arrow-left hidden" title="Previous Step" aria-label="Previous Step">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="m15 18-6-6 6-6"/>
                     </svg>
                 </button>
-                <button id="nav-arrow-right" class="nav-arrow nav-arrow-right" title="Next Step">
+                <button id="nav-arrow-right" class="nav-arrow nav-arrow-right" title="Next Step" aria-label="Next Step">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="m9 18 6-6-6-6"/>
                     </svg>
@@ -112,8 +112,8 @@
                 </div>
 
                 <div class="step-actions">
-                    <button class="btn btn-secondary" id="skip-dependencies">Skip for Now</button>
-                    <button class="btn btn-primary" id="continue-dependencies" disabled>Continue</button>
+                    <button class="btn btn-secondary" id="skip-dependencies" aria-label="Skip dependencies for now">Skip for Now</button>
+                    <button class="btn btn-primary" id="continue-dependencies" disabled aria-disabled="true" aria-label="Continue to Permissions">Continue</button>
                 </div>
             </div>
 
@@ -161,8 +161,8 @@
                 </div>
 
                 <div class="step-actions">
-                    <button class="btn btn-secondary" id="back-to-dependencies">Back</button>
-                    <button class="btn btn-primary" id="continue-permissions">Continue</button>
+                    <button class="btn btn-secondary" id="back-to-dependencies" aria-label="Back to Dependencies">Back</button>
+                    <button class="btn btn-primary" id="continue-permissions" aria-label="Continue to AI Provider">Continue</button>
                 </div>
             </div>
 
@@ -173,7 +173,7 @@
             <p>Select the AI service you'd like to use with Hintify:</p>
             
             <div class="provider-options">
-                <div class="provider-option" data-provider="gemini">
+                <div class="provider-option" data-provider="gemini" role="button" tabindex="0" aria-label="Select Google Gemini as AI provider">
                     <div class="provider-header">
                         <h3>Google Gemini (Recommended)</h3>
                         <span class="provider-badge cloud">Cloud</span>
@@ -187,7 +187,7 @@
                     <button id="setup-gemini-btn" class="btn btn-secondary setup-gemini-btn">Set Up Gemini</button>
                 </div>
                 
-                <div class="provider-option" data-provider="ollama">
+                <div class="provider-option" data-provider="ollama" role="button" tabindex="0" aria-label="Select Ollama as AI provider">
                     <div class="provider-header">
                         <h3>Ollama (Local)</h3>
                         <span class="provider-badge local">Local</span>
@@ -203,8 +203,8 @@
             </div>
             
             <div class="step-actions">
-                <button class="btn btn-secondary" id="back-provider">Back</button>
-                <button class="btn btn-primary" id="continue-config" disabled>Continue</button>
+                <button class="btn btn-secondary" id="back-provider" aria-label="Back to Permissions">Back</button>
+                <button class="btn btn-primary" id="continue-config" disabled aria-disabled="true" aria-label="Continue to Configuration">Continue</button>
             </div>
         </div>
 
@@ -261,17 +261,17 @@
             </div>
             
             <div class="step-actions">
-                <button class="btn btn-secondary" id="back-config">Back</button>
-                <button class="btn btn-primary" id="finish-setup">Finish Setup</button>
+                <button class="btn btn-secondary" id="back-config" aria-label="Back to Provider Selection">Back</button>
+                <button class="btn btn-primary" id="finish-setup" aria-label="Finish Setup">Finish Setup</button>
             </div>
         </div>
 
     <!-- Step 5: Complete -->
-    <div class="step-content" id="step-5-content" style="display: none;">
-            <h2>🎉 Setup Complete!</h2>
-            <p>Hintify SnapAssist AI is now ready to help you with your studies.</p>
+    <div class="step-content completion-center" id="step-5-content" style="display: none;">
+            <h2 class="animate-pop">🎉 Setup Complete!</h2>
+            <p class="animate-slide-up delay-1">Hintify SnapAssist AI is now ready to help you with your studies.</p>
             
-            <div class="completion-summary">
+            <div class="completion-summary animate-slide-up delay-2">
                 <h3>What's Next?</h3>
                 <ul>
                     <li>Use <strong>Cmd+Shift+H</strong> (Mac) or <strong>Ctrl+Shift+H</strong> (Windows) to capture screenshots</li>
@@ -281,8 +281,8 @@
                 </ul>
             </div>
 
-            <div class="step-actions">
-                <button class="btn btn-primary btn-large" id="start-app">Start Using Hintify SnapAssist AI</button>
+            <div class="step-actions centered-actions animate-slide-up delay-3">
+                <button class="btn btn-primary btn-large" id="start-app" aria-label="Start Using Hintify SnapAssist AI">Start Using Hintify SnapAssist AI</button>
             </div>
         </div>
         </div>
@@ -294,16 +294,17 @@
       // Initialize Ripple Grid once DOM is ready
       document.addEventListener('DOMContentLoaded', function() {
         if (window.initRippleGrid) {
-          window.__rippleGrid = window.initRippleGrid({
-            enableRainbow: false,
-            gridColor: '#ffffff',
-            rippleIntensity: 0.05,
-            gridSize: 10.0,
-            gridThickness: 15.0,
-            mouseInteraction: true,
-            mouseInteractionRadius: 1.2,
-            opacity: 0.8
-          });
+                    window.__rippleGrid = window.initRippleGrid({
+                        enableRainbow: false,
+                        gridColor: '#0f766e', // deep teal
+                        rippleIntensity: 0.05,
+                        gridSize: 10.0,
+                        gridThickness: 15.0,
+                        glowIntensity: 0.06,
+                        mouseInteraction: true,
+                        mouseInteractionRadius: 1.2,
+                        opacity: 0.65
+                    });
         }
       });
     </script>

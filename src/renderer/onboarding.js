@@ -37,6 +37,8 @@ const isLinux = platform === 'linux';
 function initializeOnboarding() {
     // Set default theme
     document.body.className = 'theme-dark';
+    // Ensure full-screen layout for better visibility
+    document.body.classList.add('full-screen');
     
     // Load app logo
     loadOnboardingLogo();
@@ -49,6 +51,7 @@ function initializeOnboarding() {
     
     // Setup event listeners
     setupEventListeners();
+    setupKeyboardNavigation();
     
     // Show first step
     goToStep(1);
@@ -140,6 +143,9 @@ function updateDependenciesStep() {
     // Enable continue button if Tesseract is satisfied or user wants to skip
     if (tesseract) {
         continueBtn.disabled = false;
+        continueBtn.setAttribute('aria-disabled', 'false');
+    } else {
+        continueBtn.setAttribute('aria-disabled', 'true');
     }
 }
 
@@ -558,10 +564,12 @@ function updatePermissionsStep() {
         continueBtn.disabled = false;
         continueBtn.textContent = '✓ Continue to AI Provider';
         continueBtn.classList.add('btn-success');
+        continueBtn.setAttribute('aria-disabled', 'false');
     } else {
         continueBtn.disabled = false; // Allow users to continue even without permissions
         continueBtn.textContent = 'Continue (Skip Permissions)';
         continueBtn.classList.remove('btn-success');
+        continueBtn.setAttribute('aria-disabled', 'false');
     }
 }
 
@@ -622,6 +630,45 @@ function setupEventListeners() {
     });
 }
 
+// Keyboard navigation for seamless flow
+function setupKeyboardNavigation() {
+    const rightAction = () => {
+        const step = getCurrentStep();
+        if (step < 5) goToStep(step + 1);
+    };
+    const leftAction = () => {
+        const step = getCurrentStep();
+        if (step > 1) goToStep(step - 1);
+    };
+
+    window.addEventListener('keydown', (e) => {
+        // Avoid hijacking when typing into inputs or selects
+        const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+        const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select';
+        if (isTyping) return;
+
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            rightAction();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            leftAction();
+        } else if (e.key === 'Enter') {
+            // Map Enter to the primary action in each step
+            const step = getCurrentStep();
+            if (step === 1) {
+                const cont = document.getElementById('continue-dependencies');
+                if (cont && !cont.disabled) cont.click();
+                else document.getElementById('skip-dependencies')?.click();
+            }
+            else if (step === 2) document.getElementById('continue-permissions')?.click();
+            else if (step === 3) document.getElementById('continue-config')?.click();
+            else if (step === 4) document.getElementById('finish-setup')?.click();
+            else if (step === 5) document.getElementById('start-app')?.click();
+        }
+    });
+}
+
 // Go to specific step
 function goToStep(step) {
     // Hide legacy and new containers
@@ -641,6 +688,24 @@ function goToStep(step) {
     currentStep = step;
     updateProgress();
     updateNavigationArrows(step);
+
+    // Scroll content to top for seamless transition
+    const content = document.querySelector('.onboarding-content');
+    try { content?.scrollTo({ top: 0, behavior: 'smooth' }); } catch { content && (content.scrollTop = 0); }
+
+    // Focus primary action for the step to aid keyboard users
+    setTimeout(() => {
+        const focusMap = {
+            1: '#continue-dependencies',
+            2: '#continue-permissions',
+            3: '#continue-config',
+            4: '#finish-setup',
+            5: '#start-app'
+        };
+        const selector = focusMap[step];
+        const el = selector ? document.querySelector(selector) : null;
+        if (el && !el.disabled) try { el.focus(); } catch {}
+    }, 50);
 
     // Step-specific logic
     if (step === 2) {
@@ -713,14 +778,18 @@ function setupProviderSelection() {
     if (defaultOption) {
         defaultOption.classList.add('selected');
         setupProgress.configuration.provider = 'gemini';
-        if (continueBtn) continueBtn.disabled = false;
+        if (continueBtn) {
+            continueBtn.disabled = false;
+            continueBtn.setAttribute('aria-disabled', 'false');
+        }
     } else if (continueBtn) {
         continueBtn.disabled = true;
+        continueBtn.setAttribute('aria-disabled', 'true');
     }
     
     // Handle provider selection
     providerOptions.forEach(option => {
-        option.onclick = () => {
+        const select = () => {
             // Remove previous selection
             providerOptions.forEach(opt => opt.classList.remove('selected'));
 
@@ -733,7 +802,15 @@ function setupProviderSelection() {
 
             // Enable continue button
             if (continueBtn) continueBtn.disabled = false;
+            if (continueBtn) continueBtn.setAttribute('aria-disabled', 'false');
         };
+        option.onclick = select;
+        option.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                select();
+            }
+        });
     });
     
     // Setup provider-specific buttons

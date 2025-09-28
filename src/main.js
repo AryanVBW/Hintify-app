@@ -646,6 +646,8 @@ function createOnboardingWindow() {
 
   onboardingWindow.once('ready-to-show', () => {
     onboardingWindow.show();
+    // Maximize for a full-screen onboarding experience
+    try { onboardingWindow.maximize(); } catch {}
 
     if (isDevelopment) {
       onboardingWindow.webContents.openDevTools();

@@ -602,6 +602,22 @@ async function showHistoryModal() {
 
     historyContent.innerHTML = historyHtml;
 
+    // After injecting history, render any math expressions present
+    try {
+      if (window.renderMathInElement) {
+        window.renderMathInElement(historyContent, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '$', right: '$', display: false },
+            { left: '\\(', right: '\\)', display: false }
+          ],
+          throwOnError: false,
+          trust: true
+        });
+      }
+    } catch (e) { console.warn('KaTeX render (history) failed:', e); }
+
   } catch (error) {
     console.error('Failed to load history:', error);
     historyContent.innerHTML = `
@@ -783,7 +799,37 @@ function displayHints(hintsText) {
     return;
   }
 
-  const lines = hintsText.split('\n').filter(line => line.trim());
+  // Merge multi-line $$...$$ math blocks so they stay within a single element
+  const mergeMathBlocks = (text) => {
+    const src = String(text || '');
+    const rawLines = src.split('\n');
+    const out = [];
+    let inBlock = false;
+    let buf = '';
+    for (const ln of rawLines) {
+      if (!inBlock) {
+        const cc = (ln.match(/\$\$/g) || []).length;
+        if (cc % 2 === 1) { // enters a $$ block
+          inBlock = true;
+          buf = ln;
+        } else {
+          out.push(ln);
+        }
+      } else {
+        buf += `\n${ln}`;
+        const total = (buf.match(/\$\$/g) || []).length;
+        if (total % 2 === 0) { // balanced -> close
+          out.push(buf);
+          buf = '';
+          inBlock = false;
+        }
+      }
+    }
+    if (buf) out.push(buf);
+    return out.filter(l => l && l.trim());
+  };
+
+  const lines = mergeMathBlocks(hintsText);
   const parsedHints = [];
 
   lines.forEach(line => {
@@ -801,9 +847,10 @@ function displayHints(hintsText) {
       labelDiv.className = 'hint-label';
       labelDiv.textContent = hintMatch[1];
 
-      const textDiv = document.createElement('div');
-      textDiv.className = 'hint-text';
-      textDiv.textContent = hintMatch[2];
+  const textDiv = document.createElement('div');
+  textDiv.className = 'hint-text';
+  // Keep plain text; KaTeX auto-render will scan and transform $...$ / $$...$$
+  textDiv.textContent = hintMatch[2];
 
       hintDiv.appendChild(labelDiv);
       hintDiv.appendChild(textDiv);
@@ -816,9 +863,9 @@ function displayHints(hintsText) {
       const encDiv = document.createElement('div');
       encDiv.className = 'encouragement fade-in';
 
-      const encText = document.createElement('div');
+  const encText = document.createElement('div');
       encText.className = 'encouragement-text';
-      encText.textContent = trimmed;
+  encText.textContent = trimmed;
 
       encDiv.appendChild(encText);
       hintsDisplay.appendChild(encDiv);
@@ -840,7 +887,26 @@ function displayHints(hintsText) {
     hintsDisplay.appendChild(footer);
     if (window.lucide && window.lucide.createIcons) { window.lucide.createIcons(); }
   }
-
+  // Render LaTeX math if KaTeX auto-render is available
+  try {
+    const anyHasMath = /\$\$[\s\S]*?\$\$|(^|[^\\])\$[^\n]*?\$(?!\w)/.test(hintsText || '');
+    if (anyHasMath && window.renderMathInElement) {
+      window.renderMathInElement(hintsDisplay, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\(', right: '\\)', display: false }
+        ],
+        throwOnError: false,
+        trust: true,
+        macros: { '\\RR': '\\mathbb{R}' }
+      });
+    }
+  } catch (e) {
+    // Non-fatal if math rendering fails
+    console.warn('KaTeX render failed:', e);
+  }
 }
 
 // Build tiny action bar for a hint (used by displayHints)
@@ -1049,6 +1115,12 @@ Guidelines for hints:
 - Each hint should guide without completing the solution.
 - Keep hints concise for faster responses.
 
+Math formatting:
+- Prefer LaTeX notation for mathematical expressions.
+- Use $...$ for inline math and $$...$$ for block equations.
+- Examples: $a^2+b^2=c^2$, $x_{i}$, $\\frac{dy}{dx}$, $\\int_{0}^{1} x^2\\,dx$, $$\\lim_{n\\to\\infty} \\frac{n}{n+1}$$, matrices with \\begin{bmatrix} ... \\end{bmatrix}.
+- For chemical formulas/equations, you may use \\ce{H2O + CO2 -> H2CO3} when relevant.
+
 End with an encouragement such as:
 "Now try completing the final step on your own."
 or
@@ -1084,6 +1156,11 @@ Requirements for regenerated hints:
   Hint 1: ...\n  Hint 2: ...\n  Hint 3: ...\n  (Optionally Hint 4..6)
 - Absolutely avoid: final value, option letters, or step that directly completes the problem.
 - End with one short encouragement line.
+
+Math formatting:
+- Prefer LaTeX notation for formulas, calculus symbols, vectors/matrices, and scientific notation.
+- Use $...$ for inline math and $$...$$ for block equations.
+- Include units and symbols clearly, e.g., $v=\\frac{\\Delta x}{\\Delta t}$, $$\\int e^{x}\\,dx$$, matrix forms \\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}, limits/derivatives, and \\ce{...} for chemical equations if applicable.
 
 Output format (TEXT ONLY):
 Hint 1: ...\nHint 2: ...\nHint 3: ...\n(Hint 4..6 if useful)\n<encouragement line>`;
@@ -1799,6 +1876,8 @@ function setupEventListeners() {
       // Show welcome message
       const userName = authData.user.name || authData.user.firstName || authData.user.email || 'User';
       displayHints(`✅ <strong>Welcome, ${userName}!</strong><br><br>You're now signed in with Supabase and ready to use Hintify SnapAssist AI. You can start capturing screenshots or processing clipboard images.`);
+  // No math here, but if templates change later, keep renderer ready
+  try { if (window.renderMathInElement) window.renderMathInElement(document.getElementById('hints-display'), { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}] }); } catch {}
 
       console.log('🎨 UI updated for authenticated user:', {
         displayName: authData.user.name || authData.user.firstName || authData.user.email,
@@ -2149,6 +2228,7 @@ function enableGuestMode() {
         </div>
       </div>
     `;
+    try { if (window.renderMathInElement) window.renderMathInElement(hintsDisplay, { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}] }); } catch {}
   }
 
   updateStatus('Ready - Guest Mode');

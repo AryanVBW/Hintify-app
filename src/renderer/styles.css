@@ -586,6 +586,20 @@ body {
   line-height: 1.5;
 }
 
+/* KaTeX styling integration */
+.katex { font-size: 1.02em; }
+.katex-display { margin: 10px 0; padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--panel-bg) 85%, transparent); border: 1px solid var(--border); }
+.katex-display > .katex { display: inline-block; }
+.katex .mord, .katex .text { color: var(--fg-text); }
+.katex .mspace { border-color: var(--fg-text); }
+.katex .base { color: var(--fg-text); }
+/* Improve overflow for wide equations/matrices */
+.hint-text, .history-answer, .history-question { overflow-x: auto; }
+/* Improve fraction and radical visibility in dark themes */
+.theme-dark .katex .frac-line, .theme-glass .katex .frac-line { border-top-color: color-mix(in srgb, var(--fg-text) 80%, transparent); }
+.theme-dark .katex .rule, .theme-glass .katex .rule { background: color-mix(in srgb, var(--fg-text) 80%, transparent); }
+.theme-dark .katex .sqrt-line, .theme-glass .katex .sqrt-line { border-top-color: color-mix(in srgb, var(--fg-text) 80%, transparent); }
+
 /* Tiny actions for each hint */
 .hint-actions{ display:flex; gap:8px; margin-top:10px; opacity:.9; }
 .hint-actions .icon-btn{ width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:8px; background:var(--button-bg); cursor:pointer; transition:transform var(--transition-speed), background-color var(--transition-speed); }
