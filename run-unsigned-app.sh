@@ -11,7 +11,7 @@ read -p "Enter your choice (1-3): " choice
 case $choice in
     1)
         echo "Removing quarantine attribute from Hintify app..."
-        xattr -d com.apple.quarantine "Hintify SnapAssist AI (Dev).app" 2>/dev/null
+    xattr -d com.apple.quarantine "Hintify (Dev).app" 2>/dev/null
         echo "Done! You should now be able to run the app normally."
         ;;
     2)

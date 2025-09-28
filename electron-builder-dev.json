@@ -1,7 +1,7 @@
 {
   "extends": null,
   "appId": "com.hintify.snapassist.dev",
-  "productName": "Hintify SnapAssist AI (Dev)",
+  "productName": "Hintify (Dev)",
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
   "copyright": "Copyright © 2025 AryanVBW",
   "protocols": {
@@ -53,7 +53,7 @@
     }
   },
   "dmg": {
-    "title": "SnapAssist AI (Dev)",
+  "title": "Hintify (Dev)",
     "contents": [
       {
         "x": 410,

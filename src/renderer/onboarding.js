@@ -478,7 +478,7 @@ function requestScreenPermission() {
         document.getElementById('screen-details').innerHTML = `
             <div class="permission-instruction-card">
                 <div class="permission-instruction-header">
-                    <img src="${logoPath}" alt="Hintify SnapAssist AI" class="permission-app-logo">
+                    <img src="${logoPath}" alt="Hintify" class="permission-app-logo">
                     <h4>Grant Screen Recording Permission</h4>
                 </div>
                 <div class="permission-steps">
@@ -492,7 +492,7 @@ function requestScreenPermission() {
                     </div>
                     <div class="step-item">
                         <span class="step-number">3</span>
-                        <span class="step-text">Find and check the box next to <strong>"Hintify SnapAssist AI"</strong></span>
+                        <span class="step-text">Find and check the box next to <strong>"Hintify"</strong></span>
                     </div>
                     <div class="step-item">
                         <span class="step-number">4</span>
@@ -526,7 +526,7 @@ function requestAccessibilityPermission() {
         document.getElementById('accessibility-details').innerHTML = `
             <div class="permission-instruction-card">
                 <div class="permission-instruction-header">
-                    <img src="${logoPath}" alt="Hintify SnapAssist AI" class="permission-app-logo">
+                    <img src="${logoPath}" alt="Hintify" class="permission-app-logo">
                     <h4>Grant Accessibility Permission</h4>
                 </div>
                 <div class="permission-steps">
@@ -540,7 +540,7 @@ function requestAccessibilityPermission() {
                     </div>
                     <div class="step-item">
                         <span class="step-number">3</span>
-                        <span class="step-text">Find and check the box next to <strong>"Hintify SnapAssist AI"</strong></span>
+                        <span class="step-text">Find and check the box next to <strong>"Hintify"</strong></span>
                     </div>
                     <div class="step-item">
                         <span class="step-number">4</span>

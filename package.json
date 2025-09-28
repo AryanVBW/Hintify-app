@@ -1,7 +1,7 @@
 {
-  "name": "hintify-snapassist-ai",
-  "version": "1.0.4",
-  "description": "Hintify SnapAssist AI – Your intelligent study companion for instant homework hints and guidance",
+  "name": "hintify",
+  "version": "1.0.5",
+  "description": "Hintify – Your intelligent study companion for instant homework hints and guidance",
   "main": "src/main.js",
   "author": {
     "name": "AryanVBW",
@@ -30,7 +30,11 @@
     "dev": "NODE_ENV=development electron . --development",
     "build": "electron-builder",
     "build-mac": "electron-builder --mac",
+  "build-mac-arm64": "electron-builder --mac --arm64",
+  "build-mac-arm64-signed": "APPLE_SIGNING=1 bash scripts/build-mac-arm64.sh",
+  "build-mac-arm64-dev": "electron-builder --mac --arm64 --config=electron-builder-dev.json",
     "build-mac-unsigned": "electron-builder --mac --config.mac.identity=null --config.afterSign=null",
+  "build-mac-arm64-prod-unsigned": "SKIP_NOTARIZE=1 ELECTRON_BUILDER_DISABLE_CODE_SIGNING=true CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 --publish never",
     "build-mac-dev": "electron-builder --mac --config=electron-builder-dev.json",
     "build-win": "electron-builder --win",
     "build-linux": "electron-builder --linux",
@@ -59,7 +63,7 @@
   },
   "build": {
     "appId": "com.hintify.snapassist",
-    "productName": "Hintify SnapAssist AI",
+  "productName": "Hintify",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "copyright": "Copyright © 2025 AryanVBW",
     "protocols": {
@@ -106,6 +110,13 @@
       "category": "public.app-category.education",
       "icon": "build/icon.png",
       "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
         {
           "target": "zip",
           "arch": [
@@ -159,15 +170,15 @@
         }
       ]
     },
-    "nsis": {
+  "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SnapAssist AI"
+      "shortcutName": "Hintify"
     },
     "dmg": {
-      "title": "SnapAssist AI",
+      "title": "Hintify",
       "contents": [
         {
           "x": 410,

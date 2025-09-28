@@ -1,4 +1,4 @@
-# SnapAssist AI - Setup and Fixes Summary
+# Hintify - Setup and Fixes Summary
 
 ## ✅ Issues Fixed and Features Added
 
@@ -113,4 +113,4 @@
 4. **Cross-Platform**: Works consistently across different operating systems
 5. **Easy Maintenance**: Users can easily reconfigure or troubleshoot
 
-The app now provides a complete, professional setup experience that ensures all dependencies are properly installed and configured before users start using SnapAssist AI for their studies!
+The app now provides a complete, professional setup experience that ensures all dependencies are properly installed and configured before users start using Hintify for their studies!

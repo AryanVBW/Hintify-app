@@ -1,6 +1,7 @@
 const electron = require('electron');
 const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol, screen } = electron;
 const path = require('path');
+const fs = require('fs');
 const Store = require('electron-store');
 
 // Load environment variables first
@@ -87,6 +88,10 @@ const defaultConfig = {
   ollama_model: 'granite3.2-vision:2b',
   gemini_model: 'gemini-2.0-flash',
   theme: 'dark',
+  // Enable Advanced Mode by default: direct vision (skip OCR)
+  advanced_mode: true,
+  // Mark when the user has completed the onboarding wizard
+  onboarding_completed: false,
   windowBounds: { width: 750, height: 600, x: 100, y: 100 }
 };
 
@@ -111,6 +116,20 @@ function saveConfig(config) {
 
 // Function to register all IPC handlers
 function registerIpcHandlers() {
+  // Securely store/update GitHub token for updates
+  ipcMain.handle('set-update-token', async (event, token) => {
+    try {
+      if (!token || typeof token !== 'string' || token.length < 10) {
+        return { success: false, error: 'Invalid token' };
+      }
+      const tokenFile = path.join(app.getPath('userData'), 'update-token.json');
+      const data = JSON.stringify({ token }, null, 2);
+      fs.writeFileSync(tokenFile, data, 'utf8');
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
   // Settings and configuration handlers
   ipcMain.on('open-settings', () => {
     createSettingsWindow();
@@ -125,7 +144,17 @@ function registerIpcHandlers() {
 
   ipcMain.on('onboarding-completed', (event, config) => {
     console.log('✅ Onboarding completed with config:', config);
-    saveConfig(config);
+    // Persist onboarding flag and other config safely
+    try {
+      store.set('onboarding_completed', true);
+      if (config && typeof config === 'object') {
+        Object.entries(config).forEach(([k, v]) => store.set(k, v));
+      }
+    } catch (e) {
+      console.warn('Failed to persist onboarding config:', e?.message || e);
+      saveConfig(config);
+      store.set('onboarding_completed', true);
+    }
 
     if (onboardingWindow && !onboardingWindow.isDestroyed()) {
       onboardingWindow.close();
@@ -380,6 +409,18 @@ function registerIpcHandlers() {
     app.quit();
   });
 
+  // Relaunch app on request (useful after granting macOS permissions)
+  ipcMain.handle('relaunch-app', async () => {
+    try {
+      app.relaunch();
+      app.exit(0);
+      return true;
+    } catch (e) {
+      console.error('Failed to relaunch app:', e);
+      return false;
+    }
+  });
+
   // Handle window focus request
   ipcMain.handle('focus-main-window', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -532,7 +573,7 @@ function createMainWindow() {
   },
   icon: resolveAsset('logo_m.png'),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    title: 'Hintify SnapAssist AI',
+  title: 'Hintify',
     show: false // Don't show until ready
   });
 
@@ -641,7 +682,7 @@ function createOnboardingWindow() {
       enableRemoteModule: true
   },
   icon: resolveAsset('logo_m.png'),
-    title: 'Setup - Hintify SnapAssist AI',
+  title: 'Setup - Hintify',
     show: false
   });
 
@@ -709,9 +750,19 @@ function createMenuTemplate() {
         {
           label: 'Run Setup Again...',
           click: () => {
-            // Reset onboarding completed flag and show onboarding
-            store.set('onboarding_completed', false);
-            createOnboardingWindow();
+            // Confirm before resetting onboarding
+            const response = dialog.showMessageBoxSync({
+              type: 'question',
+              buttons: ['Run Setup', 'Cancel'],
+              defaultId: 0,
+              cancelId: 1,
+              title: 'Run Setup Again',
+              message: 'Do you want to run the onboarding setup again? This is usually only needed on first install.'
+            });
+            if (response === 0) {
+              store.set('onboarding_completed', false);
+              createOnboardingWindow();
+            }
           }
         },
         { type: 'separator' },
@@ -748,7 +799,7 @@ function createMenuTemplate() {
         },
         { type: 'separator' },
         {
-          label: 'Hide SnapAssist AI',
+          label: 'Hide Hintify',
           accelerator: 'CmdOrCtrl+H',
           role: 'hide'
         },
@@ -1064,12 +1115,30 @@ function setupAutoUpdater() {
   }
 
   try {
+    const fs = require('fs');
     // Configure updater
     autoUpdater.autoDownload = false; // we'll download when user clicks
     autoUpdater.allowDowngrade = false;
-    // Authorize requests if using a private GitHub repo
-    if (process.env.GH_TOKEN) {
-      try { autoUpdater.requestHeaders = { Authorization: `token ${process.env.GH_TOKEN}` }; } catch {}
+
+    // Read token for private GitHub repo access
+    let updateToken = process.env.HINTIFY_UPDATE_TOKEN || process.env.GH_TOKEN || null;
+    if (!updateToken) {
+      try {
+        const tokenFile = path.join(app.getPath('userData'), 'update-token.json');
+        if (fs.existsSync(tokenFile)) {
+          const raw = fs.readFileSync(tokenFile, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed.token === 'string' && parsed.token.trim()) {
+            updateToken = parsed.token.trim();
+          }
+        }
+      } catch (e) {
+        console.warn('AutoUpdater: failed reading token file:', e?.message || e);
+      }
+    }
+
+    if (updateToken) {
+      try { autoUpdater.requestHeaders = { Authorization: `token ${updateToken}` }; } catch {}
     }
 
     // Forward updater events to renderer
@@ -1123,10 +1192,12 @@ function setupAutoUpdater() {
       }, 1200);
     });
 
-    // Periodic checks (every 6 hours)
-    setInterval(() => {
-      try { autoUpdater.checkForUpdates(); } catch (e) {}
-    }, 6 * 60 * 60 * 1000);
+    // Periodic checks (every 6 hours), only if token configured for private repo
+    if (updateToken) {
+      setInterval(() => {
+        try { autoUpdater.checkForUpdates(); } catch (e) {}
+      }, 6 * 60 * 60 * 1000);
+    }
   } catch (e) {
     console.warn('Failed to initialize auto-updater:', e?.message || e);
   }
@@ -1143,7 +1214,8 @@ function setupApp() {
   // Check authentication status and onboarding status
   const authStatus = checkAuthStatus();
   const config = loadConfig();
-  const isFirstRun = !config.onboarding_completed;
+  // If the flag was never set, default is false; respect true once set
+  const isFirstRun = !store.get('onboarding_completed', config.onboarding_completed === true);
 
   console.log('🚀 App setup:', {
     isAuthenticated: authStatus.authenticated,
@@ -1245,7 +1317,7 @@ app.whenReady().then(() => {
   // About panel with author credit
   if (app.setAboutPanelOptions) {
     app.setAboutPanelOptions({
-      applicationName: 'Hintify SnapAssist AI',
+  applicationName: 'Hintify',
       applicationVersion: app.getVersion(),
       authors: ['AryanVBW'],
       website: 'https://github.com/AryanVBW/Hintify',
@@ -1263,6 +1335,16 @@ app.whenReady().then(() => {
   }
 
   setupApp();
+
+  // Initial update check (only if token configured)
+  try {
+    const hasToken = !!(process.env.HINTIFY_UPDATE_TOKEN || process.env.GH_TOKEN);
+    if (autoUpdater && hasToken) {
+      setTimeout(() => {
+        try { autoUpdater.checkForUpdates(); } catch {}
+      }, 3000);
+    }
+  } catch {}
 
   // Run migrations on version change
   try {

@@ -13,6 +13,16 @@ exports.default = async function notarizeHook(context) {
     return;
   }
 
+  // Respect explicit skip flags or when signing is disabled
+  if (
+    process.env.SKIP_NOTARIZE === '1' ||
+    process.env.ELECTRON_BUILDER_DISABLE_CODE_SIGNING === 'true' ||
+    (process.env.APPLE_SIGNING && process.env.APPLE_SIGNING !== '1')
+  ) {
+    console.warn('[notarize] Skipping: unsigned build or SKIP_NOTARIZE set');
+    return;
+  }
+
   const appName = packager.appInfo.productFilename;
 
   // Skip notarization on PRs or when creds are missing

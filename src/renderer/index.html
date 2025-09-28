@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hintify SnapAssist AI</title>
+    <title>Hintify</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- KaTeX for LaTeX math rendering -->
@@ -18,16 +18,16 @@
         <!-- Top bar with logo and controls -->
         <div class="topbar">
             <div class="title-section">
-                <img id="app-logo" src="" alt="Hintify SnapAssist AI" class="app-logo">
-                <h1 class="app-title">Hintify SnapAssist AI</h1>
+                <img id="app-logo" src="" alt="Hintify" class="app-logo">
+                <h1 class="app-title">Hintify</h1>
             </div>
 
             <div class="action-buttons">
                 <button id="capture-btn" class="btn btn-primary" title="Capture Screenshot" aria-label="Capture Screenshot">
-                    <i id="capture-icon" data-lucide="camera" class="btn-icon" aria-hidden="true"></i>
+                    <img id="capture-icon" class="btn-icon" alt="Capture" src="" />
                 </button>
                 <button id="settings-btn" class="btn btn-secondary" title="Settings" aria-label="Settings">
-                    <i id="settings-icon" data-lucide="settings" class="btn-icon" aria-hidden="true"></i>
+                    <img id="settings-icon" class="btn-icon" alt="Settings" src="" />
                 </button>
 
             </div>
@@ -55,7 +55,7 @@
             <div class="text-container">
                 <div id="hints-display" class="hints-display">
                     <div class="welcome-message">
-                        <h2>Welcome to Hintify SnapAssist AI</h2>
+                        <h2>Welcome to Hintify</h2>
                         <p>Your AI-powered study companion for instant hints and guidance.</p>
                         <div class="instructions">
                             <h3>Quick Start:</h3>
@@ -82,7 +82,7 @@
             <div class="status-section" style="margin-left:auto; display:flex; align-items:center; gap:8px;">
                 <label for="mode-toggle" class="mode-toggle-label" title="Toggle between Standard (OCR) and Advanced (Direct Vision) modes" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                     <input type="checkbox" id="mode-toggle" style="accent-color: var(--accent, #6ea8fe); cursor:pointer;">
-                    <span id="mode-toggle-text">Standard Mode</span>
+                    <span id="mode-toggle-text">Advanced Mode</span>
                 </label>
             </div>
         </div>

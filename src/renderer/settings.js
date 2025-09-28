@@ -11,7 +11,7 @@ const defaultConfig = {
   ollama_model: 'granite3.2-vision:2b',
   gemini_model: 'gemini-2.0-flash',
   theme: 'dark',
-  advanced_mode: false
+  advanced_mode: true
 };
 
 // DOM elements

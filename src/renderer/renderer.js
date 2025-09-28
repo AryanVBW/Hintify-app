@@ -1,4 +1,4 @@
-const { ipcRenderer, clipboard, nativeImage, shell, desktopCapturer } = require('electron');
+const { ipcRenderer, clipboard, nativeImage, shell, desktopCapturer, systemPreferences } = require('electron');
 const Store = require('electron-store');
 const axios = require('axios');
 const fs = require('fs');
@@ -22,7 +22,7 @@ const defaultConfig = {
   gemini_model: 'gemini-2.0-flash',
   theme: 'dark',
   // When enabled, screenshots are sent directly to the AI model (vision) without OCR
-  advanced_mode: false
+  advanced_mode: true
 };
 
 // Load configuration
@@ -674,44 +674,13 @@ function loadAppImages() {
     const appLogo = document.getElementById('app-logo');
     setWithFallback(appLogo, 'logo_m.png');
 
-    // Render Lucide icons if available; otherwise fallback to PNGs
+    // Set capture icon image
     const captureIcon = document.getElementById('capture-icon');
-    if (captureIcon) {
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons({ icons: { camera: window.lucide.icons?.camera } });
-      } else {
-        // Fallback to image source if Lucide isn't loaded
-        if (captureIcon.tagName.toLowerCase() === 'img') {
-          setWithFallback(captureIcon, 'screenshot-64.png');
-        } else {
-          // Replace <i> with <img>
-          const img = document.createElement('img');
-          img.id = 'capture-icon';
-          img.className = 'btn-icon';
-          img.alt = 'Capture';
-          setWithFallback(img, 'screenshot-64.png');
-          captureIcon.replaceWith(img);
-        }
-      }
-    }
+    if (captureIcon) setWithFallback(captureIcon, 'screenshot-64.png');
 
+    // Set settings icon image
     const settingsIcon = document.getElementById('settings-icon');
-    if (settingsIcon) {
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons({ icons: { settings: window.lucide.icons?.settings } });
-      } else {
-        if (settingsIcon.tagName.toLowerCase() === 'img') {
-          setWithFallback(settingsIcon, 'settings-94.png');
-        } else {
-          const img = document.createElement('img');
-          img.id = 'settings-icon';
-          img.className = 'btn-icon';
-          img.alt = 'Settings';
-          setWithFallback(img, 'settings-94.png');
-          settingsIcon.replaceWith(img);
-        }
-      }
-    }
+    if (settingsIcon) setWithFallback(settingsIcon, 'settings-94.png');
   } catch (error) {
     console.error('Error loading app images:', error);
     // Fallback: try to load with relative paths
@@ -1149,7 +1118,7 @@ function detectDifficulty(text) {
 
 // Build prompt for AI
 function buildPrompt(text, qtype, difficulty) {
-  return `You are SnapAssist AI, a study buddy for students.
+  return `You are Hintify, a study buddy for students.
 
 The following text was extracted from a screenshot:
 ${text}
@@ -1195,7 +1164,7 @@ If the text is not a valid question, reply only:
 
 // Improved system prompt specifically for REGENERATION with higher quality hints
 function buildRegenerationPrompt(text, qtype, difficulty, previousHints = '') {
-  return `You are SnapAssist AI, regenerating a new, higher‑quality set of HINTS for the same problem.
+  return `You are Hintify, regenerating a new, higher‑quality set of HINTS for the same problem.
 
 Objective:
 - Produce a fresh set of 4–6 concise, progressively detailed hints that are MORE thorough and structured than before.
@@ -1231,7 +1200,7 @@ Hint 1: ...\nHint 2: ...\nHint 3: ...\n(Hint 4..6 if useful)\n<encouragement lin
 
 // Specialized prompt for direct image hinting (no OCR)
 function buildImageHintPrompt() {
-  return `You are SnapAssist AI, a study buddy for students.
+  return `You are Hintify, a study buddy for students.
 
 You will receive a screenshot of a problem/question. Your job is to provide ONLY hints without solving it or revealing the final answer.
 
@@ -1557,15 +1526,8 @@ async function extractTextWithTesseractJS(imageBuffer) {
 
     const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--development');
 
-    // 1) Prefer the Node build to avoid DOM Worker in Electron renderers
-    let Tesseract;
-    try {
-      // Force Node entry to ensure worker_threads (not window.Worker)
-      Tesseract = require('tesseract.js/dist/tesseract.node.js');
-    } catch (e) {
-      // Fallback to default import if node build path is unavailable
-      Tesseract = require('tesseract.js');
-    }
+    // Use official entry; avoid brittle deep paths that may not exist in some versions
+    const Tesseract = require('tesseract.js');
 
     // 2) Resolve local tessdata if bundled to avoid remote downloads
     const prodLangDir = path.join(process.resourcesPath || path.join(__dirname, '..', '..'), 'assets', 'tessdata');
@@ -1586,16 +1548,10 @@ async function extractTextWithTesseractJS(imageBuffer) {
     const { data: { text } } = await Tesseract.recognize(imageBuffer, 'eng', recognizeOptions);
     return String(text || '').replace(/\s+/g, ' ').trim();
   } catch (error) {
-    // Detect common Worker construction failures and retry once with explicit Node build
+    // Provide a clean, user-friendly error without leaking internal module paths
     const msg = String(error?.message || error);
     if (/Failed to construct 'Worker'|worker.*not support|V8 platform/i.test(msg)) {
-      try {
-        const TesseractNode = require('tesseract.js/dist/tesseract.node.js');
-        const { data: { text } } = await TesseractNode.recognize(imageBuffer, 'eng', { workerBlobURL: false });
-        return String(text || '').replace(/\s+/g, ' ').trim();
-      } catch (e2) {
-        throw new Error(`Worker-init failed in this environment. ${e2.message}`);
-      }
+      throw new Error('OCR engine could not start in this environment. You can enable Advanced Mode to send images directly to the AI without OCR.');
     }
     throw new Error(`Fallback OCR failed: ${msg}`);
   }
@@ -1757,18 +1713,36 @@ async function processImage(imageBuffer) {
 
       if (!text || text.startsWith('[OCR Error]') || text.trim().length === 0) {
         const rawMsg = text?.startsWith('[OCR Error]') ? text : '⚠️ No text found in the image.';
-        let userMsg = rawMsg;
-        if (/Failed to construct 'Worker'|V8 platform|worker.*not support|tesseract.*not found/i.test(rawMsg)) {
-          userMsg = [
-            '⚠️ OCR could not start on this system.',
-            '',
-            'Try one of the following:',
-            '• Install native Tesseract OCR (recommended) and restart the app',
-            '• Or update Hintify to the latest version',
-            '',
-            `Details: ${rawMsg}`
-          ].join('\n');
+
+        // If the OCR engine failed to initialize, auto-switch to Advanced Mode and retry with vision
+        if (/Failed to construct 'Worker'|V8 platform|worker.*not support|tesseract.*not found|Worker-init failed/i.test(rawMsg)) {
+          updateStatus('OCR unavailable. Switching to Advanced Mode...');
+          showLoading(true, 'Generating hints (Advanced Mode)...');
+          // Persist mode switch
+          currentConfig.advanced_mode = true;
+          saveConfig({ advanced_mode: true });
+          try { syncModeToggleUI(currentConfig); } catch {}
+
+          // Process image directly with the selected vision model
+          const hints = await generateHintsFromImageDirect(imageBuffer, processingStartTime);
+          displayHints(hints);
+          await logActivity('image_processing', 'completed', {
+            question_type: 'image_direct',
+            difficulty: 'Unknown',
+            ocr_skipped: true,
+            hints_length: (hints || '').length,
+            total_processing_time_ms: Date.now() - processingStartTime
+          });
+          updateStatus('Ready');
+          return;
         }
+
+        // Generic OCR failure message
+        let userMsg = [
+          '⚠️ OCR could not extract text from the image.',
+          '',
+          `Details: ${rawMsg}`
+        ].join('\n');
         displayHints(userMsg);
 
         await logActivity('ocr', 'failed', {
@@ -1849,12 +1823,71 @@ async function ensureScreenRecordingPermission() {
   }
 }
 
+// Check current macOS Screen Recording permission status
+function getScreenPermissionStatus() {
+  try {
+    if (process.platform !== 'darwin') return 'granted';
+    // Electron exposes 'screen' in getMediaAccessStatus on macOS
+    return systemPreferences.getMediaAccessStatus('screen');
+  } catch (e) {
+    console.warn('Unable to determine screen permission status:', e?.message || e);
+    return 'unknown';
+  }
+}
+
+// Open macOS System Settings to the Screen Recording privacy pane
+function openScreenRecordingPreferences() {
+  try {
+    const { spawn } = require('child_process');
+    spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture']);
+  } catch (e) {
+    console.warn('Failed to open System Settings:', e?.message || e);
+  }
+}
+
+// Ensure permission is granted or guide the user; returns boolean
+async function ensurePermissionOrGuide() {
+  if (process.platform !== 'darwin') return true;
+
+  let status = getScreenPermissionStatus();
+  // Allow capture when status is granted or unknown/not-determined to trigger the native prompt
+  if (status === 'granted' || status === 'not-determined' || status === 'unknown') {
+    // Best-effort registration; do not block capture
+    try { await ensureScreenRecordingPermission(); } catch {}
+    return true;
+  }
+
+  // At this point it's explicitly denied/restricted; guide the user
+  openScreenRecordingPreferences();
+
+  const message = [
+    'Hintify needs Screen Recording permission to capture screenshots.',
+  'In System Settings → Privacy & Security → Screen Recording, enable permission for "Hintify".',
+    'Then quit and reopen the app to apply the change.'
+  ].join('\n\n');
+
+  // Show a simple prompt with options to restart now
+  const restartNow = window.confirm(`${message}\n\nWould you like to restart the app now?`);
+  if (restartNow) {
+    try { await ipcRenderer.invoke('relaunch-app'); } catch {}
+  } else {
+    updateStatus('Please grant Screen Recording in System Settings, then restart the app.');
+  }
+
+  return false;
+}
+
 // Trigger screenshot capture
 async function triggerCapture() {
   updateStatus('Waiting for screenshot...');
 
   // On macOS, first ensure the app is registered in Screen Recording permissions
   if (process.platform === 'darwin') {
+    // Verify permission and guide user if necessary
+    const ok = await ensurePermissionOrGuide();
+    if (!ok) return;
+
+    // Also ensure TCC registration in case status just flipped
     await ensureScreenRecordingPermission();
 
     const { spawn } = require('child_process');
@@ -1867,7 +1900,15 @@ async function triggerCapture() {
           processClipboardImage();
         }, 1000);
       } else {
-        updateStatus('Screenshot cancelled');
+        // If user cancelled selection, code is non-zero. If it's due to permission,
+        // guide them again.
+        const status = getScreenPermissionStatus();
+        if (status !== 'granted') {
+          updateStatus('Screen Recording permission required');
+          openScreenRecordingPreferences();
+        } else {
+          updateStatus('Screenshot cancelled');
+        }
       }
     });
     return;
@@ -1887,7 +1928,7 @@ async function triggerCapture() {
 
 // Initialize the app with async authentication check
 async function initializeApp() {
-  console.log('🚀 Initializing Hintify SnapAssist AI...');
+  console.log('🚀 Initializing Hintify...');
 
   // Load configuration
   const config = loadConfig();
@@ -2166,7 +2207,7 @@ function setupEventListeners() {
 
       // Show welcome message
       const userName = authData.user.name || authData.user.firstName || authData.user.email || 'User';
-      displayHints(`✅ <strong>Welcome, ${userName}!</strong><br><br>You're now signed in with Supabase and ready to use Hintify SnapAssist AI. You can start capturing screenshots or processing clipboard images.`);
+  displayHints(`✅ <strong>Welcome, ${userName}!</strong><br><br>You're now signed in with Supabase and ready to use Hintify. You can start capturing screenshots or processing clipboard images.`);
   // No math here, but if templates change later, keep renderer ready
   try { if (window.renderMathInElement) window.renderMathInElement(document.getElementById('hints-display'), { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}] }); } catch {}
 
@@ -2437,7 +2478,7 @@ function displayGuestModeMessage() {
   const mod = getModKeyLabel();
   hintsDisplay.innerHTML = `
     <div class="welcome-message">
-      <h2>🎯 Welcome to Hintify SnapAssist AI</h2>
+  <h2>🎯 Welcome to Hintify</h2>
       <p>Start using the app right away! Capture screenshots or process clipboard images to get AI-powered hints.</p>
       <div class="instructions">
         <h3>How to Get Started:</h3>
@@ -2510,7 +2551,7 @@ function enableGuestMode() {
       <div class="hint-item guest-mode-compact">
         <div class="hint-label">🎯 Guest Mode Activated</div>
         <div class="hint-text">
-          You're now using Hintify SnapAssist AI in guest mode! All core features are available:
+          You're now using Hintify in guest mode! All core features are available:
           <br><br>
           • Capture screenshots with the 📸 button or <strong>${mod}+Shift+S</strong>
           <br>

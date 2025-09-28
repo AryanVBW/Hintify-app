@@ -1,4 +1,4 @@
-# Hintify SnapAssist AI - Setup Wizard Improvements
+# Hintify - Setup Wizard Improvements
 
 ## ✅ **Issues Fixed and Updates Made**
 
@@ -39,9 +39,9 @@
 - **User Flow**: Users who want Ollama can set it up separately and then switch provider in settings
 
 ### 6. **Updated App Branding**
-- **App Name**: Changed from "SnapAssist AI" to "Hintify SnapAssist AI"
+- **App Name**: Standardized as "Hintify"
 - **Package Name**: Updated to "hintify-snapassist-ai"
-- **Window Titles**: All windows now show "Hintify SnapAssist AI"
+- **Window Titles**: All windows now show "Hintify"
 - **HTML Titles**: Updated all page titles and headers
 
 ### 7. **Improved User Experience**
@@ -95,7 +95,7 @@
 1. **Faster Setup**: No complex Ollama installation required by default
 2. **Better Compatibility**: Gemini works on all platforms without local setup
 3. **Improved Accessibility**: Proper scrolling and responsive design
-4. **Clearer Branding**: Consistent "Hintify SnapAssist AI" naming
+4. **Clearer Branding**: Consistent "Hintify" naming
 5. **Flexible Options**: Users can still choose Ollama if they prefer
 6. **Better Navigation**: All content visible and accessible
 

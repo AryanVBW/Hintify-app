@@ -1,6 +1,6 @@
-# SnapAssist AI - Electron Version
+# Hintify - Electron Version
 
-This is the Electron desktop application version of Hintify's SnapAssist AI, a real-time clipboard-to-hints assistant that helps students with their studies by providing AI-generated hints for questions captured in screenshots.
+This is the Electron desktop application version of Hintify, a real-time clipboard-to-hints assistant that helps students with their studies by providing AI-generated hints for questions captured in screenshots.
 
 ## Features
 
