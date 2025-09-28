@@ -352,6 +352,14 @@ body {
   display: none !important;
 }
 
+/* Updates card alignment */
+.updates-card { text-align:center; }
+.updates-card .setting-group { display:flex; flex-direction:column; align-items:center; }
+.updates-card #current-version { font-weight:600; margin-top:4px; }
+.updates-card #latest-version-text { margin-top:6px; }
+.updates-card #check-update-btn { min-width: 180px; }
+.updates-card #update-progress small { opacity: .8; }
+
 .fade-in {
   animation: fadeIn 0.3s ease-in;
 }

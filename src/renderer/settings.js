@@ -310,6 +310,12 @@ function initializeSettings() {
     signOutBtn: document.getElementById('settings-signout-btn')
   };
 
+  // Updates card elements
+  elements.currentVersion = document.getElementById('current-version');
+  elements.latestVersionText = document.getElementById('latest-version-text');
+  elements.checkUpdateBtn = document.getElementById('check-update-btn');
+  elements.updateProgress = document.getElementById('update-progress');
+
   // Ensure API key input can receive paste events
   if (elements.geminiApiKey) {
     // Enable paste operations
@@ -423,6 +429,9 @@ function initializeSettings() {
 
   // Load current settings into form
   loadForm();
+
+  // Initialize Updates card
+  initializeUpdatesSection();
 }
 
 // Initialize when DOM is loaded
@@ -432,3 +441,129 @@ document.addEventListener('DOMContentLoaded', initializeSettings);
 window.addEventListener('beforeunload', () => {
   // Clean up if needed
 });
+
+// -----------------
+// Updates Section
+// -----------------
+function setUpdateBtnState({ text, disabled = false, primary = false }) {
+  if (!elements.checkUpdateBtn) return;
+  elements.checkUpdateBtn.textContent = text;
+  elements.checkUpdateBtn.disabled = disabled;
+  elements.checkUpdateBtn.classList.toggle('btn-primary', primary);
+  elements.checkUpdateBtn.classList.toggle('btn-secondary', !primary);
+}
+
+function initializeUpdatesSection() {
+  let version = '';
+  try {
+    const pkg = require('../../package.json');
+    version = pkg?.version || '';
+  } catch {}
+  if (elements.currentVersion) {
+    elements.currentVersion.textContent = version || 'Unknown';
+  }
+
+  // Event wiring
+  if (elements.checkUpdateBtn) {
+    elements.checkUpdateBtn.addEventListener('click', onCheckOrUpdateClick);
+  }
+
+  // Listen for updater events to reflect progress
+  ipcRenderer.on('update-status', (_e, payload) => {
+    if (payload?.status === 'checking') {
+      setUpdateBtnState({ text: 'Checking…', disabled: true });
+    }
+  });
+
+  ipcRenderer.on('update-available', (_e, info) => {
+    if (elements.latestVersionText) {
+      elements.latestVersionText.textContent = `Update available: v${info?.version}`;
+      elements.latestVersionText.classList.remove('hidden');
+    }
+    setUpdateBtnState({ text: `Update Now`, disabled: false, primary: true });
+    elements.checkUpdateBtn.dataset.state = 'ready-to-download';
+  });
+
+  ipcRenderer.on('update-not-available', (_e, info) => {
+    if (elements.latestVersionText) {
+      elements.latestVersionText.textContent = `You are on the latest version${info?.currentVersion ? ` (v${info.currentVersion})` : ''}`;
+      elements.latestVersionText.classList.remove('hidden');
+    }
+    setUpdateBtnState({ text: 'Check for Updates', disabled: false, primary: false });
+    elements.checkUpdateBtn.dataset.state = 'check';
+  });
+
+  ipcRenderer.on('update-download-progress', (_e, progress) => {
+    if (elements.updateProgress) {
+      elements.updateProgress.classList.remove('hidden');
+      const pct = Math.max(0, Math.min(100, Math.round(progress?.percent || 0)));
+      elements.updateProgress.innerHTML = `<small>Downloading… ${pct}%</small>`;
+    }
+    setUpdateBtnState({ text: 'Downloading…', disabled: true, primary: true });
+  });
+
+  ipcRenderer.on('update-downloaded', (_e, info) => {
+    if (elements.updateProgress) {
+      elements.updateProgress.innerHTML = `<small>Update downloaded (v${info?.version}). Installing…</small>`;
+    }
+    setUpdateBtnState({ text: 'Installing…', disabled: true, primary: true });
+  });
+
+  ipcRenderer.on('update-error', (_e, err) => {
+    showStatus(`Update error: ${err?.message || err}`, 'error', 4000);
+    setUpdateBtnState({ text: 'Check for Updates', disabled: false, primary: false });
+    if (elements.updateProgress) elements.updateProgress.classList.add('hidden');
+    elements.checkUpdateBtn.dataset.state = 'check';
+  });
+}
+
+async function onCheckOrUpdateClick() {
+  const state = elements.checkUpdateBtn.dataset.state || 'check';
+  if (state === 'ready-to-download') {
+    // Start download
+    setUpdateBtnState({ text: 'Preparing…', disabled: true, primary: true });
+    if (elements.updateProgress) {
+      elements.updateProgress.classList.remove('hidden');
+      elements.updateProgress.innerHTML = `<small>Preparing update…</small>`;
+    }
+    ipcRenderer.send('download-update');
+    return;
+  }
+
+  // Otherwise, perform a check
+  setUpdateBtnState({ text: 'Checking…', disabled: true });
+  if (elements.latestVersionText) {
+    elements.latestVersionText.classList.add('hidden');
+  }
+  try {
+    const res = await ipcRenderer.invoke('check-for-updates');
+    if (res?.unsupported) {
+      showStatus('Auto-update is not supported in this build.', 'info', 3500);
+      setUpdateBtnState({ text: 'Check for Updates', disabled: false });
+      return;
+    }
+    if (res?.success && res.available) {
+      if (elements.latestVersionText) {
+        elements.latestVersionText.textContent = `Update available: v${res.latestVersion} (current v${res.currentVersion})`;
+        elements.latestVersionText.classList.remove('hidden');
+      }
+      setUpdateBtnState({ text: 'Update Now', disabled: false, primary: true });
+      elements.checkUpdateBtn.dataset.state = 'ready-to-download';
+    } else if (res?.success) {
+      if (elements.latestVersionText) {
+        elements.latestVersionText.textContent = `You are on the latest version (v${res.currentVersion})`;
+        elements.latestVersionText.classList.remove('hidden');
+      }
+      setUpdateBtnState({ text: 'Check for Updates', disabled: false });
+      elements.checkUpdateBtn.dataset.state = 'check';
+    } else {
+      showStatus(`Failed to check for updates: ${res?.error || 'Unknown error'}`, 'error', 4000);
+      setUpdateBtnState({ text: 'Check for Updates', disabled: false });
+      elements.checkUpdateBtn.dataset.state = 'check';
+    }
+  } catch (e) {
+    showStatus(`Failed to check for updates: ${e?.message || e}`, 'error', 4000);
+    setUpdateBtnState({ text: 'Check for Updates', disabled: false });
+    elements.checkUpdateBtn.dataset.state = 'check';
+  }
+}

@@ -462,12 +462,15 @@ function registerIpcHandlers() {
 
   // Auto-update IPC handlers
   ipcMain.handle('check-for-updates', async () => {
-    if (!autoUpdater) return { supported: false };
+    if (!autoUpdater) return { success: false, unsupported: true };
     try {
-      await autoUpdater.checkForUpdates();
-      return { supported: true, started: true };
+      const res = await autoUpdater.checkForUpdates();
+      const currentVersion = app.getVersion();
+      const latestVersion = res?.updateInfo?.version;
+      const available = !!latestVersion && latestVersion !== currentVersion;
+      return { success: true, available, currentVersion, latestVersion };
     } catch (e) {
-      return { supported: true, started: false, error: e?.message || String(e) };
+      return { success: false, error: e?.message || String(e) };
     }
   });
 
