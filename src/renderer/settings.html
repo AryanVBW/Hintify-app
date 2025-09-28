@@ -38,6 +38,11 @@
                     <small id="latest-version-text" class="hidden"></small>
                 </div>
                 <div class="setting-group">
+                    <label for="update-token">Update Token (Optional)</label>
+                    <input type="password" id="update-token" placeholder="GitHub token for private repository access">
+                    <small>Required only for private repository updates. Leave blank for public releases.</small>
+                </div>
+                <div class="setting-group">
                     <button type="button" id="check-update-btn" class="btn btn-secondary">Check for Updates</button>
                     <div id="update-progress" class="hidden" style="margin-top:8px"><small>Preparing update…</small></div>
                 </div>

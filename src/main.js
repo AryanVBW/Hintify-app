@@ -57,7 +57,8 @@ try {
     initializeFromStorage: async () => false,
     getCurrentUser: () => null,
     getCurrentSession: () => null,
-    isAuthenticated: () => false
+    isAuthenticated: () => false,
+    getAuthStatus: () => ({ authenticated: false, session: null, lastActivity: null, sessionValid: false })
   };
 }
 
@@ -128,6 +129,21 @@ function registerIpcHandlers() {
       return { success: true };
     } catch (e) {
       return { success: false, error: e?.message || String(e) };
+    }
+  });
+
+  // Check if update token exists
+  ipcMain.handle('has-update-token', async () => {
+    try {
+      const tokenFile = path.join(app.getPath('userData'), 'update-token.json');
+      if (fs.existsSync(tokenFile)) {
+        const raw = fs.readFileSync(tokenFile, 'utf8');
+        const parsed = JSON.parse(raw);
+        return !!(parsed && typeof parsed.token === 'string' && parsed.token.trim());
+      }
+      return !!(process.env.HINTIFY_UPDATE_TOKEN || process.env.GH_TOKEN);
+    } catch (e) {
+      return false;
     }
   });
   // Settings and configuration handlers
@@ -503,15 +519,37 @@ function registerIpcHandlers() {
 
   // Auto-update IPC handlers
   ipcMain.handle('check-for-updates', async () => {
-    if (!autoUpdater) return { success: false, unsupported: true };
+    if (!autoUpdater) return { success: false, unsupported: true, error: 'Auto-updater not available in this build' };
+    
     try {
+      console.log('🔄 Checking for updates...');
       const res = await autoUpdater.checkForUpdates();
       const currentVersion = app.getVersion();
       const latestVersion = res?.updateInfo?.version;
       const available = !!latestVersion && latestVersion !== currentVersion;
+      
+      console.log('✅ Update check completed:', { currentVersion, latestVersion, available });
       return { success: true, available, currentVersion, latestVersion };
     } catch (e) {
-      return { success: false, error: e?.message || String(e) };
+      const errorMsg = e?.message || String(e);
+      console.error('❌ Update check failed:', errorMsg, e);
+      
+      // Provide specific error messages for common issues
+      let userFriendlyError = errorMsg;
+      if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
+        userFriendlyError = 'Update server not accessible. This may be a private repository requiring authentication.';
+      } else if (errorMsg.includes('ENOTFOUND') || errorMsg.includes('network')) {
+        userFriendlyError = 'Network error: Please check your internet connection.';
+      } else if (errorMsg.includes('token') || errorMsg.includes('authentication')) {
+        userFriendlyError = 'Authentication failed. Please check your update token in Settings.';
+      }
+      
+      return { 
+        success: false, 
+        error: userFriendlyError,
+        rawError: errorMsg,
+        needsToken: errorMsg.includes('404') || errorMsg.includes('authentication')
+      };
     }
   });
 
@@ -548,6 +586,27 @@ function registerIpcHandlers() {
       return { success: false, error: error.message };
     }
   });
+
+  // Clipboard read (for secure paste in renderer)
+  ipcMain.handle('get-clipboard-text', async () => {
+    try {
+      return clipboard.readText();
+    } catch (e) {
+      return '';
+    }
+  });
+}
+
+// Perform data/schema migrations between versions
+function performMigrations(fromVersion, toVersion) {
+  try {
+    console.log(`🔄 Performing migrations from ${fromVersion} to ${toVersion}...`);
+    // Add data/schema migrations here as needed in future versions
+    // Currently no-op
+    console.log('✅ Migrations complete');
+  } catch (e) {
+    console.warn('⚠️ Migration error:', e?.message || e);
+  }
 }
 
 function createMainWindow() {
@@ -594,18 +653,6 @@ function createMainWindow() {
   // Handle window ready-to-show
   mainWindow.once('ready-to-show', () => {
     // Ensure dock icon set on macOS
-
-function performMigrations(fromVersion, toVersion) {
-  try {
-    console.log(`🔄 Performing migrations from ${fromVersion} to ${toVersion}...`);
-    // Add data/schema migrations here as needed in future versions
-    // Currently no-op
-    console.log('✅ Migrations complete');
-  } catch (e) {
-    console.warn('⚠️ Migration error:', e?.message || e);
-  }
-}
-
     if (process.platform === 'darwin') {
       try {
         const dockImg = nativeImage.createFromPath(resolveAsset('logo_m.png'));
@@ -1108,6 +1155,13 @@ async function processDeepLinkAuth(tokens) {
         source: 'deeplink'
       });
     }
+
+  } catch (error) {
+    console.error('❌ Error processing deep link authentication:', error);
+    throw error;
+  }
+}
+
 // Auto-update setup (uses electron-updater if available)
 function setupAutoUpdater() {
   if (!autoUpdater) {
@@ -1115,7 +1169,6 @@ function setupAutoUpdater() {
   }
 
   try {
-    const fs = require('fs');
     // Configure updater
     autoUpdater.autoDownload = false; // we'll download when user clicks
     autoUpdater.allowDowngrade = false;
@@ -1158,7 +1211,7 @@ function setupAutoUpdater() {
       }
     });
 
-    autoUpdater.on('update-not-available', (info) => {
+    autoUpdater.on('update-not-available', () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-not-available', { currentVersion: app.getVersion() });
       }
@@ -1195,18 +1248,11 @@ function setupAutoUpdater() {
     // Periodic checks (every 6 hours), only if token configured for private repo
     if (updateToken) {
       setInterval(() => {
-        try { autoUpdater.checkForUpdates(); } catch (e) {}
+        try { autoUpdater.checkForUpdates(); } catch {}
       }, 6 * 60 * 60 * 1000);
     }
   } catch (e) {
     console.warn('Failed to initialize auto-updater:', e?.message || e);
-  }
-}
-
-
-  } catch (error) {
-    console.error('❌ Error processing deep link authentication:', error);
-    throw error;
   }
 }
 

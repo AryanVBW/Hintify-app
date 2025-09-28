@@ -5,7 +5,7 @@ const axios = require('axios');
 // Initialize store
 const store = new Store();
 
-// Default configuration
+// (Removed duplicate/broken saveSettings block at top)
 const defaultConfig = {
   provider: 'ollama',
   ollama_model: 'granite3.2-vision:2b',
@@ -166,7 +166,7 @@ async function testConnection() {
 }
 
 // Save settings
-function saveSettings() {
+async function saveSettings() {
   const saveBtn = elements.saveBtn;
   if (!saveBtn) return;
 
@@ -183,6 +183,22 @@ function saveSettings() {
   const geminiApiKey = elements.geminiApiKey.value.trim();
   if (geminiApiKey) {
     store.set('gemini_api_key', geminiApiKey);
+  }
+  
+  // Save update token securely via IPC if provided
+  const updateToken = elements.updateToken?.value?.trim();
+  if (updateToken) {
+    try {
+      const result = await ipcRenderer.invoke('set-update-token', updateToken);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save token');
+      }
+      elements.updateToken.value = ''; // Clear for security
+      elements.updateToken.placeholder = 'Token saved securely';
+    } catch (e) {
+      showStatus(`Failed to save update token: ${e.message}`, 'error');
+      return; // Don't close settings if token save failed
+    }
   }
 
   // Save configuration
@@ -223,13 +239,12 @@ function cancelSettings() {
   }
 }
 
-// Get clipboard text and paste into API key field
+// Get clipboard text safely via IPC and paste into API key field
 async function pasteFromClipboard() {
   try {
-    const { clipboard } = require('electron');
-    const text = clipboard.readText();
+    const text = await ipcRenderer.invoke('get-clipboard-text');
     if (text && elements.geminiApiKey) {
-      elements.geminiApiKey.value = text.trim();
+      elements.geminiApiKey.value = String(text).trim();
       elements.geminiApiKey.focus();
       showStatus('API key pasted from clipboard', 'success', 2000);
     } else {
@@ -265,7 +280,7 @@ function updateProviderFields() {
 }
 
 // Load form with current settings
-function loadForm() {
+async function loadForm() {
   const config = loadConfig();
 
   // Set form values
@@ -278,6 +293,19 @@ function loadForm() {
   // Load Gemini API key
   const geminiApiKey = store.get('gemini_api_key') || '';
   elements.geminiApiKey.value = geminiApiKey;
+  
+  // Load update token status (stored securely via IPC)
+  try {
+    const hasToken = await ipcRenderer.invoke('has-update-token');
+    if (elements.updateToken) {
+      elements.updateToken.placeholder = hasToken ? 'Token configured (hidden for security)' : 'GitHub token for private repository access';
+    }
+  } catch (e) {
+    console.warn('Failed to check update token status:', e);
+    if (elements.updateToken) {
+      elements.updateToken.placeholder = 'GitHub token for private repository access';
+    }
+  }
 
   // Apply current theme
   applyTheme(config.theme);
@@ -287,7 +315,7 @@ function loadForm() {
 }
 
 // Initialize settings window
-function initializeSettings() {
+async function initializeSettings() {
   // Get DOM elements
   elements = {
     providerSelect: document.getElementById('provider-select'),
@@ -313,6 +341,7 @@ function initializeSettings() {
   // Updates card elements
   elements.currentVersion = document.getElementById('current-version');
   elements.latestVersionText = document.getElementById('latest-version-text');
+  elements.updateToken = document.getElementById('update-token');
   elements.checkUpdateBtn = document.getElementById('check-update-btn');
   elements.updateProgress = document.getElementById('update-progress');
 
@@ -428,14 +457,20 @@ function initializeSettings() {
   });
 
   // Load current settings into form
-  loadForm();
+  await loadForm();
 
   // Initialize Updates card
   initializeUpdatesSection();
 }
 
 // Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', initializeSettings);
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await initializeSettings();
+  } catch (e) {
+    console.error('Failed to initialize settings:', e);
+  }
+});
 
 // Handle window close
 window.addEventListener('beforeunload', () => {
@@ -510,10 +545,22 @@ function initializeUpdatesSection() {
   });
 
   ipcRenderer.on('update-error', (_e, err) => {
-    showStatus(`Update error: ${err?.message || err}`, 'error', 4000);
+    const errorMsg = err?.message || String(err);
+    let displayMsg = `Update error: ${errorMsg}`;
+    
+    // Provide helpful context for common errors
+    if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
+      displayMsg += '. This may be a private repository requiring an update token.';
+    } else if (errorMsg.includes('network') || errorMsg.includes('ENOTFOUND')) {
+      displayMsg += '. Please check your internet connection.';
+    }
+    
+    showStatus(displayMsg, 'error', 6000);
     setUpdateBtnState({ text: 'Check for Updates', disabled: false, primary: false });
     if (elements.updateProgress) elements.updateProgress.classList.add('hidden');
     elements.checkUpdateBtn.dataset.state = 'check';
+    
+    console.error('Update error details:', err);
   });
 }
 
@@ -557,13 +604,26 @@ async function onCheckOrUpdateClick() {
       setUpdateBtnState({ text: 'Check for Updates', disabled: false });
       elements.checkUpdateBtn.dataset.state = 'check';
     } else {
-      showStatus(`Failed to check for updates: ${res?.error || 'Unknown error'}`, 'error', 4000);
+      // Show detailed error message
+      const errorMsg = res?.error || 'Unknown error';
+      const fullMsg = res?.needsToken ? 
+        `${errorMsg} You may need to set an update token for private repository access.` : 
+        errorMsg;
+      
+      showStatus(`Update check failed: ${fullMsg}`, 'error', 6000);
       setUpdateBtnState({ text: 'Check for Updates', disabled: false });
       elements.checkUpdateBtn.dataset.state = 'check';
+      
+      // Show raw error in console for debugging
+      if (res?.rawError) {
+        console.error('Raw update error:', res.rawError);
+      }
     }
   } catch (e) {
-    showStatus(`Failed to check for updates: ${e?.message || e}`, 'error', 4000);
+    const errorMsg = e?.message || String(e);
+    showStatus(`Update check failed: ${errorMsg}`, 'error', 6000);
     setUpdateBtnState({ text: 'Check for Updates', disabled: false });
     elements.checkUpdateBtn.dataset.state = 'check';
+    console.error('Update check exception:', e);
   }
 }

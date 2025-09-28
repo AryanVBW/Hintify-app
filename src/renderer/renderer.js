@@ -1969,7 +1969,7 @@ async function initializeApp() {
           <div class="hint-text">
             You're continuing in guest mode. All core features are available:
             <br><br>
-            • Capture screenshots with the 📸 button or <strong>${mod}+Shift+S</strong>
+            • Capture screenshots with the 📸 button or <strong>${mod}+Shift+H</strong>
             <br>
             • Process clipboard <em>text or images</em> with <strong>${mod}+Shift+V</strong>
             <br>
@@ -2553,7 +2553,7 @@ function enableGuestMode() {
         <div class="hint-text">
           You're now using Hintify in guest mode! All core features are available:
           <br><br>
-          • Capture screenshots with the 📸 button or <strong>${mod}+Shift+S</strong>
+          • Capture screenshots with the 📸 button or <strong>${mod}+Shift+H</strong>
           <br>
           • Process clipboard <em>text or images</em> with <strong>${mod}+Shift+V</strong>
           <br>

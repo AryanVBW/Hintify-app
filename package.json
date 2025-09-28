@@ -30,11 +30,11 @@
     "dev": "NODE_ENV=development electron . --development",
     "build": "electron-builder",
     "build-mac": "electron-builder --mac",
-  "build-mac-arm64": "electron-builder --mac --arm64",
-  "build-mac-arm64-signed": "APPLE_SIGNING=1 bash scripts/build-mac-arm64.sh",
-  "build-mac-arm64-dev": "electron-builder --mac --arm64 --config=electron-builder-dev.json",
+    "build-mac-arm64": "electron-builder --mac --arm64",
+    "build-mac-arm64-signed": "APPLE_SIGNING=1 bash scripts/build-mac-arm64.sh",
+    "build-mac-arm64-dev": "electron-builder --mac --arm64 --config=electron-builder-dev.json",
     "build-mac-unsigned": "electron-builder --mac --config.mac.identity=null --config.afterSign=null",
-  "build-mac-arm64-prod-unsigned": "SKIP_NOTARIZE=1 ELECTRON_BUILDER_DISABLE_CODE_SIGNING=true CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 --publish never",
+    "build-mac-arm64-prod-unsigned": "SKIP_NOTARIZE=1 ELECTRON_BUILDER_DISABLE_CODE_SIGNING=true CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 --publish never",
     "build-mac-dev": "electron-builder --mac --config=electron-builder-dev.json",
     "build-win": "electron-builder --win",
     "build-linux": "electron-builder --linux",
@@ -47,6 +47,9 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.2",
     "@neondatabase/serverless": "^1.0.1",
     "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.6.2",
@@ -63,7 +66,7 @@
   },
   "build": {
     "appId": "com.hintify.snapassist",
-  "productName": "Hintify",
+    "productName": "Hintify",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "copyright": "Copyright © 2025 AryanVBW",
     "protocols": {
@@ -170,7 +173,7 @@
         }
       ]
     },
-  "nsis": {
+    "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
