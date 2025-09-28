@@ -2483,7 +2483,7 @@ function displayGuestModeMessage() {
       <div class="instructions">
         <h3>How to Get Started:</h3>
         <ul>
-          <li>📸 <strong>Capture Screenshot:</strong> Click the camera button or press <strong>${mod}+Shift+S</strong></li>
+          <li>📸 <strong>Capture Screenshot:</strong> Click the camera button or press <strong>${mod}+Shift+H</strong></li>
           <li>📋 <strong>Process Clipboard (Text or Image):</strong> Copy your question or screenshot and press <strong>${mod}+Shift+V</strong></li>
           <li>⌨️ <strong>Global Hotkey:</strong> Open the app anytime with <strong>${mod}+Shift+H</strong></li>
           <li>🤖 <strong>Get AI Hints:</strong> Receive intelligent hints without spoiling the answer</li>
@@ -2611,83 +2611,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ---- Auto-update UI wiring ----
-function showUpdateBanner(version) {
-  const banner = document.getElementById('update-banner');
-  const ver = document.getElementById('update-version');
-  if (banner) banner.classList.remove('hidden');
-  if (ver && version) ver.textContent = `(v${version})`;
-}
-function hideUpdateBanner(dismissMs) {
-  const banner = document.getElementById('update-banner');
-  if (banner) banner.classList.add('hidden');
-  // ask main to remember dismissal window by writing into store via a simple log-activity reuse if needed
-  // Simpler: send a custom IPC to main to store; but to avoid new IPC, we skip and let main check periodically
-  if (dismissMs) {
-    try { ipcRenderer.send('dismiss-update', dismissMs); } catch {}
-  }
-}
-function setUpdateProgress(percent, text) {
-  const fill = document.getElementById('update-progress-fill');
-  const bar = document.getElementById('update-progress');
-  const label = document.getElementById('update-progress-text');
-  if (bar) bar.classList.remove('hidden');
-  if (fill) fill.style.width = `${Math.max(0, Math.min(100, Math.floor(percent || 0)))}%`;
-  if (label && text) label.textContent = text;
-}
-
-// IPC listeners for updater events
-ipcRenderer.on('update-available', (_e, info) => {
-  showUpdateBanner(info?.version);
-});
-
-// General status updates from main for updater
-ipcRenderer.on('update-status', (_e, payload) => {
-  const s = payload?.status;
-  if (s === 'checking') updateStatus('Checking for updates...');
-  else if (s === 'unsupported') updateStatus('Auto-update not supported in this build');
-});
-
-// No updates available
-ipcRenderer.on('update-not-available', () => {
-  updateStatus('You are up to date');
-});
-
-try {
-  // download progress
-  ipcRenderer.on('update-download-progress', (_e, p) => {
-    setUpdateProgress(p?.percent || 0, `Downloading... ${Math.floor(p?.percent || 0)}%`);
-  });
-  // downloaded
-  ipcRenderer.on('update-downloaded', (_e, info) => {
-    setUpdateProgress(100, 'Ready to install...');
-  });
-  // errors
-  ipcRenderer.on('update-error', (_e, err) => {
-    setUpdateProgress(0, 'Update failed');
-    updateStatus(`Update error: ${err?.message || err}`);
-  });
-} catch {}
-
-// Hook buttons
-(function wireUpdateButtons(){
-  const updateBtn = document.getElementById('update-now-btn');
-  const dismissBtn = document.getElementById('dismiss-update-btn');
-  if (updateBtn) {
-    updateBtn.addEventListener('click', () => {
-      setUpdateProgress(0, 'Preparing download...');
-      ipcRenderer.send('download-update');
-    });
-  }
-  if (dismissBtn) {
-    dismissBtn.addEventListener('click', () => {
-      hideUpdateBanner(24*60*60*1000); // 1 day defer
-    });
-  }
-})();
-
-// Optionally trigger a manual check on load (main also checks periodically)
-try { ipcRenderer.invoke('check-for-updates'); } catch {}
 
 
 // Handle app focus
