@@ -99,8 +99,10 @@ fi
 
 # Collect artifacts for this version (include yml, blockmap, installers, zips, etc.)
 shopt -s nullglob
+# Collect installer files (zip/dmg/exe/AppImage/deb, etc.) that include the new version
+# plus auto-updater metadata (*.yml) and blockmaps
 assets=(
-  "$dist_dir"/*"$NEW_VERSION"*.
+  "$dist_dir"/*"$NEW_VERSION"*
   "$dist_dir"/*.yml
   "$dist_dir"/*.blockmap
 )
