@@ -14,6 +14,8 @@ let currentConfig = {};
 let isProcessing = false;
 let userInfo = null;
 let currentQuestionData = null; // Store current question for saving to database
+// Session flag to avoid repeatedly opening System Settings for screen recording
+let screenPrefsPrompted = false;
 
 // Default configuration
 const defaultConfig = {
@@ -1828,7 +1830,12 @@ function getScreenPermissionStatus() {
   try {
     if (process.platform !== 'darwin') return 'granted';
     // Electron exposes 'screen' in getMediaAccessStatus on macOS
-    return systemPreferences.getMediaAccessStatus('screen');
+    const raw = systemPreferences.getMediaAccessStatus('screen');
+    const s = String(raw || '').toLowerCase();
+    if (['granted', 'authorized', 'allow', 'allowed'].includes(s)) return 'granted';
+    if (['denied', 'restricted'].includes(s)) return 'denied';
+    if (['not-determined', 'undetermined', 'prompt'].includes(s)) return 'not-determined';
+    return 'unknown';
   } catch (e) {
     console.warn('Unable to determine screen permission status:', e?.message || e);
     return 'unknown';
@@ -1858,7 +1865,10 @@ async function ensurePermissionOrGuide() {
   }
 
   // At this point it's explicitly denied/restricted; guide the user
-  openScreenRecordingPreferences();
+  if (!screenPrefsPrompted) {
+    openScreenRecordingPreferences();
+    screenPrefsPrompted = true;
+  }
 
   const message = [
     'Hintify needs Screen Recording permission to capture screenshots.',
@@ -1901,12 +1911,16 @@ async function triggerCapture() {
         }, 1000);
       } else {
         // If user cancelled selection, code is non-zero. If it's due to permission,
-        // guide them again.
+        // guide them only when permission is explicitly denied.
         const status = getScreenPermissionStatus();
-        if (status !== 'granted') {
+        if (status === 'denied') {
           updateStatus('Screen Recording permission required');
-          openScreenRecordingPreferences();
+          if (!screenPrefsPrompted) {
+            openScreenRecordingPreferences();
+            screenPrefsPrompted = true;
+          }
         } else {
+          // Treat unknown/not-determined as a cancel or transient issue to avoid false prompts
           updateStatus('Screenshot cancelled');
         }
       }
