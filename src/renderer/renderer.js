@@ -1825,12 +1825,35 @@ async function ensureScreenRecordingPermission() {
   }
 }
 
-// Check current macOS Screen Recording permission status
-function getScreenPermissionStatus() {
+// Try to actually open a minimal desktop stream to verify permission; returns boolean
+async function probeScreenPermissionViaStream() {
+  try {
+    if (process.platform !== 'darwin') return true;
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
+    if (!sources || !sources.length) return false;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: sources[0].id
+        }
+      }
+    });
+    stream.getTracks().forEach(t => t.stop());
+    // Persist a sticky hint to avoid future prompts in this profile
+    try { store.set('screen_permission_granted', true); } catch {}
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Check current macOS Screen Recording permission status (via main for reliability)
+async function getScreenPermissionStatus() {
   try {
     if (process.platform !== 'darwin') return 'granted';
-    // Electron exposes 'screen' in getMediaAccessStatus on macOS
-    const raw = systemPreferences.getMediaAccessStatus('screen');
+    const raw = await ipcRenderer.invoke('get-screen-permission-status');
     const s = String(raw || '').toLowerCase();
     if (['granted', 'authorized', 'allow', 'allowed'].includes(s)) return 'granted';
     if (['denied', 'restricted'].includes(s)) return 'denied';
@@ -1843,10 +1866,9 @@ function getScreenPermissionStatus() {
 }
 
 // Open macOS System Settings to the Screen Recording privacy pane
-function openScreenRecordingPreferences() {
+async function openScreenRecordingPreferences() {
   try {
-    const { spawn } = require('child_process');
-    spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture']);
+    await ipcRenderer.invoke('open-screen-preferences');
   } catch (e) {
     console.warn('Failed to open System Settings:', e?.message || e);
   }
@@ -1856,24 +1878,33 @@ function openScreenRecordingPreferences() {
 async function ensurePermissionOrGuide() {
   if (process.platform !== 'darwin') return true;
 
-  let status = getScreenPermissionStatus();
+  const packaged = await ipcRenderer.invoke('is-packaged-app');
+  const appName = await ipcRenderer.invoke('get-app-name');
+  // If we previously confirmed success, trust it first
+  const stickyGranted = !!store.get('screen_permission_granted', false);
+  if (stickyGranted) return true;
+
+  let status = await getScreenPermissionStatus();
   // Allow capture when status is granted or unknown/not-determined to trigger the native prompt
   if (status === 'granted' || status === 'not-determined' || status === 'unknown') {
-    // Best-effort registration; do not block capture
-    try { await ensureScreenRecordingPermission(); } catch {}
+    // Actively probe with a minimal stream; if that works, mark granted and proceed
+    const ok = await probeScreenPermissionViaStream();
+    if (ok) return true;
+    // If probing failed but status is not explicitly denied, allow capture to trigger native prompt gracefully
     return true;
   }
 
   // At this point it's explicitly denied/restricted; guide the user
   if (!screenPrefsPrompted) {
-    openScreenRecordingPreferences();
+    await openScreenRecordingPreferences();
     screenPrefsPrompted = true;
   }
 
+  const targetName = packaged ? appName : 'Electron (development)';
   const message = [
     'Hintify needs Screen Recording permission to capture screenshots.',
-  'In System Settings → Privacy & Security → Screen Recording, enable permission for "Hintify".',
-    'Then quit and reopen the app to apply the change.'
+    `In System Settings → Privacy & Security → Screen Recording, enable permission for "${targetName}".`,
+    packaged ? 'Then quit and reopen the app to apply the change.' : 'Development builds appear as "Electron". After enabling, quit and restart this dev app.'
   ].join('\n\n');
 
   // Show a simple prompt with options to restart now
@@ -1903,20 +1934,22 @@ async function triggerCapture() {
     const { spawn } = require('child_process');
     const capture = spawn('screencapture', ['-i', '-c']);
 
-    capture.on('close', (code) => {
+  capture.on('close', async (code) => {
       if (code === 0) {
         // Wait a moment then process clipboard
         setTimeout(() => {
+          try { if (process.platform === 'darwin') store.set('screen_permission_granted', true); } catch {}
           processClipboardImage();
         }, 1000);
       } else {
         // If user cancelled selection, code is non-zero. If it's due to permission,
         // guide them only when permission is explicitly denied.
-        const status = getScreenPermissionStatus();
+        // Re-check via main to avoid stale cache
+  const status = await getScreenPermissionStatus();
         if (status === 'denied') {
           updateStatus('Screen Recording permission required');
           if (!screenPrefsPrompted) {
-            openScreenRecordingPreferences();
+            await openScreenRecordingPreferences();
             screenPrefsPrompted = true;
           }
         } else {

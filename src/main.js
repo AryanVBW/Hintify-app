@@ -1,5 +1,5 @@
 const electron = require('electron');
-const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol, screen } = electron;
+const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol, screen, systemPreferences } = electron;
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
@@ -117,6 +117,36 @@ function saveConfig(config) {
 
 // Function to register all IPC handlers
 function registerIpcHandlers() {
+  // macOS Screen Recording permission helpers
+  ipcMain.handle('get-screen-permission-status', () => {
+    try {
+      if (process.platform !== 'darwin') return 'granted';
+      const s = String(systemPreferences.getMediaAccessStatus('screen') || '').toLowerCase();
+      return s;
+    } catch (e) {
+      return 'unknown';
+    }
+  });
+
+  ipcMain.handle('open-screen-preferences', () => {
+    try {
+      if (process.platform === 'darwin') {
+        shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  });
+
+  ipcMain.handle('is-packaged-app', () => {
+    try { return app.isPackaged; } catch { return false; }
+  });
+
+  ipcMain.handle('get-app-name', () => {
+    try { return app.getName(); } catch { return 'Hintify'; }
+  });
   // Securely store/update GitHub token for updates
   ipcMain.handle('set-update-token', async (event, token) => {
     try {
