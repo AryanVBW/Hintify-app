@@ -7,7 +7,7 @@ const store = new Store();
 
 // (Removed duplicate/broken saveSettings block at top)
 const defaultConfig = {
-  provider: 'ollama',
+  provider: 'gemini',
   ollama_model: 'granite3.2-vision:2b',
   gemini_model: 'gemini-2.0-flash',
   theme: 'dark',
@@ -38,7 +38,19 @@ function saveConfig(config) {
 
 // Apply theme
 function applyTheme(theme) {
-  document.body.className = `theme-${theme || 'dark'}`;
+  // Remove all theme classes
+  document.body.className = '';
+  document.documentElement.className = '';
+  
+  // Apply the selected theme
+  if (theme === 'glass') {
+    document.body.classList.add('theme-dark', 'glassy-mode');
+    document.documentElement.classList.add('theme-glassy');
+    store.set('glassy_mode', true);
+  } else {
+    document.body.classList.add(`theme-${theme || 'dark'}`);
+    store.set('glassy_mode', false);
+  }
 }
 
 // Show status message
@@ -69,7 +81,7 @@ async function refreshUserCard() {
         elements.userAvatar.src = avatarUrl;
       } else {
         // Show a pleasant default avatar for guest users
-        elements.userAvatar.src = '../../assets/logo_m.png';
+        elements.userAvatar.src = '../assets/logo_m.png';
       }
     }
     if (elements.signInBtn && elements.signOutBtn) {
@@ -79,6 +91,101 @@ async function refreshUserCard() {
   } catch (e) {
     // Silent fail; keep defaults
   }
+}
+
+// Fetch available Ollama models
+async function fetchOllamaModels() {
+  try {
+    const response = await axios.get('http://localhost:11434/api/tags', { timeout: 5000 });
+    return { 
+      success: true, 
+      models: response.data.models || [],
+      running: true
+    };
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      return { 
+        success: false, 
+        running: false,
+        message: 'Ollama is not running. Please start Ollama to see available models.' 
+      };
+    }
+    return { 
+      success: false, 
+      running: false,
+      message: `Error fetching models: ${error.message}` 
+    };
+  }
+}
+
+// Update Ollama model dropdown with available models
+async function updateOllamaModelList() {
+  const modelSelect = elements.ollamaModel;
+  const statusText = document.getElementById('ollama-status-text');
+  const refreshBtn = document.getElementById('refresh-ollama-models');
+  
+  if (!modelSelect || !statusText) return;
+
+  // Set loading state
+  if (refreshBtn) refreshBtn.disabled = true;
+  modelSelect.innerHTML = '<option value="">Loading models...</option>';
+  statusText.textContent = 'Checking Ollama status...';
+  statusText.style.color = 'var(--fg-muted)';
+
+  const result = await fetchOllamaModels();
+
+  if (result.success && result.models.length > 0) {
+    // Clear and populate dropdown
+    modelSelect.innerHTML = '';
+    
+    // Get current saved model
+    const currentModel = store.get('ollama_model', 'granite3.2-vision:2b');
+    
+    let currentModelFound = false;
+    result.models.forEach(model => {
+      const modelName = model.name;
+      const option = document.createElement('option');
+      option.value = modelName;
+      option.textContent = modelName;
+      if (modelName === currentModel) {
+        option.selected = true;
+        currentModelFound = true;
+      }
+      modelSelect.appendChild(option);
+    });
+    
+    // If current model not found in list, add it as first option
+    if (!currentModelFound && currentModel) {
+      const option = document.createElement('option');
+      option.value = currentModel;
+      option.textContent = `${currentModel} (not installed)`;
+      option.selected = true;
+      modelSelect.insertBefore(option, modelSelect.firstChild);
+    }
+    
+    statusText.innerHTML = `✅ Ollama is running. Found ${result.models.length} model(s).`;
+    statusText.style.color = 'var(--success, #4ade80)';
+  } else if (!result.running) {
+    // Ollama not running
+    modelSelect.innerHTML = '<option value="">Ollama not running</option>';
+    const currentModel = store.get('ollama_model', 'granite3.2-vision:2b');
+    if (currentModel) {
+      const option = document.createElement('option');
+      option.value = currentModel;
+      option.textContent = currentModel;
+      option.selected = true;
+      modelSelect.appendChild(option);
+    }
+    statusText.innerHTML = '⚠️ Ollama is not running. Please start Ollama with: <code>ollama serve</code>';
+    statusText.style.color = 'var(--warning, #fb923c)';
+  } else {
+    // Other error
+    modelSelect.innerHTML = '<option value="">Error loading models</option>';
+    statusText.textContent = result.message || 'Failed to load Ollama models';
+    statusText.style.color = 'var(--error, #ef4444)';
+  }
+
+  if (refreshBtn) refreshBtn.disabled = false;
 }
 
 // Test Ollama connection
@@ -93,9 +200,9 @@ async function testOllamaConnection(model) {
     return { success: true, message: 'Ollama connection successful' };
   } catch (error) {
     if (error.code === 'ECONNREFUSED') {
-      return { success: false, message: 'Ollama is not running. Please start Ollama first.' };
+      return { success: false, message: 'Ollama is not running. Please start Ollama first with: ollama serve' };
     } else if (error.response?.status === 404) {
-      return { success: false, message: `Model "${model}" not found. Please pull it first: ollama pull ${model}` };
+      return { success: false, message: `Model "${model}" not found. Pull it with: ollama pull ${model}` };
     }
     return { success: false, message: `Ollama error: ${error.message}` };
   }
@@ -138,20 +245,29 @@ async function testConnection() {
   if (!testBtn) return;
 
   const provider = elements.providerSelect.value;
-  const ollamaModel = elements.ollamaModel.value.trim() || 'granite3.2-vision:2b';
-  const geminiModel = elements.geminiModel.value;
-  const geminiApiKey = elements.geminiApiKey.value.trim();
+  const ollamaModel = elements.ollamaModel?.value?.trim();
+  const geminiModel = elements.geminiModel?.value;
+  const geminiApiKey = elements.geminiApiKey?.value?.trim();
 
   // Set loading state
   testBtn.classList.add('loading');
   testBtn.disabled = true;
+  testBtn.textContent = 'Testing...';
 
   try {
     let result;
     if (provider === 'ollama') {
-      result = await testOllamaConnection(ollamaModel);
+      if (!ollamaModel) {
+        result = { success: false, message: 'Please select an Ollama model first' };
+      } else {
+        result = await testOllamaConnection(ollamaModel);
+      }
     } else if (provider === 'gemini') {
-      result = await testGeminiConnection(geminiModel, geminiApiKey);
+      if (!geminiApiKey) {
+        result = { success: false, message: 'Please enter your Gemini API key first' };
+      } else {
+        result = await testGeminiConnection(geminiModel, geminiApiKey);
+      }
     } else {
       result = { success: false, message: 'Unknown provider' };
     }
@@ -162,6 +278,7 @@ async function testConnection() {
   } finally {
     testBtn.classList.remove('loading');
     testBtn.disabled = false;
+    testBtn.textContent = 'Test Connection';
   }
 }
 
@@ -172,10 +289,10 @@ async function saveSettings() {
 
   // Get form values
   const config = {
-    provider: elements.providerSelect.value,
-    ollama_model: elements.ollamaModel.value.trim() || 'granite3.2-vision:2b',
-    gemini_model: elements.geminiModel.value,
-    theme: elements.themeSelect.value,
+    provider: elements.providerSelect?.value || 'gemini',
+    ollama_model: elements.ollamaModel?.value?.trim() || 'granite3.2-vision:2b',
+    gemini_model: elements.geminiModel?.value || 'gemini-2.0-flash',
+    theme: elements.themeSelect?.value || 'dark',
     advanced_mode: !!elements.advancedModeToggle?.checked
   };
 
@@ -207,8 +324,12 @@ async function saveSettings() {
   // Apply theme immediately
   applyTheme(config.theme);
 
-  // Notify main window of config update
-  ipcRenderer.send('config-updated', config);
+  // Notify main window of config update (including glassy mode status)
+  const themeConfig = {
+    ...config,
+    glassy_mode: store.get('glassy_mode', false)
+  };
+  ipcRenderer.send('config-updated', themeConfig);
 
   showStatus('Settings saved successfully!', 'success');
 
@@ -284,10 +405,20 @@ async function loadForm() {
   const config = loadConfig();
 
   // Set form values
-  elements.providerSelect.value = config.provider;
-  elements.ollamaModel.value = config.ollama_model;
-  elements.geminiModel.value = config.gemini_model;
-  elements.themeSelect.value = config.theme;
+  if (elements.providerSelect) elements.providerSelect.value = config.provider;
+  if (elements.geminiModel) elements.geminiModel.value = config.gemini_model;
+  
+  // Load Ollama models (will set the saved value after loading)
+  await updateOllamaModelList();
+  
+  // Handle theme - check if glassy mode is enabled
+  const glassyMode = store.get('glassy_mode', false);
+  if (glassyMode) {
+    elements.themeSelect.value = 'glass';
+  } else {
+    elements.themeSelect.value = config.theme;
+  }
+  
   if (elements.advancedModeToggle) elements.advancedModeToggle.checked = !!config.advanced_mode;
 
   // Load Gemini API key
@@ -345,19 +476,21 @@ async function initializeSettings() {
   elements.checkUpdateBtn = document.getElementById('check-update-btn');
   elements.updateProgress = document.getElementById('update-progress');
 
-  // Ensure API key input can receive paste events
-  if (elements.geminiApiKey) {
+  // Enable paste on all text inputs for better UX
+  const enablePasteOnInput = (inputElement) => {
+    if (!inputElement) return;
+    
     // Enable paste operations
-    elements.geminiApiKey.addEventListener('paste', (e) => {
+    inputElement.addEventListener('paste', (e) => {
       // Allow default paste behavior
       setTimeout(() => {
         // Trim whitespace from pasted content
-        elements.geminiApiKey.value = elements.geminiApiKey.value.trim();
+        inputElement.value = inputElement.value.trim();
       }, 10);
     });
 
     // Add keyboard shortcut for paste
-    elements.geminiApiKey.addEventListener('keydown', (e) => {
+    inputElement.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         // Allow native paste
         e.stopPropagation();
@@ -365,12 +498,19 @@ async function initializeSettings() {
     });
 
     // Add right-click context menu support
-    elements.geminiApiKey.addEventListener('contextmenu', (e) => {
+    inputElement.addEventListener('contextmenu', (e) => {
       // Allow native context menu with paste option
       e.stopPropagation();
     });
+  };
 
-    // Add focus styling
+  // Enable paste on all input fields
+  enablePasteOnInput(elements.geminiApiKey);
+  enablePasteOnInput(elements.ollamaModel);
+  enablePasteOnInput(elements.updateToken);
+
+  // Add focus styling to API key field
+  if (elements.geminiApiKey) {
     elements.geminiApiKey.addEventListener('focus', () => {
       elements.geminiApiKey.style.borderColor = 'var(--accent)';
     });
@@ -403,6 +543,15 @@ async function initializeSettings() {
 
   if (elements.providerSelect) {
     elements.providerSelect.addEventListener('change', updateProviderFields);
+  }
+
+  // Refresh Ollama models button
+  const refreshOllamaBtn = document.getElementById('refresh-ollama-models');
+  if (refreshOllamaBtn) {
+    refreshOllamaBtn.addEventListener('click', async () => {
+      showStatus('Refreshing Ollama models...', 'info', 1500);
+      await updateOllamaModelList();
+    });
   }
 
   // Theme change preview

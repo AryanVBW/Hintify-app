@@ -65,7 +65,6 @@ try {
 // Global variables
 let mainWindow;
 let settingsWindow;
-let onboardingWindow;
 let isDevelopment = process.argv.includes('--development') || process.env.NODE_ENV === 'development';
 
 // Deep linking variables
@@ -91,8 +90,6 @@ const defaultConfig = {
   theme: 'dark',
   // Enable Advanced Mode by default: direct vision (skip OCR)
   advanced_mode: true,
-  // Mark when the user has completed the onboarding wizard
-  onboarding_completed: false,
   windowBounds: { width: 750, height: 600, x: 100, y: 100 }
 };
 
@@ -117,31 +114,140 @@ function saveConfig(config) {
 
 // Function to register all IPC handlers
 function registerIpcHandlers() {
-  // macOS Screen Recording permission helpers
+  // macOS Screen Recording permission helpers with comprehensive error handling
   ipcMain.handle('get-screen-permission-status', () => {
     try {
-      if (process.platform !== 'darwin') return 'granted';
-      const s = String(systemPreferences.getMediaAccessStatus('screen') || '').toLowerCase();
-      return s;
+      if (process.platform !== 'darwin') {
+        console.log('[Permission] Non-macOS platform, returning granted');
+        return 'granted';
+      }
+
+      // Check if systemPreferences is available
+      if (!systemPreferences || typeof systemPreferences.getMediaAccessStatus !== 'function') {
+        console.error('[Permission] systemPreferences.getMediaAccessStatus not available');
+        return 'unknown';
+      }
+
+      const rawStatus = systemPreferences.getMediaAccessStatus('screen');
+      const normalizedStatus = String(rawStatus || '').toLowerCase().trim();
+
+      console.log(`[Permission] Raw macOS screen permission status: "${rawStatus}" -> normalized: "${normalizedStatus}"`);
+
+      // Handle all known macOS permission states with comprehensive mapping
+      if (['granted', 'authorized', 'allow', 'allowed', 'yes', 'true', '1'].includes(normalizedStatus)) {
+        console.log('[Permission] Permission status: GRANTED');
+        return 'granted';
+      } else if (['denied', 'restricted', 'deny', 'blocked', 'no', 'false', '0'].includes(normalizedStatus)) {
+        console.log('[Permission] Permission status: DENIED');
+        return 'denied';
+      } else if (['not-determined', 'undetermined', 'prompt', 'ask'].includes(normalizedStatus)) {
+        console.log('[Permission] Permission status: NOT-DETERMINED');
+        return 'not-determined';
+      } else if (['unknown', '', 'null', 'undefined'].includes(normalizedStatus)) {
+        console.log('[Permission] Permission status: UNKNOWN');
+        return 'unknown';
+      } else {
+        console.warn(`[Permission] Unrecognized permission status: "${normalizedStatus}" (raw: "${rawStatus}")`);
+        // Log system info for debugging
+        console.log('[Permission] System info:', {
+          platform: process.platform,
+          version: process.version,
+          electronVersion: process.versions.electron
+        });
+        return 'unknown';
+      }
     } catch (e) {
+      console.error('[Permission] Critical error getting screen permission status:', {
+        error: e.message,
+        stack: e.stack,
+        platform: process.platform,
+        electronVersion: process.versions.electron
+      });
       return 'unknown';
     }
   });
 
-  ipcMain.handle('open-screen-preferences', () => {
+  ipcMain.handle('open-screen-preferences', async () => {
     try {
-      if (process.platform === 'darwin') {
-        shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
-        return true;
+      if (process.platform !== 'darwin') return false;
+
+      console.log('[Permission] Opening macOS System Settings for Screen Recording');
+
+      // Try the modern macOS Ventura+ URL first, then fall back to older versions
+      const urls = [
+        'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+        'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenRecording'
+      ];
+
+      let success = false;
+      for (const url of urls) {
+        try {
+          await shell.openExternal(url);
+          console.log(`[Permission] Successfully opened System Settings with URL: ${url}`);
+          success = true;
+          break;
+        } catch (e) {
+          console.warn(`[Permission] Failed to open with URL ${url}:`, e.message);
+        }
       }
-      return false;
+
+      if (!success) {
+        // Final fallback - open System Settings root
+        console.log('[Permission] Falling back to opening System Settings root');
+        await shell.openExternal('x-apple.systempreferences:');
+        success = true;
+      }
+
+      return success;
     } catch (e) {
+      console.error('[Permission] Error opening System Settings:', e);
       return false;
     }
   });
 
   ipcMain.handle('is-packaged-app', () => {
     try { return app.isPackaged; } catch { return false; }
+  });
+
+  // Debug diagnostics for permission troubleshooting
+  ipcMain.handle('get-permission-diagnostics', () => {
+    try {
+      const diagnostics = {
+        platform: process.platform,
+        electronVersion: process.versions.electron,
+        nodeVersion: process.versions.node,
+        appVersion: app.getVersion(),
+        appName: app.getName(),
+        isPackaged: app.isPackaged,
+        timestamp: new Date().toISOString()
+      };
+
+      if (process.platform === 'darwin') {
+        try {
+          const screenStatus = systemPreferences.getMediaAccessStatus('screen');
+          diagnostics.macOS = {
+            screenRecordingStatus: screenStatus,
+            systemPreferencesAvailable: !!systemPreferences,
+            getMediaAccessStatusAvailable: typeof systemPreferences.getMediaAccessStatus === 'function'
+          };
+        } catch (e) {
+          diagnostics.macOS = {
+            error: e.message,
+            systemPreferencesAvailable: !!systemPreferences
+          };
+        }
+      }
+
+      console.log('[Permission] Diagnostics collected:', diagnostics);
+      return diagnostics;
+    } catch (e) {
+      console.error('[Permission] Error collecting diagnostics:', e);
+      return {
+        error: e.message,
+        platform: process.platform,
+        timestamp: new Date().toISOString()
+      };
+    }
   });
 
   ipcMain.handle('get-app-name', () => {
@@ -188,37 +294,6 @@ function registerIpcHandlers() {
     }
   });
 
-  ipcMain.on('onboarding-completed', (event, config) => {
-    console.log('✅ Onboarding completed with config:', config);
-    // Persist onboarding flag and other config safely
-    try {
-      store.set('onboarding_completed', true);
-      if (config && typeof config === 'object') {
-        Object.entries(config).forEach(([k, v]) => store.set(k, v));
-      }
-    } catch (e) {
-      console.warn('Failed to persist onboarding config:', e?.message || e);
-      saveConfig(config);
-      store.set('onboarding_completed', true);
-    }
-
-    if (onboardingWindow && !onboardingWindow.isDestroyed()) {
-      onboardingWindow.close();
-    }
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('config-updated', config);
-      mainWindow.show();
-      mainWindow.focus();
-
-      // After onboarding, check if user needs to authenticate
-      const authStatus = checkAuthStatus();
-      if (!authStatus.authenticated) {
-        console.log('🔐 Onboarding complete, but user needs to authenticate');
-        // The main window will show the auth UI automatically
-      }
-    }
-  });
 
   // Auth-related IPC handlers with enhanced error handling and validation
   ipcMain.on('auth-completed', async (event, userInfo) => {
@@ -742,51 +817,6 @@ function createSettingsWindow() {
   } catch {}
 }
 
-function createOnboardingWindow() {
-  if (onboardingWindow && !onboardingWindow.isDestroyed()) {
-    onboardingWindow.focus();
-    return;
-  }
-
-  onboardingWindow = new BrowserWindow({
-    width: 1000,
-    height: 800,
-    resizable: true,
-    center: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: true
-  },
-  icon: resolveAsset('logo_m.png'),
-  title: 'Setup - Hintify',
-    show: false
-  });
-
-  onboardingWindow.loadFile(path.join(__dirname, 'renderer', 'onboarding.html'));
-
-  onboardingWindow.once('ready-to-show', () => {
-    onboardingWindow.show();
-    // Maximize for a full-screen onboarding experience
-    try { onboardingWindow.maximize(); } catch {}
-
-    if (isDevelopment) {
-      onboardingWindow.webContents.openDevTools();
-    }
-  });
-
-  onboardingWindow.on('closed', () => {
-    onboardingWindow = null;
-    // Show main window when onboarding is closed
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
-
-  // Remove menu bar for onboarding window
-  onboardingWindow.setMenuBarVisibility(false);
-}
 
 // createAuthWindow function removed - now using direct browser authentication
 
@@ -823,24 +853,6 @@ function createMenuTemplate() {
           label: 'Settings...',
           accelerator: 'CmdOrCtrl+,',
           click: () => createSettingsWindow()
-        },
-        {
-          label: 'Run Setup Again...',
-          click: () => {
-            // Confirm before resetting onboarding
-            const response = dialog.showMessageBoxSync({
-              type: 'question',
-              buttons: ['Run Setup', 'Cancel'],
-              defaultId: 0,
-              cancelId: 1,
-              title: 'Run Setup Again',
-              message: 'Do you want to run the onboarding setup again? This is usually only needed on first install.'
-            });
-            if (response === 0) {
-              store.set('onboarding_completed', false);
-              createOnboardingWindow();
-            }
-          }
         },
         { type: 'separator' },
         // Add auth-related menu items
@@ -1287,16 +1299,12 @@ function setupAutoUpdater() {
 }
 
 function setupApp() {
-  // Check authentication status and onboarding status
+  // Check authentication status
   const authStatus = checkAuthStatus();
   const config = loadConfig();
-  // If the flag was never set, default is false; respect true once set
-  const isFirstRun = !store.get('onboarding_completed', config.onboarding_completed === true);
 
   console.log('🚀 App setup:', {
-    isAuthenticated: authStatus.authenticated,
-    isFirstRun,
-    onboardingCompleted: config.onboarding_completed
+    isAuthenticated: authStatus.authenticated
   });
 
   // Initialize authentication from storage
@@ -1308,27 +1316,8 @@ function setupApp() {
     console.error('❌ Failed to initialize authentication:', error);
   });
 
-  // Create main window
+  // Create and show main window
   createMainWindow();
-
-  // Priority order:
-  // 1. First-time users see onboarding (regardless of auth)
-  // 2. Authenticated users see main app
-  // 3. Non-authenticated users see sign-in in main app
-  if (isFirstRun) {
-    console.log('🚀 First run detected - showing onboarding wizard');
-    // Hide main window and show onboarding for first-time users
-    if (mainWindow) {
-      mainWindow.hide();
-    }
-    createOnboardingWindow();
-  } else {
-    console.log('🛠️ Returning user - showing main app');
-    // Show main window - it will handle auth state internally
-    if (mainWindow) {
-      mainWindow.show();
-    }
-  }
 
   // Handle deep link if one was received during startup
   if (deeplinkingUrl) {

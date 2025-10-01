@@ -1,21 +1,315 @@
-const { ipcRenderer, clipboard, nativeImage, shell, desktopCapturer, systemPreferences } = require('electron');
+const { ipcRenderer, clipboard, nativeImage, shell } = require('electron');
 const Store = require('electron-store');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const os = require('os');
+const ErrorDisplay = require('./components/ErrorDisplay');
 
-// Initialize store
+// Initialize store and error display
 const store = new Store();
+const errorDisplay = new ErrorDisplay();
 
 // Global variables
 let currentConfig = {};
 let isProcessing = false;
 let userInfo = null;
 let currentQuestionData = null; // Store current question for saving to database
-// Session flag to avoid repeatedly opening System Settings for screen recording
-let screenPrefsPrompted = false;
+// Permission state management
+class PermissionManager {
+  constructor() {
+    this.sessionFlags = {
+      screenPrefsPrompted: false,
+      lastPermissionCheck: 0,
+      lastKnownStatus: 'unknown',
+      registrationAttempted: false,
+      restartDialogShown: false // Track if we've shown the restart dialog this session
+    };
+    this.PERMISSION_CHECK_INTERVAL = 5000; // 5 seconds minimum between checks
+  }
+
+  // Clear all permission-related flags and reset state
+  clearPermissionState() {
+    console.log('[Permission] Clearing all permission state');
+    try {
+      store.delete('screen_permission_granted');
+      store.delete('screen_permission_primed');
+      store.delete('screen_permission_restart_required');
+      this.sessionFlags.screenPrefsPrompted = false;
+      this.sessionFlags.lastKnownStatus = 'unknown';
+      this.sessionFlags.lastPermissionCheck = 0;
+    } catch (e) {
+      console.error('[Permission] Error clearing permission state:', e);
+    }
+  }
+
+  // Get cached permission status with validation
+  getCachedPermissionStatus() {
+    const granted = store.get('screen_permission_granted', false);
+    const primed = store.get('screen_permission_primed', false);
+    const restartRequired = store.get('screen_permission_restart_required', false);
+
+    return { granted, primed, restartRequired };
+  }
+
+  // Update permission status with proper state management and logging
+  updatePermissionStatus(status, actuallyGranted = false) {
+    permissionLogger.log('info', 'Updating permission status', {
+      status,
+      actuallyGranted,
+      previousStatus: this.sessionFlags.lastKnownStatus
+    });
+
+    this.sessionFlags.lastKnownStatus = status;
+    this.sessionFlags.lastPermissionCheck = Date.now();
+
+    if (status === 'granted' && actuallyGranted) {
+      // Permission is confirmed working
+      store.set('screen_permission_granted', true);
+      store.set('screen_permission_restart_required', false);
+      this.sessionFlags.screenPrefsPrompted = false; // Reset so we can prompt again if needed
+      permissionLogger.log('info', 'Permission confirmed as working', { status });
+    } else if (status === 'denied') {
+      // Permission is explicitly denied
+      store.set('screen_permission_granted', false);
+      // Don't clear restart_required here - user might have just granted it
+      permissionLogger.log('warn', 'Permission explicitly denied', { status });
+    } else if (status === 'not-determined') {
+      // Permission not yet determined
+      store.set('screen_permission_granted', false);
+      store.set('screen_permission_restart_required', false);
+      permissionLogger.log('info', 'Permission not yet determined', { status });
+    } else {
+      permissionLogger.log('warn', 'Unknown permission status', { status });
+    }
+  }
+
+  // Check if we should skip permission checks due to recent check
+  shouldSkipPermissionCheck() {
+    const now = Date.now();
+    const timeSinceLastCheck = now - this.sessionFlags.lastPermissionCheck;
+    return timeSinceLastCheck < this.PERMISSION_CHECK_INTERVAL;
+  }
+
+  // Reset session flags (useful after app restart or permission changes)
+  resetSessionFlags() {
+    console.log('[Permission] Resetting session flags');
+    this.sessionFlags.screenPrefsPrompted = false;
+    this.sessionFlags.lastPermissionCheck = 0;
+  }
+}
+
+// Initialize permission manager
+const permissionManager = new PermissionManager();
+
+// Permission change detection system
+class PermissionMonitor {
+  constructor() {
+    this.isMonitoring = false;
+    this.monitorInterval = null;
+    this.MONITOR_INTERVAL_MS = 10000; // Check every 10 seconds
+    this.lastKnownPermissionState = 'unknown';
+  }
+
+  // Start monitoring permission changes
+  startMonitoring() {
+    if (this.isMonitoring || process.platform !== 'darwin') return;
+
+    console.log('[PermissionMonitor] Starting permission change monitoring');
+    this.isMonitoring = true;
+
+    // Initial check
+    this.checkPermissionChange();
+
+    // Set up periodic checks
+    this.monitorInterval = setInterval(() => {
+      this.checkPermissionChange();
+    }, this.MONITOR_INTERVAL_MS);
+  }
+
+  // Stop monitoring
+  stopMonitoring() {
+    if (!this.isMonitoring) return;
+
+    console.log('[PermissionMonitor] Stopping permission change monitoring');
+    this.isMonitoring = false;
+
+    if (this.monitorInterval) {
+      clearInterval(this.monitorInterval);
+      this.monitorInterval = null;
+    }
+  }
+
+  // Check for permission changes
+  async checkPermissionChange() {
+    try {
+      const currentStatus = await getScreenPermissionStatus(true); // Force fresh check
+
+      if (currentStatus !== this.lastKnownPermissionState) {
+        console.log(`[PermissionMonitor] Permission state changed: ${this.lastKnownPermissionState} → ${currentStatus}`);
+
+        this.handlePermissionChange(this.lastKnownPermissionState, currentStatus);
+        this.lastKnownPermissionState = currentStatus;
+      }
+    } catch (e) {
+      console.error('[PermissionMonitor] Error checking permission change:', e);
+    }
+  }
+
+  // Handle permission state changes with comprehensive error handling
+  handlePermissionChange(oldStatus, newStatus) {
+    console.log(`[PermissionMonitor] Handling permission change: ${oldStatus} → ${newStatus}`);
+
+    try {
+      if (newStatus === 'granted' && oldStatus !== 'granted') {
+        // Permission was just granted
+        console.log('[PermissionMonitor] Permission was granted - clearing stale flags');
+        permissionManager.updatePermissionStatus('granted', false); // Don't mark as validated yet
+        permissionManager.resetSessionFlags();
+
+        // Show user-friendly notification
+        updateStatus('✅ Screen Recording permission granted! You can now capture screenshots.');
+
+      } else if (newStatus === 'denied' && oldStatus === 'granted') {
+        // Permission was revoked
+        console.log('[PermissionMonitor] Permission was revoked');
+        permissionManager.clearPermissionState();
+
+        updateStatus('⚠️ Screen Recording permission was revoked. Please re-enable it in System Settings.');
+
+      } else if (newStatus === 'not-determined' && oldStatus === 'denied') {
+        // Permission was reset (user might have reset privacy settings)
+        console.log('[PermissionMonitor] Permission was reset to not-determined');
+        permissionManager.clearPermissionState();
+
+      } else if (newStatus === 'unknown' || oldStatus === 'unknown') {
+        // Handle unknown states gracefully
+        console.warn('[PermissionMonitor] Unknown permission state detected, clearing cache');
+        permissionManager.clearPermissionState();
+
+      } else {
+        console.log(`[PermissionMonitor] No action needed for change: ${oldStatus} → ${newStatus}`);
+      }
+    } catch (e) {
+      console.error('[PermissionMonitor] Error handling permission change:', e);
+      // Don't let permission change handling errors break the app
+      try {
+        updateStatus('Permission status update failed - please restart the app if issues persist');
+      } catch (statusError) {
+        console.error('[PermissionMonitor] Failed to update status:', statusError);
+      }
+    }
+  }
+
+  // Set initial state
+  setInitialState(status) {
+    this.lastKnownPermissionState = status;
+  }
+}
+
+// Initialize permission monitor
+const permissionMonitor = new PermissionMonitor();
+
+// Debug logging and diagnostics system
+class PermissionLogger {
+  constructor() {
+    this.logs = [];
+    this.maxLogs = 100; // Keep last 100 log entries
+  }
+
+  // Log permission events with context
+  log(level, message, context = {}) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      context: {
+        ...context,
+        platform: process.platform,
+        sessionFlags: permissionManager.sessionFlags,
+        cachedPermissions: permissionManager.getCachedPermissionStatus()
+      }
+    };
+
+    this.logs.push(logEntry);
+
+    // Keep only recent logs
+    if (this.logs.length > this.maxLogs) {
+      this.logs = this.logs.slice(-this.maxLogs);
+    }
+
+    // Also log to console with appropriate level
+    const consoleMessage = `[Permission] ${message}`;
+    switch (level) {
+      case 'error':
+        console.error(consoleMessage, context);
+        break;
+      case 'warn':
+        console.warn(consoleMessage, context);
+        break;
+      case 'info':
+        console.log(consoleMessage, context);
+        break;
+      case 'debug':
+        console.debug(consoleMessage, context);
+        break;
+      default:
+        console.log(consoleMessage, context);
+    }
+  }
+
+  // Get diagnostic report
+  async getDiagnosticReport() {
+    try {
+      const mainDiagnostics = await ipcRenderer.invoke('get-permission-diagnostics');
+
+      return {
+        timestamp: new Date().toISOString(),
+        mainProcess: mainDiagnostics,
+        renderer: {
+          permissionManager: {
+            sessionFlags: permissionManager.sessionFlags,
+            cachedPermissions: permissionManager.getCachedPermissionStatus()
+          },
+          permissionMonitor: {
+            isMonitoring: permissionMonitor.isMonitoring,
+            lastKnownState: permissionMonitor.lastKnownPermissionState
+          },
+          recentLogs: this.logs.slice(-20) // Last 20 log entries
+        }
+      };
+    } catch (e) {
+      return {
+        timestamp: new Date().toISOString(),
+        error: e.message,
+        renderer: {
+          permissionManager: {
+            sessionFlags: permissionManager.sessionFlags,
+            cachedPermissions: permissionManager.getCachedPermissionStatus()
+          },
+          recentLogs: this.logs.slice(-20)
+        }
+      };
+    }
+  }
+
+  // Export logs for debugging
+  exportLogs() {
+    return {
+      timestamp: new Date().toISOString(),
+      logs: this.logs,
+      summary: {
+        totalLogs: this.logs.length,
+        errorCount: this.logs.filter(l => l.level === 'error').length,
+        warnCount: this.logs.filter(l => l.level === 'warn').length
+      }
+    };
+  }
+}
+
+// Initialize permission logger
+const permissionLogger = new PermissionLogger();
 
 // Default configuration
 const defaultConfig = {
@@ -50,7 +344,19 @@ function saveConfig(config) {
 
 // Apply theme to body
 function applyTheme(theme) {
-  document.body.className = `theme-${theme || 'dark'}`;
+  // Remove all theme classes
+  document.body.classList.remove('theme-dark', 'theme-light', 'glassy-mode');
+  document.documentElement.classList.remove('theme-glassy');
+  
+  // Apply the selected theme
+  if (theme === 'glass') {
+    document.body.classList.add('theme-dark', 'glassy-mode');
+    document.documentElement.classList.add('theme-glassy');
+    store.set('glassy_mode', true);
+  } else {
+    document.body.classList.add(`theme-${theme || 'dark'}`);
+    store.set('glassy_mode', false);
+  }
 }
 
 // Platform-aware modifier key label for shortcuts
@@ -822,14 +1128,39 @@ function displayHints(hintsText) {
   hintsDisplay.innerHTML = '';
 
   if (!hintsText || hintsText.trim().startsWith('[') || hintsText.includes('Error')) {
-    // Show error message
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'error-message';
-    errorDiv.innerHTML = `
-      <h3>Error Processing Image</h3>
-      <p>${hintsText || 'Failed to generate hints. Please try again.'}</p>
-    `;
-    hintsDisplay.appendChild(errorDiv);
+    // Show error with beautiful animation
+    const errorMessage = hintsText || 'Failed to generate hints. Please try again.';
+    let errorType = 'general';
+    
+    // Determine error type
+    if (errorMessage.includes('OCR')) errorType = 'ocr';
+    else if (errorMessage.includes('API') || errorMessage.includes('rate limit')) errorType = 'api';
+    else if (errorMessage.includes('network') || errorMessage.includes('connection')) errorType = 'network';
+    else if (errorMessage.includes('permission')) errorType = 'permission';
+    
+    errorDisplay.show({
+      type: errorType,
+      title: 'Error Processing Image',
+      message: errorMessage,
+      actions: [
+        {
+          text: 'Try Again',
+          icon: 'refresh',
+          variant: 'btn-primary',
+          onClick: () => {
+            // Trigger clipboard processing again
+            processClipboardSmart();
+          }
+        },
+        {
+          text: 'Close',
+          icon: 'close',
+          variant: 'btn-secondary',
+          onClick: () => {}
+        }
+      ],
+      container: hintsDisplay
+    });
     return;
   }
 
@@ -882,9 +1213,9 @@ function displayHints(hintsText) {
       labelDiv.textContent = hintMatch[1];
 
   const textDiv = document.createElement('div');
-  textDiv.className = 'hint-text';
-  // Keep plain text; KaTeX auto-render will scan and transform $...$ / $$...$$
-  textDiv.textContent = hintMatch[2];
+      textDiv.className = 'hint-text';
+      // Keep plain text; KaTeX auto-render will scan and transform $...$ / $$...$$
+      textDiv.textContent = hintMatch[2];
 
       hintDiv.appendChild(labelDiv);
       hintDiv.appendChild(textDiv);
@@ -1718,34 +2049,81 @@ async function processImage(imageBuffer) {
 
         // If the OCR engine failed to initialize, auto-switch to Advanced Mode and retry with vision
         if (/Failed to construct 'Worker'|V8 platform|worker.*not support|tesseract.*not found|Worker-init failed/i.test(rawMsg)) {
-          updateStatus('OCR unavailable. Switching to Advanced Mode...');
-          showLoading(true, 'Generating hints (Advanced Mode)...');
-          // Persist mode switch
-          currentConfig.advanced_mode = true;
-          saveConfig({ advanced_mode: true });
-          try { syncModeToggleUI(currentConfig); } catch {}
+          // Show helpful error with option to switch to Advanced Mode
+          const hintsDisplay = document.getElementById('hints-display');
+          errorDisplay.show({
+            type: 'ocr',
+            title: 'OCR Engine Unavailable',
+            message: 'The OCR engine could not start. Would you like to switch to Advanced Mode? It sends images directly to AI without OCR.',
+            actions: [
+              {
+                text: 'Enable Advanced Mode',
+                icon: 'flash_on',
+                variant: 'btn-primary',
+                onClick: async () => {
+                  updateStatus('Switching to Advanced Mode...');
+                  showLoading(true, 'Generating hints (Advanced Mode)...');
+                  // Persist mode switch
+                  currentConfig.advanced_mode = true;
+                  saveConfig({ advanced_mode: true });
+                  try { syncModeToggleUI(currentConfig); } catch {}
 
-          // Process image directly with the selected vision model
-          const hints = await generateHintsFromImageDirect(imageBuffer, processingStartTime);
-          displayHints(hints);
-          await logActivity('image_processing', 'completed', {
-            question_type: 'image_direct',
-            difficulty: 'Unknown',
-            ocr_skipped: true,
-            hints_length: (hints || '').length,
-            total_processing_time_ms: Date.now() - processingStartTime
+                  // Process image directly with the selected vision model
+                  const hints = await generateHintsFromImageDirect(imageBuffer, processingStartTime);
+                  displayHints(hints);
+                  await logActivity('image_processing', 'completed', {
+                    question_type: 'image_direct',
+                    difficulty: 'Unknown',
+                    ocr_skipped: true,
+                    hints_length: (hints || '').length,
+                    total_processing_time_ms: Date.now() - processingStartTime
+                  });
+                  updateStatus('Ready');
+                }
+              },
+              {
+                text: 'Cancel',
+                icon: 'close',
+                variant: 'btn-secondary',
+                onClick: () => {
+                  updateStatus('Ready');
+                }
+              }
+            ],
+            container: hintsDisplay
           });
-          updateStatus('Ready');
           return;
         }
 
-        // Generic OCR failure message
-        let userMsg = [
-          '⚠️ OCR could not extract text from the image.',
-          '',
-          `Details: ${rawMsg}`
-        ].join('\n');
-        displayHints(userMsg);
+        // Generic OCR failure - show with beautiful error UI
+        const hintsDisplay = document.getElementById('hints-display');
+        errorDisplay.show({
+          type: 'ocr',
+          title: 'Text Extraction Failed',
+          message: `Could not extract text from the image. ${rawMsg}`,
+          actions: [
+            {
+              text: 'Try Again',
+              icon: 'refresh',
+              variant: 'btn-primary',
+              onClick: () => {
+                processClipboardSmart();
+              }
+            },
+            {
+              text: 'Use Advanced Mode',
+              icon: 'flash_on',
+              variant: 'btn-secondary',
+              onClick: async () => {
+                currentConfig.advanced_mode = true;
+                saveConfig({ advanced_mode: true });
+                try { syncModeToggleUI(currentConfig); } catch {}
+                processClipboardSmart();
+              }
+            }
+          ],
+          container: hintsDisplay
+        });
 
         await logActivity('ocr', 'failed', {
           error: rawMsg,
@@ -1795,72 +2173,142 @@ async function processImage(imageBuffer) {
   }
 }
 
-// Prime macOS Screen Recording permission by briefly requesting a desktop media stream
+// Legacy function - now handled by the new permission system
+// Kept for compatibility but no longer used
 async function ensureScreenRecordingPermission() {
-  try {
-    if (process.platform !== 'darwin') return;
-    const primed = store.get('screen_permission_primed', false);
-    if (primed) return;
-
-    // Try to obtain a minimal screen media stream which will register the app
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
-    if (!sources || !sources.length) return;
-
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: sources[0].id
-        }
-      }
-    });
-
-    // Immediately stop to avoid any capture; this just primes TCC registration
-    stream.getTracks().forEach(t => t.stop());
-    store.set('screen_permission_primed', true);
-  } catch (err) {
-    // Ignore; the attempt is sufficient to get the app listed in System Settings
-    // Users can grant permission there and retry capture
-  }
+  console.warn('[Permission] ensureScreenRecordingPermission is deprecated - use new permission system');
+  // The new permission system handles this automatically
 }
 
 // Try to actually open a minimal desktop stream to verify permission; returns boolean
 async function probeScreenPermissionViaStream() {
+  // Disabled to avoid triggering macOS permission prompt loops
+  return false;
+}
+
+// One-time registration to make app appear in macOS Screen Recording list
+async function registerAppForScreenRecordingOnce() {
+  if (process.platform !== 'darwin') return;
+  if (permissionManager.sessionFlags.registrationAttempted) return;
+  permissionManager.sessionFlags.registrationAttempted = true;
+
+  console.log('[Registration] Attempting to register app with macOS Screen Recording...');
+  permissionLogger.log('info', 'Starting Screen Recording registration process');
+
   try {
-    if (process.platform !== 'darwin') return true;
-    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
-    if (!sources || !sources.length) return false;
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: sources[0].id
-        }
+    // Check current status
+    const status = await getScreenPermissionStatus(true);
+    console.log(`[Registration] Current permission status: ${status}`);
+    
+    // Always attempt registration regardless of status to ensure app appears in list
+    const nmd = navigator.mediaDevices;
+    if (!nmd || typeof nmd.getDisplayMedia !== 'function') {
+      console.log('[Registration] getDisplayMedia not available');
+      return;
+    }
+
+    console.log('[Registration] Calling getDisplayMedia to register with TCC...');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      console.log('[Registration] Timeout reached, aborting registration');
+      controller.abort();
+    }, 5000);
+
+    try {
+      const stream = await nmd.getDisplayMedia({
+        video: { 
+          displaySurface: 'monitor',
+          width: { max: 1 },
+          height: { max: 1 }
+        },
+        audio: false
+      });
+      clearTimeout(timeout);
+
+      console.log('[Registration] Successfully obtained display media stream');
+      
+      // Immediately stop tracks; this is only for registration
+      stream.getTracks().forEach(track => {
+        console.log(`[Registration] Stopping track: ${track.kind}`);
+        track.stop();
+      });
+
+      console.log('[Registration] ✅ App registered with macOS Screen Recording');
+      permissionLogger.log('info', 'Successfully registered app with macOS Screen Recording via getDisplayMedia');
+      
+    } catch (e) {
+      clearTimeout(timeout);
+      console.log(`[Registration] getDisplayMedia failed: ${e.message}`);
+      
+      // This is expected if permission is denied, but the app should still be listed
+      if (e.name === 'NotAllowedError') {
+        console.log('[Registration] Permission denied, but app should now be listed in System Settings');
+        permissionLogger.log('info', 'Registration triggered permission prompt - app should now be visible in settings');
+      } else {
+        permissionLogger.log('warn', 'Registration attempt failed', { error: e.message, name: e.name });
       }
-    });
-    stream.getTracks().forEach(t => t.stop());
-    // Persist a sticky hint to avoid future prompts in this profile
-    try { store.set('screen_permission_granted', true); } catch {}
-    return true;
+    }
   } catch (e) {
-    return false;
+    console.error('[Registration] Registration flow error:', e);
+    permissionLogger.log('error', 'Registration flow encountered an error', { error: e.message });
   }
 }
 
 // Check current macOS Screen Recording permission status (via main for reliability)
-async function getScreenPermissionStatus() {
+async function getScreenPermissionStatus(forceCheck = false) {
   try {
-    if (process.platform !== 'darwin') return 'granted';
-    const raw = await ipcRenderer.invoke('get-screen-permission-status');
-    const s = String(raw || '').toLowerCase();
-    if (['granted', 'authorized', 'allow', 'allowed'].includes(s)) return 'granted';
-    if (['denied', 'restricted'].includes(s)) return 'denied';
-    if (['not-determined', 'undetermined', 'prompt'].includes(s)) return 'not-determined';
-    return 'unknown';
+    if (process.platform !== 'darwin') {
+      console.log('[Permission] Non-macOS platform, returning granted');
+      return 'granted';
+    }
+
+    // Use cached status if recent and not forcing check
+    if (!forceCheck && permissionManager.shouldSkipPermissionCheck()) {
+      const cached = permissionManager.sessionFlags.lastKnownStatus;
+      if (cached !== 'unknown') {
+        console.log(`[Permission] Using cached status: "${cached}"`);
+        return cached;
+      }
+    }
+
+    console.log('[Permission] Requesting fresh permission status from main process');
+
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Permission status check timeout')), 5000);
+    });
+
+    const statusPromise = ipcRenderer.invoke('get-screen-permission-status');
+    const status = await Promise.race([statusPromise, timeoutPromise]);
+
+    console.log(`[Permission] Received status from main process: "${status}"`);
+
+    // Validate the received status
+    if (!['granted', 'denied', 'not-determined', 'unknown'].includes(status)) {
+      console.warn(`[Permission] Invalid status received: "${status}", treating as unknown`);
+      return 'unknown';
+    }
+
+  // Update permission manager with the new status
+  // Do NOT mark as actuallyGranted here; that should only happen after a successful capture
+  permissionManager.updatePermissionStatus(status, false);
+
+    return status;
   } catch (e) {
-    console.warn('Unable to determine screen permission status:', e?.message || e);
+    console.error('[Permission] Error getting screen permission status:', {
+      error: e.message,
+      stack: e.stack,
+      forceCheck,
+      platform: process.platform
+    });
+
+    // Return cached status if available, otherwise unknown
+    const cached = permissionManager.sessionFlags.lastKnownStatus;
+    if (cached !== 'unknown') {
+      console.log(`[Permission] Falling back to cached status: "${cached}"`);
+      return cached;
+    }
+
     return 'unknown';
   }
 }
@@ -1868,49 +2316,107 @@ async function getScreenPermissionStatus() {
 // Open macOS System Settings to the Screen Recording privacy pane
 async function openScreenRecordingPreferences() {
   try {
-    await ipcRenderer.invoke('open-screen-preferences');
+    const result = await ipcRenderer.invoke('open-screen-preferences');
+    if (result) {
+      permissionManager.sessionFlags.screenPrefsPrompted = true;
+      try { store.set('screen_permission_restart_required', true); } catch {}
+    }
+    return result;
   } catch (e) {
-    console.warn('Failed to open System Settings:', e?.message || e);
+    return false;
   }
 }
 
-// Ensure permission is granted or guide the user; returns boolean
-async function ensurePermissionOrGuide() {
+// Comprehensive permission validation that combines multiple checks
+async function validateScreenPermission() {
+  if (process.platform !== 'darwin') return { status: 'granted', validated: true };
+  const systemStatus = await getScreenPermissionStatus(true);
+  if (systemStatus === 'granted') return { status: 'granted', validated: true, method: 'system' };
+  if (systemStatus === 'denied') return { status: 'denied', validated: true, method: 'system' };
+  if (systemStatus === 'not-determined') return { status: 'not-determined', validated: true, method: 'system' };
+  return { status: 'unknown', validated: false, method: 'system' };
+}
+
+// Smart permission handler that uses comprehensive validation
+async function ensureScreenPermission() {
+  if (process.platform !== 'darwin') return { success: true, status: 'granted' };
+  const validation = await validateScreenPermission();
+  
+  try {
+    // If permission is granted and validated, clear the restart flag
+    if (validation.status === 'granted' && validation.validated) {
+      // Permission is confirmed working - clear restart requirement
+      const hadRestartFlag = store.get('screen_permission_restart_required', false);
+      if (hadRestartFlag) {
+        console.log('[Permission] Clearing restart_required flag - permission is working');
+        store.set('screen_permission_restart_required', false);
+      }
+      return { success: true, status: 'granted', method: validation.method };
+    }
+    
+    // Only show restart dialog if flag is set AND we haven't shown it this session
+    if (validation.status === 'granted' && store.get('screen_permission_restart_required', false)) {
+      // Check if we've already shown the restart prompt this session
+      if (permissionManager.sessionFlags.restartDialogShown) {
+        // Already shown this session, just clear the flag and try to proceed
+        console.log('[Permission] Restart dialog already shown this session, clearing flag');
+        store.set('screen_permission_restart_required', false);
+        return { success: true, status: 'granted', method: validation.method };
+      }
+      
+      // Mark that we're showing the restart dialog
+      permissionManager.sessionFlags.restartDialogShown = true;
+      return { success: false, status: 'granted', needsRestart: true, message: 'Screen Recording permission changed. Restart Hintify to apply it.' };
+    }
+  } catch (e) {
+    console.error('[Permission] Error in ensureScreenPermission:', e);
+  }
+  
+  if (validation.status === 'granted') return { success: true, status: 'granted', method: validation.method };
+  // Treat not-determined similar to denied for user guidance
+  return { success: false, status: validation.status, message: 'Screen Recording permission is required.' };
+}
+
+// Guide user through permission granting process
+async function guideUserToGrantPermission() {
   if (process.platform !== 'darwin') return true;
 
   const packaged = await ipcRenderer.invoke('is-packaged-app');
   const appName = await ipcRenderer.invoke('get-app-name');
-  // If we previously confirmed success, trust it first
-  const stickyGranted = !!store.get('screen_permission_granted', false);
-  if (stickyGranted) return true;
 
-  let status = await getScreenPermissionStatus();
-  // Allow capture when status is granted or unknown/not-determined to trigger the native prompt
-  if (status === 'granted' || status === 'not-determined' || status === 'unknown') {
-    // Actively probe with a minimal stream; if that works, mark granted and proceed
-    const ok = await probeScreenPermissionViaStream();
-    if (ok) return true;
-    // If probing failed but status is not explicitly denied, allow capture to trigger native prompt gracefully
-    return true;
-  }
-
-  // At this point it's explicitly denied/restricted; guide the user
-  if (!screenPrefsPrompted) {
-    await openScreenRecordingPreferences();
-    screenPrefsPrompted = true;
+  // Don't prompt repeatedly in the same session unless permission status changed
+  if (permissionManager.sessionFlags.screenPrefsPrompted) {
+    console.log('[Permission] Already prompted user in this session');
+    return false;
   }
 
   const targetName = packaged ? appName : 'Electron (development)';
+
+  // Try to proactively register the app in macOS Screen Recording (one-time per session)
+  await registerAppForScreenRecordingOnce();
   const message = [
     'Hintify needs Screen Recording permission to capture screenshots.',
     `In System Settings → Privacy & Security → Screen Recording, enable permission for "${targetName}".`,
     packaged ? 'Then quit and reopen the app to apply the change.' : 'Development builds appear as "Electron". After enabling, quit and restart this dev app.'
   ].join('\n\n');
 
-  // Show a simple prompt with options to restart now
+  // Open System Settings
+  const opened = await openScreenRecordingPreferences();
+  if (!opened) {
+    console.error('[Permission] Failed to open System Settings');
+    updateStatus('Please manually open System Settings → Privacy & Security → Screen Recording');
+    return false;
+  }
+
+  // Show guidance dialog
   const restartNow = window.confirm(`${message}\n\nWould you like to restart the app now?`);
   if (restartNow) {
-    try { await ipcRenderer.invoke('relaunch-app'); } catch {}
+    try {
+      await ipcRenderer.invoke('relaunch-app');
+      return true;
+    } catch (e) {
+      console.error('[Permission] Failed to restart app:', e);
+    }
   } else {
     updateStatus('Please grant Screen Recording in System Settings, then restart the app.');
   }
@@ -1918,46 +2424,178 @@ async function ensurePermissionOrGuide() {
   return false;
 }
 
-// Trigger screenshot capture
+// Diagnostic function for troubleshooting permission issues
+async function diagnosePermissionIssues() {
+  permissionLogger.log('info', 'Starting permission diagnostics');
+
+  try {
+    const report = await permissionLogger.getDiagnosticReport();
+
+    console.group('🔍 Permission Diagnostic Report');
+    console.log('📊 Full Report:', report);
+    console.log('🖥️ Main Process:', report.mainProcess);
+    console.log('🎨 Renderer Process:', report.renderer);
+    console.log('📝 Recent Logs:', report.renderer.recentLogs);
+    console.groupEnd();
+
+    // Also display in UI for user
+    const summary = [
+      `Platform: ${report.mainProcess.platform}`,
+      `App Version: ${report.mainProcess.appVersion}`,
+      `Packaged: ${report.mainProcess.isPackaged}`,
+      `Permission Status: ${report.mainProcess.macOS?.screenRecordingStatus || 'N/A'}`,
+      `Cached Status: ${report.renderer.permissionManager.sessionFlags.lastKnownStatus}`,
+      `Monitoring: ${report.renderer.permissionMonitor.isMonitoring ? 'Active' : 'Inactive'}`
+    ].join('\n');
+
+    updateStatus(`Permission Diagnostics:\n${summary}`);
+
+    return report;
+  } catch (e) {
+    permissionLogger.log('error', 'Failed to generate diagnostic report', { error: e.message });
+    console.error('Failed to generate permission diagnostic report:', e);
+    return null;
+  }
+}
+
+// Make diagnostic function available globally for debugging
+window.diagnosePermissions = diagnosePermissionIssues;
+
+// Cleanup function for app shutdown
+function cleanupPermissionSystem() {
+  permissionLogger.log('info', 'Cleaning up permission system');
+
+  try {
+    // Stop permission monitoring
+    permissionMonitor.stopMonitoring();
+
+    // Clear any pending timeouts or intervals
+    // (The PermissionMonitor class handles its own cleanup)
+
+    console.log('[Permission] Permission system cleanup completed');
+  } catch (e) {
+    console.error('[Permission] Error during cleanup:', e);
+  }
+}
+
+// Register cleanup on window unload
+window.addEventListener('beforeunload', cleanupPermissionSystem);
+
+// Test function for permission system (development/debugging)
+async function testPermissionSystem() {
+  console.group('🧪 Permission System Test');
+
+  try {
+    console.log('1. Testing permission status check...');
+    const status = await getScreenPermissionStatus(true);
+    console.log(`   Status: ${status}`);
+
+    console.log('2. Testing permission validation...');
+    const validation = await validateScreenPermission();
+    console.log('   Validation result:', validation);
+
+    console.log('3. Testing smart permission check...');
+    const smartCheck = await ensureScreenPermission();
+    console.log('   Smart check result:', smartCheck);
+
+    console.log('4. Getting diagnostic report...');
+    const diagnostics = await diagnosePermissionIssues();
+    console.log('   Diagnostics available:', !!diagnostics);
+
+    console.log('✅ Permission system test completed');
+    return { success: true, status, validation, smartCheck, diagnostics };
+
+  } catch (e) {
+    console.error('❌ Permission system test failed:', e);
+    return { success: false, error: e.message };
+  } finally {
+    console.groupEnd();
+  }
+}
+
+// Make test function available globally for debugging
+window.testPermissionSystem = testPermissionSystem;
+
+// Trigger screenshot capture with improved permission handling
 async function triggerCapture() {
-  updateStatus('Waiting for screenshot...');
+  updateStatus('Preparing screenshot capture...');
 
-  // On macOS, first ensure the app is registered in Screen Recording permissions
+  // On macOS, use the new smart permission system
   if (process.platform === 'darwin') {
-    // Verify permission and guide user if necessary
-    const ok = await ensurePermissionOrGuide();
-    if (!ok) return;
+    console.log('[Capture] Checking screen recording permission');
 
-    // Also ensure TCC registration in case status just flipped
-    await ensureScreenRecordingPermission();
+    const permissionResult = await ensureScreenPermission();
+    console.log('[Capture] Permission check result:', permissionResult);
+
+    if (!permissionResult.success) {
+      if (permissionResult.needsRestart) {
+        // Permission is granted but needs restart
+        const restart = window.confirm(`${permissionResult.message}\n\nWould you like to restart Hintify now?`);
+        if (restart) {
+          try {
+            await ipcRenderer.invoke('relaunch-app');
+            return;
+          } catch (e) {
+            console.error('[Capture] Failed to restart app:', e);
+          }
+        } else {
+          updateStatus('Please restart Hintify to use screenshot capture.');
+          return;
+        }
+      } else if (permissionResult.status === 'denied' || permissionResult.status === 'not-determined') {
+        // Permission is denied - guide user
+        updateStatus('Screen Recording permission required');
+        const guided = await guideUserToGrantPermission();
+        if (!guided) {
+          updateStatus('Please grant Screen Recording permission in System Settings');
+        }
+        return;
+      } else {
+        // Other permission issues
+        updateStatus(permissionResult.message || 'Permission check failed');
+        return;
+      }
+    }
+
+    // Permission is confirmed - proceed with capture
+    console.log('[Capture] Permission confirmed, starting screencapture');
+    updateStatus('Click and drag to select area to capture...');
 
     const { spawn } = require('child_process');
-    const capture = spawn('screencapture', ['-i', '-c']);
+    const capture = spawn('screencapture', ['-i', '-c', '-x']);
 
-  capture.on('close', async (code) => {
+    capture.on('close', async (code) => {
       if (code === 0) {
+        console.log('[Capture] Screenshot captured successfully');
+        // Mark permission as working
+        permissionManager.updatePermissionStatus('granted', true);
+
         // Wait a moment then process clipboard
         setTimeout(() => {
-          try { if (process.platform === 'darwin') store.set('screen_permission_granted', true); } catch {}
           processClipboardImage();
         }, 1000);
       } else {
-        // If user cancelled selection, code is non-zero. If it's due to permission,
-        // guide them only when permission is explicitly denied.
-        // Re-check via main to avoid stale cache
-  const status = await getScreenPermissionStatus();
-        if (status === 'denied') {
-          updateStatus('Screen Recording permission required');
-          if (!screenPrefsPrompted) {
-            await openScreenRecordingPreferences();
-            screenPrefsPrompted = true;
-          }
+        console.log(`[Capture] Screenshot capture failed with code: ${code}`);
+
+        // Re-validate permission to see what happened
+        const validation = await validateScreenPermission();
+        console.log('[Capture] Post-failure validation:', validation);
+
+        if (validation.status === 'denied') {
+          updateStatus('Screen Recording permission was denied');
+          await guideUserToGrantPermission();
         } else {
-          // Treat unknown/not-determined as a cancel or transient issue to avoid false prompts
+          // Likely user cancelled or other non-permission issue
           updateStatus('Screenshot cancelled');
         }
       }
     });
+
+    capture.on('error', (error) => {
+      console.error('[Capture] Screenshot capture error:', error);
+      updateStatus('Screenshot capture failed');
+    });
+
     return;
   }
 
@@ -1980,8 +2618,13 @@ async function initializeApp() {
   // Load configuration
   const config = loadConfig();
 
-  // Apply theme
-  applyTheme(config.theme);
+  // Apply theme (check if glassy mode is enabled)
+  const glassyMode = store.get('glassy_mode', false);
+  if (glassyMode) {
+    applyTheme('glass');
+  } else {
+    applyTheme(config.theme);
+  }
 
   // Load images with proper paths
   loadAppImages();
@@ -1998,6 +2641,22 @@ async function initializeApp() {
   // Always check system readiness (works for both authenticated and guest users)
   checkSystemReadiness();
 
+  // Start permission monitoring on macOS
+  if (process.platform === 'darwin') {
+    // Set initial permission state and start monitoring
+    try {
+      const initialStatus = await getScreenPermissionStatus();
+      permissionMonitor.setInitialState(initialStatus);
+      permissionMonitor.startMonitoring();
+      console.log(`[Permission] Started monitoring with initial state: ${initialStatus}`);
+      
+      // Register app with macOS Screen Recording immediately on startup
+      await registerAppForScreenRecordingOnce();
+    } catch (e) {
+      console.error('[Permission] Failed to start permission monitoring:', e);
+    }
+  }
+
   // Determine what to show based on authentication state
   if (isAuthenticated) {
     // User is authenticated - show normal authenticated UI
@@ -2007,28 +2666,7 @@ async function initializeApp() {
     console.log('🚀 Restoring guest mode from previous session');
     window.isGuestMode = true;
     updateAuthUI(false, null, true);
-    const hintsDisplay = document.getElementById('hints-display');
-    if (hintsDisplay) {
-      const mod = getModKeyLabel();
-      hintsDisplay.innerHTML = `
-        <div class="hint-item guest-mode-compact">
-          <div class="hint-label">🚀 Welcome Back!</div>
-          <div class="hint-text">
-            You're continuing in guest mode. All core features are available:
-            <br><br>
-            • Capture screenshots with the 📸 button or <strong>${mod}+Shift+H</strong>
-            <br>
-            • Process clipboard <em>text or images</em> with <strong>${mod}+Shift+V</strong>
-            <br>
-            • Bring up the app quickly with the global hotkey <strong>${mod}+Shift+H</strong>
-            <br>
-            • Get AI-powered hints without spoiling answers
-            <br><br>
-            <em>Sign in anytime to unlock progress tracking and personalized features!</em>
-          </div>
-        </div>
-      `;
-    }
+    // Show default welcome message (same as in index.html)
     updateStatus('Ready - Guest Mode');
   } else if (!authChoiceMade) {
     // First time or user hasn't made a choice - show guest mode welcome message
@@ -2221,7 +2859,12 @@ function setupEventListeners() {
 
   ipcRenderer.on('config-updated', (event, newConfig) => {
     currentConfig = { ...currentConfig, ...newConfig };
-    applyTheme(newConfig.theme);
+    // Apply theme (check if glassy_mode is in newConfig)
+    if (newConfig.glassy_mode) {
+      applyTheme('glass');
+    } else {
+      applyTheme(newConfig.theme);
+    }
     updateProvider(newConfig.provider, newConfig.provider === 'ollama' ? newConfig.ollama_model : newConfig.gemini_model);
     syncModeToggleUI(currentConfig);
   });
@@ -2590,31 +3233,7 @@ function enableGuestMode() {
   // Update UI to reflect guest mode
   updateAuthUI(false, null, true); // Pass true for guest mode
 
-  // Show welcome message for guest mode (fix HTML rendering)
-  const hintsDisplay = document.getElementById('hints-display');
-  if (hintsDisplay) {
-    const mod = getModKeyLabel();
-    hintsDisplay.innerHTML = `
-      <div class="hint-item guest-mode-compact">
-        <div class="hint-label">🎯 Guest Mode Activated</div>
-        <div class="hint-text">
-          You're now using Hintify in guest mode! All core features are available:
-          <br><br>
-          • Capture screenshots with the 📸 button or <strong>${mod}+Shift+H</strong>
-          <br>
-          • Process clipboard <em>text or images</em> with <strong>${mod}+Shift+V</strong>
-          <br>
-          • Bring up the app quickly with the global hotkey <strong>${mod}+Shift+H</strong>
-          <br>
-          • Get AI-powered hints without spoiling answers
-          <br><br>
-          <em>Sign in anytime to unlock progress tracking and personalized features!</em>
-        </div>
-      </div>
-    `;
-    try { if (window.renderMathInElement) window.renderMathInElement(hintsDisplay, { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}] }); } catch {}
-  }
-
+  // Show default welcome message (same as in index.html)
   updateStatus('Ready - Guest Mode');
 }
 

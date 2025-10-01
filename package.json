@@ -1,6 +1,6 @@
 {
   "name": "hintify",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Hintify – Your intelligent study companion for instant homework hints and guidance",
   "main": "src/main.js",
   "author": {
@@ -49,6 +49,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.3",
     "@mui/material": "^7.3.2",
     "@neondatabase/serverless": "^1.0.1",
     "@supabase/supabase-js": "^2.57.4",
@@ -57,10 +58,15 @@
     "electron-log": "^5.4.3",
     "electron-store": "^8.1.0",
     "electron-updater": "^6.6.2",
+    "framer-motion": "^12.23.22",
     "jsonwebtoken": "^9.0.2",
+    "lottie-web": "^5.13.0",
+    "lucide-react": "^0.544.0",
     "ogl": "^1.0.11",
     "pg": "^8.16.3",
     "postprocessing": "^6.37.8",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "tesseract.js": "^5.0.6",
     "three": "^0.180.0"
   },

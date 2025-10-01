@@ -4,7 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hintify</title>
+    
+    <!-- Material-UI Fonts and Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="glassy-theme.css">
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- KaTeX for LaTeX math rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -13,7 +19,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 
 </head>
-<body class="theme-dark">
+<body class="theme-dark material-ui">
     <div class="main-container">
         <!-- Top bar with logo and controls -->
         <div class="topbar">
@@ -23,13 +29,13 @@
             </div>
 
             <div class="action-buttons">
-                <button id="capture-btn" class="btn btn-primary" title="Capture Screenshot" aria-label="Capture Screenshot">
-                    <img id="capture-icon" class="btn-icon" alt="Capture" src="" />
+                <button id="capture-btn" class="btn btn-primary material-btn" title="Capture Screenshot" aria-label="Capture Screenshot">
+                    <span class="material-icons">photo_camera</span>
+                    <span class="btn-text">Capture</span>
                 </button>
-                <button id="settings-btn" class="btn btn-secondary" title="Settings" aria-label="Settings">
-                    <img id="settings-icon" class="btn-icon" alt="Settings" src="" />
+                <button id="settings-btn" class="btn btn-secondary material-btn" title="Settings" aria-label="Settings">
+                    <span class="material-icons">settings</span>
                 </button>
-
             </div>
         </div>
 
@@ -54,19 +60,45 @@
         <div class="content-area">
             <div class="text-container">
                 <div id="hints-display" class="hints-display">
-                    <div class="welcome-message">
+                    <div class="welcome-message material-welcome">
+                        <div class="welcome-icon">
+                            <span class="material-icons" style="font-size: 64px; color: #667eea;">school</span>
+                        </div>
                         <h2>Welcome to Hintify</h2>
-                        <p>Your AI-powered study companion for instant hints and guidance.</p>
-                        <div class="instructions">
-                            <h3>Quick Start:</h3>
-                            <ul>
-                                <li>📸 Click <strong>Capture</strong> button to take a screenshot</li>
-                                <li>📋 Copy an image and press <strong>Cmd/Ctrl+Shift+V</strong></li>
-                                <li>⌨️ Use global hotkey <strong>Cmd+Shift+H</strong> (Mac) or <strong>Ctrl+Shift+H</strong> (Windows)</li>
-                                <li>🤖 AI analyzes your questions and provides helpful hints</li>
-                            </ul>
-                            <div class="setup-reminder">
-                                <p><strong>First time?</strong> Make sure you've completed the setup process. If you skipped it, go to the app menu and select <strong>"Run Setup Again"</strong>.</p>
+                        <p class="subtitle">Your AI-powered study companion for instant hints and guidance</p>
+                        <div class="instructions material-instructions">
+                            <h3>
+                                <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">rocket_launch</span>
+                                Quick Start
+                            </h3>
+                            <div class="instruction-grid">
+                                <div class="instruction-card">
+                                    <span class="material-icons">photo_camera</span>
+                                    <h4>Capture Screenshot</h4>
+                                    <p>Click the <strong>Capture</strong> button to take a screenshot</p>
+                                </div>
+                                <div class="instruction-card">
+                                    <span class="material-icons">content_paste</span>
+                                    <h4>From Clipboard</h4>
+                                    <p>Copy an image and press <strong>Cmd/Ctrl+Shift+V</strong></p>
+                                </div>
+                                <div class="instruction-card">
+                                    <span class="material-icons">keyboard</span>
+                                    <h4>Global Hotkey</h4>
+                                    <p><strong>Cmd+Shift+H</strong> (Mac) or <strong>Ctrl+Shift+H</strong> (Windows)</p>
+                                </div>
+                                <div class="instruction-card">
+                                    <span class="material-icons">psychology</span>
+                                    <h4>AI Analysis</h4>
+                                    <p>AI analyzes your questions and provides helpful hints</p>
+                                </div>
+                            </div>
+                            <div class="setup-reminder material-reminder">
+                                <span class="material-icons">info</span>
+                                <div>
+                                    <strong>First time?</strong>
+                                    <p>Make sure you've completed the setup process. If you skipped it, go to the app menu and select <strong>"Run Setup Again"</strong>.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -224,12 +256,12 @@
 
     <!-- App Settings Modal (embedded settings.html inside main window) -->
     <div id="app-settings-modal" class="modal hidden">
-        <div class="modal-content" style="width: 92vw; height: 85vh; max-width: 1100px;">
+        <div class="modal-content" style="width: 95vw; height: 92vh; max-width: 1400px;">
             <div class="modal-header">
                 <h3>Settings</h3>
                 <button id="close-app-settings-modal" class="modal-close">&times;</button>
             </div>
-            <div class="modal-body" style="padding: 0; height: calc(100% - 56px);">
+            <div class="modal-body" style="padding: 0; height: calc(100% - 56px); overflow: hidden;">
                 <iframe id="app-settings-iframe" src="about:blank" style="border:0; width:100%; height:100%;" title="App Settings"></iframe>
             </div>
         </div>

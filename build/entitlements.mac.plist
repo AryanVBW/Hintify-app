@@ -28,5 +28,7 @@
     <true/>
     <key>com.apple.security.personal-information.clipboard</key>
     <true/>
+    <key>com.apple.security.device.screen-recording</key>
+    <true/>
 </dict>
 </plist>

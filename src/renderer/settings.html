@@ -4,9 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Hintify</title>
+    <!-- Material-UI Fonts and Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
+    <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="settings.css">
+    <link rel="stylesheet" href="glassy-theme.css">
 </head>
-<body class="theme-dark">
+<body class="theme-dark" id="settings-body">
+<script>
+    // Load glassy mode preference
+    const Store = require('electron-store');
+    const store = new Store();
+    if (store.get('glassy_mode', false)) {
+        document.body.classList.add('glassy-mode');
+        document.documentElement.classList.add('theme-glassy');
+    }
+</script>
     <div class="settings-container">
         <div class="settings-header">
             <h1>Settings</h1>
@@ -63,8 +78,13 @@
 
                     <div class="setting-group">
                         <label for="ollama-model">Ollama Model</label>
-                        <input type="text" id="ollama-model" placeholder="granite3.2-vision:2b">
-                        <small>Model to use with Ollama (e.g., granite3.2-vision:2b, llama3.2:3b)</small>
+                        <div style="position: relative;">
+                            <select id="ollama-model" class="ollama-model-select">
+                                <option value="">Loading models...</option>
+                            </select>
+                            <button type="button" id="refresh-ollama-models" class="btn btn-secondary" style="position: absolute; right: 0; top: 0; padding: 8px 12px;" title="Refresh Ollama models">🔄</button>
+                        </div>
+                        <small id="ollama-status-text">Checking Ollama status...</small>
                     </div>
 
                     <div class="setting-group">
