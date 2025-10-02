@@ -53,18 +53,26 @@ function applyTheme(theme) {
   }
 }
 
-// Show status message
+// Show status message (now using toast notifications)
 function showStatus(message, type = 'info', duration = 3000) {
-  const statusEl = elements.statusMessage;
-  if (!statusEl) return;
+  console.log(`[Settings] 📢 Status: ${type} - ${message}`);
 
-  statusEl.textContent = message;
-  statusEl.className = `status-message ${type} fade-in`;
-  statusEl.classList.remove('hidden');
+  // Use toast notification system
+  if (typeof toast !== 'undefined') {
+    toast.show(message, type, duration);
+  } else {
+    // Fallback to old system if toast not loaded
+    const statusEl = elements.statusMessage;
+    if (!statusEl) return;
 
-  setTimeout(() => {
-    statusEl.classList.add('hidden');
-  }, duration);
+    statusEl.textContent = message;
+    statusEl.className = `status-message ${type} fade-in`;
+    statusEl.classList.remove('hidden');
+
+    setTimeout(() => {
+      statusEl.classList.add('hidden');
+    }, duration);
+  }
 }
 
 // User card helpers
@@ -75,15 +83,22 @@ async function refreshUserCard() {
     const isGuest = store.get('guest_mode_enabled', false);
     if (elements.userName) elements.userName.textContent = isAuthed ? (status.user.name || status.user.firstName || status.user.email || 'User') : 'Guest User';
     if (elements.userEmail) elements.userEmail.textContent = isAuthed ? (status.user.email || '') : (isGuest ? 'Guest Mode' : 'Using app without account');
-    if (elements.userAvatar) {
+
+    // Handle avatar - show image if available, otherwise show icon
+    if (elements.userAvatar && elements.userAvatarIcon) {
       const avatarUrl = status?.user?.avatar || status?.user?.imageUrl || status?.user?.image_url || '';
       if (isAuthed && avatarUrl) {
+        // Show user's profile picture
         elements.userAvatar.src = avatarUrl;
+        elements.userAvatar.classList.remove('hidden');
+        elements.userAvatarIcon.classList.add('hidden');
       } else {
-        // Show a pleasant default avatar for guest users
-        elements.userAvatar.src = '../assets/logo_m.png';
+        // Show default icon for guest users
+        elements.userAvatar.classList.add('hidden');
+        elements.userAvatarIcon.classList.remove('hidden');
       }
     }
+
     if (elements.signInBtn && elements.signOutBtn) {
       elements.signInBtn.classList.toggle('hidden', isAuthed);
       elements.signOutBtn.classList.toggle('hidden', !isAuthed);
@@ -165,6 +180,11 @@ async function updateOllamaModelList() {
     
     statusText.innerHTML = `✅ Ollama is running. Found ${result.models.length} model(s).`;
     statusText.style.color = 'var(--success, #4ade80)';
+
+    // Show success toast
+    if (typeof toast !== 'undefined') {
+      toast.modelsRefreshed(result.models.length);
+    }
   } else if (!result.running) {
     // Ollama not running
     modelSelect.innerHTML = '<option value="">Ollama not running</option>';
@@ -178,11 +198,21 @@ async function updateOllamaModelList() {
     }
     statusText.innerHTML = '⚠️ Ollama is not running. Please start Ollama with: <code>ollama serve</code>';
     statusText.style.color = 'var(--warning, #fb923c)';
+
+    // Show warning toast
+    if (typeof toast !== 'undefined') {
+      toast.warning('Ollama is not running. Please start Ollama first.', 4000);
+    }
   } else {
     // Other error
     modelSelect.innerHTML = '<option value="">Error loading models</option>';
     statusText.textContent = result.message || 'Failed to load Ollama models';
     statusText.style.color = 'var(--error, #ef4444)';
+
+    // Show error toast
+    if (typeof toast !== 'undefined') {
+      toast.modelsError(result.message || 'Unknown error');
+    }
   }
 
   if (refreshBtn) refreshBtn.disabled = false;
@@ -241,18 +271,26 @@ async function testGeminiConnection(model, apiKey) {
 
 // Test connection based on selected provider
 async function testConnection() {
+  console.log('[Settings] 🔌 testConnection() called');
   const testBtn = elements.testConnectionBtn;
-  if (!testBtn) return;
+  if (!testBtn) {
+    console.error('[Settings] ❌ Test Connection button element not found!');
+    return;
+  }
 
   const provider = elements.providerSelect.value;
   const ollamaModel = elements.ollamaModel?.value?.trim();
   const geminiModel = elements.geminiModel?.value;
   const geminiApiKey = elements.geminiApiKey?.value?.trim();
 
+  console.log('[Settings] 🔍 Testing connection for provider:', provider);
+
   // Set loading state
   testBtn.classList.add('loading');
   testBtn.disabled = true;
-  testBtn.textContent = 'Testing...';
+  const btnText = testBtn.querySelector('span:not(.material-icons)');
+  const originalText = btnText ? btnText.textContent : 'Test Connection';
+  if (btnText) btnText.textContent = 'Testing...';
 
   try {
     let result;
@@ -272,20 +310,42 @@ async function testConnection() {
       result = { success: false, message: 'Unknown provider' };
     }
 
-    showStatus(result.message, result.success ? 'success' : 'error');
+    // Show result with toast
+    if (result.success) {
+      if (typeof toast !== 'undefined') {
+        toast.connectionSuccess(provider === 'ollama' ? 'Ollama' : 'Gemini');
+      } else {
+        showStatus(result.message, 'success');
+      }
+    } else {
+      if (typeof toast !== 'undefined') {
+        toast.connectionFailed(provider === 'ollama' ? 'Ollama' : 'Gemini', result.message);
+      } else {
+        showStatus(result.message, 'error');
+      }
+    }
   } catch (error) {
-    showStatus(`Connection test failed: ${error.message}`, 'error');
+    console.error('[Settings] ❌ Connection test error:', error);
+    if (typeof toast !== 'undefined') {
+      toast.error(`Connection test failed: ${error.message}`);
+    } else {
+      showStatus(`Connection test failed: ${error.message}`, 'error');
+    }
   } finally {
     testBtn.classList.remove('loading');
     testBtn.disabled = false;
-    testBtn.textContent = 'Test Connection';
+    if (btnText) btnText.textContent = originalText;
   }
 }
 
 // Save settings
 async function saveSettings() {
+  console.log('[Settings] 💾 saveSettings() called');
   const saveBtn = elements.saveBtn;
-  if (!saveBtn) return;
+  if (!saveBtn) {
+    console.error('[Settings] ❌ Save button element not found!');
+    return;
+  }
 
   // Get form values
   const config = {
@@ -296,30 +356,17 @@ async function saveSettings() {
     advanced_mode: !!elements.advancedModeToggle?.checked
   };
 
+  console.log('[Settings] 📝 Configuration to save:', config);
+
   // Save Gemini API key separately if provided
   const geminiApiKey = elements.geminiApiKey.value.trim();
   if (geminiApiKey) {
     store.set('gemini_api_key', geminiApiKey);
   }
-  
-  // Save update token securely via IPC if provided
-  const updateToken = elements.updateToken?.value?.trim();
-  if (updateToken) {
-    try {
-      const result = await ipcRenderer.invoke('set-update-token', updateToken);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to save token');
-      }
-      elements.updateToken.value = ''; // Clear for security
-      elements.updateToken.placeholder = 'Token saved securely';
-    } catch (e) {
-      showStatus(`Failed to save update token: ${e.message}`, 'error');
-      return; // Don't close settings if token save failed
-    }
-  }
 
   // Save configuration
   saveConfig(config);
+  console.log('[Settings] ✅ Configuration saved to store');
 
   // Apply theme immediately
   applyTheme(config.theme);
@@ -331,17 +378,24 @@ async function saveSettings() {
   };
   ipcRenderer.send('config-updated', themeConfig);
 
-  showStatus('Settings saved successfully!', 'success');
+  // Show success toast
+  if (typeof toast !== 'undefined') {
+    toast.settingsSaved();
+  } else {
+    showStatus('Settings saved successfully!', 'success');
+  }
 
   // Close after a short delay
   setTimeout(() => {
+    console.log('[Settings] 🚪 Closing settings window after save');
     try {
       if (window !== window.top) {
         window.parent.postMessage({ type: 'close-embedded-settings' }, '*');
       } else {
         window.close();
       }
-    } catch {
+    } catch (error) {
+      console.error('[Settings] ❌ Error closing window:', error);
       window.close();
     }
   }, 1000);
@@ -349,30 +403,52 @@ async function saveSettings() {
 
 // Cancel and close
 function cancelSettings() {
+  console.log('[Settings] 🚪 cancelSettings() called - closing window...');
   try {
     if (window !== window.top) {
+      console.log('[Settings] 📤 Sending close message to parent window');
       window.parent.postMessage({ type: 'close-embedded-settings' }, '*');
     } else {
+      console.log('[Settings] 🔒 Closing standalone window');
       window.close();
     }
-  } catch {
+  } catch (error) {
+    console.error('[Settings] ❌ Error closing window:', error);
     window.close();
   }
 }
 
 // Get clipboard text safely via IPC and paste into API key field
 async function pasteFromClipboard() {
+  console.log('[Settings] 📋 pasteFromClipboard() called');
   try {
     const text = await ipcRenderer.invoke('get-clipboard-text');
     if (text && elements.geminiApiKey) {
       elements.geminiApiKey.value = String(text).trim();
       elements.geminiApiKey.focus();
-      showStatus('API key pasted from clipboard', 'success', 2000);
+
+      // Show success toast
+      if (typeof toast !== 'undefined') {
+        toast.apiKeyPasted();
+      } else {
+        showStatus('API key pasted from clipboard', 'success', 2000);
+      }
     } else {
-      showStatus('No text found in clipboard', 'error', 2000);
+      // Show warning toast
+      if (typeof toast !== 'undefined') {
+        toast.clipboardEmpty();
+      } else {
+        showStatus('No text found in clipboard', 'warning', 2000);
+      }
     }
   } catch (error) {
-    showStatus('Failed to paste from clipboard', 'error', 2000);
+    console.error('[Settings] ❌ Paste error:', error);
+    // Show error toast
+    if (typeof toast !== 'undefined') {
+      toast.clipboardError();
+    } else {
+      showStatus('Failed to paste from clipboard', 'error', 2000);
+    }
   }
 }
 
@@ -380,14 +456,15 @@ async function pasteFromClipboard() {
 function toggleApiKeyVisibility() {
   const keyInput = elements.geminiApiKey;
   const toggleBtn = elements.toggleKeyVisibility;
+  const icon = toggleBtn.querySelector('.material-icons');
 
   if (keyInput.type === 'password') {
     keyInput.type = 'text';
-    toggleBtn.textContent = '🙈';
+    if (icon) icon.textContent = 'visibility_off';
     toggleBtn.title = 'Hide API key';
   } else {
     keyInput.type = 'password';
-    toggleBtn.textContent = '👁';
+    if (icon) icon.textContent = 'visibility';
     toggleBtn.title = 'Show API key';
   }
 }
@@ -447,6 +524,8 @@ async function loadForm() {
 
 // Initialize settings window
 async function initializeSettings() {
+  console.log('[Settings] 🚀 Initializing settings window...');
+
   // Get DOM elements
   elements = {
     providerSelect: document.getElementById('provider-select'),
@@ -454,7 +533,7 @@ async function initializeSettings() {
     geminiModel: document.getElementById('gemini-model'),
     geminiApiKey: document.getElementById('gemini-api-key'),
     themeSelect: document.getElementById('theme-select'),
-  advancedModeToggle: document.getElementById('advanced-mode-toggle'),
+    advancedModeToggle: document.getElementById('advanced-mode-toggle'),
     cancelBtn: document.getElementById('cancel-btn'),
     testConnectionBtn: document.getElementById('test-connection-btn'),
     saveBtn: document.getElementById('save-btn'),
@@ -463,11 +542,23 @@ async function initializeSettings() {
     statusMessage: document.getElementById('status-message'),
     // User card elements
     userAvatar: document.getElementById('settings-user-avatar'),
+    userAvatarIcon: document.getElementById('settings-user-avatar-icon'),
     userName: document.getElementById('settings-user-name'),
     userEmail: document.getElementById('settings-user-email'),
     signInBtn: document.getElementById('settings-signin-btn'),
     signOutBtn: document.getElementById('settings-signout-btn')
   };
+
+  // Debug: Log which elements were found
+  console.log('[Settings] 📋 Button elements found:', {
+    cancelBtn: !!elements.cancelBtn,
+    testConnectionBtn: !!elements.testConnectionBtn,
+    saveBtn: !!elements.saveBtn,
+    toggleKeyVisibility: !!elements.toggleKeyVisibility,
+    pasteKeyBtn: !!elements.pasteKeyBtn,
+    signInBtn: !!elements.signInBtn,
+    signOutBtn: !!elements.signOutBtn
+  });
 
   // Updates card elements
   elements.currentVersion = document.getElementById('current-version');
@@ -520,25 +611,57 @@ async function initializeSettings() {
     });
   }
 
-  // Set up event listeners
+  // Set up event listeners with debug logging
+  console.log('[Settings] 🔗 Setting up event listeners...');
+
   if (elements.cancelBtn) {
-    elements.cancelBtn.addEventListener('click', cancelSettings);
+    console.log('[Settings] ✅ Attaching click handler to Cancel button');
+    elements.cancelBtn.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Cancel button clicked!');
+      cancelSettings();
+    });
+  } else {
+    console.error('[Settings] ❌ Cancel button not found!');
   }
 
   if (elements.testConnectionBtn) {
-    elements.testConnectionBtn.addEventListener('click', testConnection);
+    console.log('[Settings] ✅ Attaching click handler to Test Connection button');
+    elements.testConnectionBtn.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Test Connection button clicked!');
+      testConnection();
+    });
+  } else {
+    console.error('[Settings] ❌ Test Connection button not found!');
   }
 
   if (elements.saveBtn) {
-    elements.saveBtn.addEventListener('click', saveSettings);
+    console.log('[Settings] ✅ Attaching click handler to Save button');
+    elements.saveBtn.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Save button clicked!');
+      saveSettings();
+    });
+  } else {
+    console.error('[Settings] ❌ Save button not found!');
   }
 
   if (elements.toggleKeyVisibility) {
-    elements.toggleKeyVisibility.addEventListener('click', toggleApiKeyVisibility);
+    console.log('[Settings] ✅ Attaching click handler to Toggle Visibility button');
+    elements.toggleKeyVisibility.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Toggle Visibility button clicked!');
+      toggleApiKeyVisibility();
+    });
+  } else {
+    console.error('[Settings] ❌ Toggle Visibility button not found!');
   }
 
   if (elements.pasteKeyBtn) {
-    elements.pasteKeyBtn.addEventListener('click', pasteFromClipboard);
+    console.log('[Settings] ✅ Attaching click handler to Paste Key button');
+    elements.pasteKeyBtn.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Paste Key button clicked!');
+      pasteFromClipboard();
+    });
+  } else {
+    console.error('[Settings] ❌ Paste Key button not found!');
   }
 
   if (elements.providerSelect) {
@@ -548,10 +671,21 @@ async function initializeSettings() {
   // Refresh Ollama models button
   const refreshOllamaBtn = document.getElementById('refresh-ollama-models');
   if (refreshOllamaBtn) {
+    console.log('[Settings] ✅ Attaching click handler to Refresh Ollama Models button');
     refreshOllamaBtn.addEventListener('click', async () => {
-      showStatus('Refreshing Ollama models...', 'info', 1500);
+      console.log('[Settings] 🖱️ Refresh Ollama Models button clicked!');
+
+      // Show refreshing toast
+      if (typeof toast !== 'undefined') {
+        toast.refreshingModels();
+      } else {
+        showStatus('Refreshing Ollama models...', 'info', 1500);
+      }
+
       await updateOllamaModelList();
     });
+  } else {
+    console.error('[Settings] ❌ Refresh Ollama Models button not found!');
   }
 
   // Theme change preview
@@ -565,28 +699,78 @@ async function initializeSettings() {
   if (elements.advancedModeToggle) {
     elements.advancedModeToggle.addEventListener('change', (e) => {
       if (e.target.checked) {
-        showStatus('Advanced Hint Mode enabled: screenshots will be sent directly to the AI (vision).', 'success', 2500);
+        if (typeof toast !== 'undefined') {
+          toast.advancedModeEnabled();
+        } else {
+          showStatus('Advanced Hint Mode enabled: screenshots will be sent directly to the AI (vision).', 'success', 2500);
+        }
       } else {
-        showStatus('Advanced Hint Mode disabled: using OCR → text prompts.', 'info', 2000);
+        if (typeof toast !== 'undefined') {
+          toast.advancedModeDisabled();
+        } else {
+          showStatus('Advanced Hint Mode disabled: using OCR → text prompts.', 'info', 2000);
+        }
       }
     });
   }
 
   // Sign in/out
   if (elements.signInBtn) {
+    console.log('[Settings] ✅ Attaching click handler to Sign In button');
     elements.signInBtn.addEventListener('click', async () => {
+      console.log('[Settings] 🖱️ Sign In button clicked!');
       try {
         await ipcRenderer.invoke('open-browser-auth');
-        showStatus('Opening sign-in in browser...', 'info', 2000);
-      } catch {}
+
+        // Show toast
+        if (typeof toast !== 'undefined') {
+          toast.signingIn();
+        } else {
+          showStatus('Opening sign-in in browser...', 'info', 2000);
+        }
+      } catch (error) {
+        console.error('[Settings] ❌ Sign in error:', error);
+
+        // Show error toast
+        if (typeof toast !== 'undefined') {
+          toast.authError('Failed to open sign-in');
+        } else {
+          showStatus('Failed to open sign-in', 'error', 2000);
+        }
+      }
     });
+  } else {
+    console.error('[Settings] ❌ Sign In button not found!');
   }
+
   if (elements.signOutBtn) {
+    console.log('[Settings] ✅ Attaching click handler to Sign Out button');
     elements.signOutBtn.addEventListener('click', async () => {
-      ipcRenderer.send('user-logged-out');
-      showStatus('Signed out', 'success', 1500);
-      setTimeout(refreshUserCard, 800);
+      console.log('[Settings] 🖱️ Sign Out button clicked!');
+      try {
+        ipcRenderer.send('user-logged-out');
+
+        // Show toast
+        if (typeof toast !== 'undefined') {
+          toast.signedOut();
+        } else {
+          showStatus('Signed out', 'success', 1500);
+        }
+
+        setTimeout(refreshUserCard, 800);
+      } catch (error) {
+        console.error('[Settings] ❌ Sign out error:', error);
+
+        // Show error toast
+        if (typeof toast !== 'undefined') {
+          toast.authError('Failed to sign out');
+        } else {
+          showStatus('Failed to sign out', 'error', 2000);
+        }
+      }
     });
+  } else {
+    console.error('[Settings] ❌ Sign Out button not found!');
   }
 
   // Load user card
@@ -631,7 +815,16 @@ window.addEventListener('beforeunload', () => {
 // -----------------
 function setUpdateBtnState({ text, disabled = false, primary = false }) {
   if (!elements.checkUpdateBtn) return;
-  elements.checkUpdateBtn.textContent = text;
+
+  // Update only the text span, not the icon
+  const btnText = elements.checkUpdateBtn.querySelector('span:not(.material-icons)');
+  if (btnText) {
+    btnText.textContent = text;
+  } else {
+    // Fallback if no text span exists
+    elements.checkUpdateBtn.textContent = text;
+  }
+
   elements.checkUpdateBtn.disabled = disabled;
   elements.checkUpdateBtn.classList.toggle('btn-primary', primary);
   elements.checkUpdateBtn.classList.toggle('btn-secondary', !primary);

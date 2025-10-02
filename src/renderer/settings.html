@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="settings.css">
     <link rel="stylesheet" href="glassy-theme.css">
+    <link rel="stylesheet" href="toast.css">
 </head>
 <body class="theme-dark" id="settings-body">
 <script>
@@ -24,73 +25,125 @@
 </script>
     <div class="settings-container">
         <div class="settings-header">
-            <h1>Settings</h1>
-            <p>Configure Hintify to your preferences</p>
+            <span class="material-icons header-icon">tune</span>
+            <div class="header-content">
+                <h1>Settings</h1>
+                <p>Configure Hintify to your preferences</p>
+            </div>
         </div>
 
         <div class="settings-content">
             <!-- User section -->
             <div class="user-card">
                 <div class="user-left">
-                    <div class="avatar-wrap"><img id="settings-user-avatar" class="user-avatar" alt="User"></div>
+                    <div class="avatar-wrap">
+                        <img id="settings-user-avatar" class="user-avatar hidden" alt="User">
+                        <span id="settings-user-avatar-icon" class="material-icons user-avatar-icon">account_circle</span>
+                    </div>
                     <div class="user-meta">
                         <div id="settings-user-name" class="user-name">Guest User</div>
                         <div id="settings-user-email" class="user-email">Using app without account</div>
                     </div>
                 </div>
                 <div class="user-actions">
-                    <button id="settings-signin-btn" class="btn btn-primary">Sign In</button>
-                    <button id="settings-signout-btn" class="btn btn-secondary hidden">Sign Out</button>
+                    <button id="settings-signin-btn" class="btn btn-primary">
+                        <span class="material-icons">login</span>
+                        <span>Sign In</span>
+                    </button>
+                    <button id="settings-signout-btn" class="btn btn-secondary hidden">
+                        <span class="material-icons">logout</span>
+                        <span>Sign Out</span>
+                    </button>
                 </div>
             </div>
 
             <!-- Updates Card (moved just below user section) -->
             <div class="card updates-card">
-                <h3>Updates</h3>
+                <h3>
+                    <span class="material-icons card-icon">system_update</span>
+                    Updates
+                </h3>
                 <div class="setting-group">
-                    <label>App Version</label>
-                    <div id="current-version">—</div>
+                    <label>
+                        <span class="material-icons label-icon">info</span>
+                        App Version
+                    </label>
+                    <div id="current-version" class="version-display">—</div>
                     <small id="latest-version-text" class="hidden"></small>
                 </div>
+
                 <div class="setting-group">
-                    <label for="update-token">Update Token (Optional)</label>
-                    <input type="password" id="update-token" placeholder="GitHub token for private repository access">
-                    <small>Required only for private repository updates. Leave blank for public releases.</small>
-                </div>
-                <div class="setting-group">
-                    <button type="button" id="check-update-btn" class="btn btn-secondary">Check for Updates</button>
+                    <button type="button" id="check-update-btn" class="btn btn-secondary">
+                        <span class="material-icons">cloud_download</span>
+                        <span>Check for Updates</span>
+                    </button>
                     <div id="update-progress" class="hidden" style="margin-top:8px"><small>Preparing update…</small></div>
+                </div>
+
+                <!-- Update Notification Banner -->
+                <div id="update-notification" class="update-notification hidden">
+                    <div class="update-notification-content">
+                        <span class="material-icons update-icon">system_update</span>
+                        <div class="update-details">
+                            <div class="update-title">Update Available!</div>
+                            <div class="update-version">Version <span id="update-new-version">—</span> is available</div>
+                            <div class="update-notes" id="update-release-notes"></div>
+                        </div>
+                        <div class="update-actions">
+                            <button type="button" id="update-now-btn" class="btn btn-primary btn-sm">
+                                <span class="material-icons">download</span>
+                                <span>Update Now</span>
+                            </button>
+                            <button type="button" id="update-later-btn" class="btn btn-secondary btn-sm">
+                                <span>Later</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <!-- AI Settings Card -->
             <div class="card">
-                <h3>AI Settings</h3>
+                <h3>
+                    <span class="material-icons card-icon">psychology</span>
+                    AI Settings
+                </h3>
                 <div class="grid-2">
                     <div class="setting-group">
-                        <label for="provider-select">AI Provider</label>
+                        <label for="provider-select">
+                            <span class="material-icons label-icon">cloud</span>
+                            AI Provider
+                        </label>
                         <select id="provider-select">
+                            <option value="gemini">Gemini (Cloud) - Recommended</option>
                             <option value="ollama">Ollama (Local)</option>
-                            <option value="gemini">Gemini (Cloud)</option>
                         </select>
                         <small>Choose between local Ollama or cloud-based Gemini AI</small>
                     </div>
 
                     <div class="setting-group">
-                        <label for="ollama-model">Ollama Model</label>
+                        <label for="ollama-model">
+                            <span class="material-icons label-icon">memory</span>
+                            Ollama Model
+                        </label>
                         <div style="position: relative;">
                             <select id="ollama-model" class="ollama-model-select">
                                 <option value="">Loading models...</option>
                             </select>
-                            <button type="button" id="refresh-ollama-models" class="btn btn-secondary" style="position: absolute; right: 0; top: 0; padding: 8px 12px;" title="Refresh Ollama models">🔄</button>
+                            <button type="button" id="refresh-ollama-models" class="btn btn-icon-only" style="position: absolute; right: 0; top: 0; padding: 8px 12px;" title="Refresh Ollama models">
+                                <span class="material-icons">refresh</span>
+                            </button>
                         </div>
                         <small id="ollama-status-text">Checking Ollama status...</small>
                     </div>
 
                     <div class="setting-group">
-                        <label for="gemini-model">Gemini Model</label>
+                        <label for="gemini-model">
+                            <span class="material-icons label-icon">auto_awesome</span>
+                            Gemini Model
+                        </label>
                         <select id="gemini-model">
-                            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                            <option value="gemini-2.0-flash">gemini-2.0-flash (Recommended)</option>
                             <option value="gemini-1.5-flash">gemini-1.5-flash</option>
                             <option value="gemini-1.5-pro">gemini-1.5-pro</option>
                         </select>
@@ -98,17 +151,24 @@
                     </div>
 
                     <div class="setting-group span-2">
-                        <label for="gemini-api-key">Gemini API Key</label>
+                        <label for="gemini-api-key">
+                            <span class="material-icons label-icon">key</span>
+                            Gemini API Key
+                        </label>
                         <div class="api-key-group">
                             <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key" autocomplete="off" spellcheck="false">
-                            <button type="button" id="paste-key-btn" class="btn btn-secondary" title="Paste from clipboard">📋</button>
-                            <button type="button" id="toggle-key-visibility" class="btn btn-secondary" title="Toggle visibility">👁</button>
+                            <button type="button" id="paste-key-btn" class="btn btn-icon-only" title="Paste from clipboard">
+                                <span class="material-icons">content_paste</span>
+                            </button>
+                            <button type="button" id="toggle-key-visibility" class="btn btn-icon-only" title="Toggle visibility">
+                                <span class="material-icons">visibility</span>
+                            </button>
                         </div>
                         <small>
                             Get your API key from
                             <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
                             <br>
-                            <em>Tip: Copy your API key, then click the 📋 button to paste it</em>
+                            <em>Tip: Copy your API key, then click the paste button to insert it</em>
                         </small>
                     </div>
                 </div>
@@ -116,10 +176,16 @@
 
             <!-- Appearance & Shortcuts Card -->
             <div class="card">
-                <h3>Appearance & Shortcuts</h3>
+                <h3>
+                    <span class="material-icons card-icon">palette</span>
+                    Appearance & Shortcuts
+                </h3>
                 <div class="grid-2">
                     <div class="setting-group">
-                        <label for="theme-select">Theme</label>
+                        <label for="theme-select">
+                            <span class="material-icons label-icon">brightness_6</span>
+                            Theme
+                        </label>
                         <select id="theme-select">
                             <option value="dark">Dark</option>
                             <option value="light">Light</option>
@@ -129,8 +195,11 @@
                     </div>
 
                     <div class="setting-group">
-                        <label for="advanced-mode-toggle">Advanced Hint Mode</label>
-                        <div>
+                        <label for="advanced-mode-toggle">
+                            <span class="material-icons label-icon">auto_awesome</span>
+                            Advanced Hint Mode
+                        </label>
+                        <div class="checkbox-wrapper">
                             <input type="checkbox" id="advanced-mode-toggle">
                             <label for="advanced-mode-toggle">Send screenshots directly to the AI (skip OCR)</label>
                         </div>
@@ -141,23 +210,38 @@
                     </div>
 
                     <div class="setting-group span-2">
-                        <label>Shortcuts</label>
+                        <label>
+                            <span class="material-icons label-icon">keyboard</span>
+                            Shortcuts
+                        </label>
                         <div class="shortcuts-info">
                             <div class="shortcut-item">
-                                <span class="shortcut-key">Cmd+Shift+H</span>
-                                <span class="shortcut-desc">Global screenshot capture (macOS)</span>
+                                <span class="material-icons shortcut-icon">screenshot</span>
+                                <div class="shortcut-content">
+                                    <span class="shortcut-key">Cmd+Shift+H</span>
+                                    <span class="shortcut-desc">Global screenshot capture (macOS)</span>
+                                </div>
                             </div>
                             <div class="shortcut-item">
-                                <span class="shortcut-key">Ctrl+Shift+H</span>
-                                <span class="shortcut-desc">Global screenshot capture (Windows)</span>
+                                <span class="material-icons shortcut-icon">screenshot</span>
+                                <div class="shortcut-content">
+                                    <span class="shortcut-key">Ctrl+Shift+H</span>
+                                    <span class="shortcut-desc">Global screenshot capture (Windows)</span>
+                                </div>
                             </div>
                             <div class="shortcut-item">
-                                <span class="shortcut-key">Cmd/Ctrl+Shift+V</span>
-                                <span class="shortcut-desc">Process clipboard (Text or Image)</span>
+                                <span class="material-icons shortcut-icon">content_paste</span>
+                                <div class="shortcut-content">
+                                    <span class="shortcut-key">Cmd/Ctrl+Shift+V</span>
+                                    <span class="shortcut-desc">Process clipboard (Text or Image)</span>
+                                </div>
                             </div>
                             <div class="shortcut-item">
-                                <span class="shortcut-key">Cmd/Ctrl+Shift+S</span>
-                                <span class="shortcut-desc">Screenshot selection</span>
+                                <span class="material-icons shortcut-icon">crop_free</span>
+                                <div class="shortcut-content">
+                                    <span class="shortcut-key">Cmd/Ctrl+Shift+S</span>
+                                    <span class="shortcut-desc">Screenshot selection</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -168,9 +252,18 @@
 
         <div class="settings-footer">
             <div class="button-group">
-                <button type="button" id="cancel-btn" class="btn btn-secondary">Cancel</button>
-                <button type="button" id="test-connection-btn" class="btn btn-secondary">Test Connection</button>
-                <button type="button" id="save-btn" class="btn btn-primary">Save Settings</button>
+                <button type="button" id="cancel-btn" class="btn btn-secondary">
+                    <span class="material-icons">close</span>
+                    <span>Cancel</span>
+                </button>
+                <button type="button" id="test-connection-btn" class="btn btn-secondary">
+                    <span class="material-icons">wifi_tethering</span>
+                    <span>Test Connection</span>
+                </button>
+                <button type="button" id="save-btn" class="btn btn-primary">
+                    <span class="material-icons">save</span>
+                    <span>Save Settings</span>
+                </button>
             </div>
         </div>
 
@@ -178,6 +271,7 @@
         <div id="status-message" class="status-message hidden"></div>
     </div>
 
+    <script src="toast.js"></script>
     <script src="settings.js"></script>
 </body>
 </html>

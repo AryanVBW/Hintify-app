@@ -253,35 +253,7 @@ function registerIpcHandlers() {
   ipcMain.handle('get-app-name', () => {
     try { return app.getName(); } catch { return 'Hintify'; }
   });
-  // Securely store/update GitHub token for updates
-  ipcMain.handle('set-update-token', async (event, token) => {
-    try {
-      if (!token || typeof token !== 'string' || token.length < 10) {
-        return { success: false, error: 'Invalid token' };
-      }
-      const tokenFile = path.join(app.getPath('userData'), 'update-token.json');
-      const data = JSON.stringify({ token }, null, 2);
-      fs.writeFileSync(tokenFile, data, 'utf8');
-      return { success: true };
-    } catch (e) {
-      return { success: false, error: e?.message || String(e) };
-    }
-  });
 
-  // Check if update token exists
-  ipcMain.handle('has-update-token', async () => {
-    try {
-      const tokenFile = path.join(app.getPath('userData'), 'update-token.json');
-      if (fs.existsSync(tokenFile)) {
-        const raw = fs.readFileSync(tokenFile, 'utf8');
-        const parsed = JSON.parse(raw);
-        return !!(parsed && typeof parsed.token === 'string' && parsed.token.trim());
-      }
-      return !!(process.env.HINTIFY_UPDATE_TOKEN || process.env.GH_TOKEN);
-    } catch (e) {
-      return false;
-    }
-  });
   // Settings and configuration handlers
   ipcMain.on('open-settings', () => {
     createSettingsWindow();
@@ -1205,36 +1177,22 @@ async function processDeepLinkAuth(tokens) {
 }
 
 // Auto-update setup (uses electron-updater if available)
+// Configured for public GitHub repository - no authentication required
 function setupAutoUpdater() {
   if (!autoUpdater) {
+    console.log('AutoUpdater: Not available in this build');
     return;
   }
 
   try {
-    // Configure updater
+    console.log('🔄 Setting up auto-updater for public GitHub repository...');
+
+    // Configure updater for public repository
     autoUpdater.autoDownload = false; // we'll download when user clicks
     autoUpdater.allowDowngrade = false;
 
-    // Read token for private GitHub repo access
-    let updateToken = process.env.HINTIFY_UPDATE_TOKEN || process.env.GH_TOKEN || null;
-    if (!updateToken) {
-      try {
-        const tokenFile = path.join(app.getPath('userData'), 'update-token.json');
-        if (fs.existsSync(tokenFile)) {
-          const raw = fs.readFileSync(tokenFile, 'utf8');
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed.token === 'string' && parsed.token.trim()) {
-            updateToken = parsed.token.trim();
-          }
-        }
-      } catch (e) {
-        console.warn('AutoUpdater: failed reading token file:', e?.message || e);
-      }
-    }
-
-    if (updateToken) {
-      try { autoUpdater.requestHeaders = { Authorization: `token ${updateToken}` }; } catch {}
-    }
+    // No authentication needed for public repository
+    console.log('✅ Auto-updater configured for public repository: AryanVBW/Hintify-app');
 
     // Forward updater events to renderer
     autoUpdater.on('checking-for-update', () => {
@@ -1278,23 +1236,26 @@ function setupAutoUpdater() {
     });
 
     autoUpdater.on('update-downloaded', (info) => {
+      console.log('✅ Update downloaded:', info?.version);
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-downloaded', { version: info?.version });
       }
       // Small delay to allow UI to update, then install
       setTimeout(() => {
+        console.log('🔄 Installing update...');
         try { autoUpdater.quitAndInstall(false, true); } catch {}
       }, 1200);
     });
 
-    // Periodic checks (every 6 hours), only if token configured for private repo
-    if (updateToken) {
-      setInterval(() => {
-        try { autoUpdater.checkForUpdates(); } catch {}
-      }, 6 * 60 * 60 * 1000);
-    }
+    // Periodic checks (every 6 hours) for public repository
+    setInterval(() => {
+      console.log('🔄 Periodic update check...');
+      try { autoUpdater.checkForUpdates(); } catch {}
+    }, 6 * 60 * 60 * 1000);
+
+    console.log('✅ Auto-updater event listeners configured');
   } catch (e) {
-    console.warn('Failed to initialize auto-updater:', e?.message || e);
+    console.error('❌ Failed to initialize auto-updater:', e?.message || e);
   }
 }
 
@@ -1401,15 +1362,20 @@ app.whenReady().then(() => {
 
   setupApp();
 
-  // Initial update check (only if token configured)
+  // Initial update check for public repository (no token needed)
   try {
-    const hasToken = !!(process.env.HINTIFY_UPDATE_TOKEN || process.env.GH_TOKEN);
-    if (autoUpdater && hasToken) {
+    if (autoUpdater) {
+      console.log('🔄 Scheduling initial update check in 3 seconds...');
       setTimeout(() => {
-        try { autoUpdater.checkForUpdates(); } catch {}
+        console.log('🔍 Performing initial update check...');
+        try { autoUpdater.checkForUpdates(); } catch (e) {
+          console.error('❌ Initial update check failed:', e);
+        }
       }, 3000);
     }
-  } catch {}
+  } catch (e) {
+    console.error('❌ Failed to schedule initial update check:', e);
+  }
 
   // Run migrations on version change
   try {

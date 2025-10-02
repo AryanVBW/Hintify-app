@@ -90,7 +90,7 @@
         "provider": "github",
         "owner": "AryanVBW",
         "repo": "Hintify-app",
-        "private": true
+        "private": false
       }
     ],
     "files": [

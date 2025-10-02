@@ -65,7 +65,15 @@ npm run build-linux
 
 ### AI Provider Setup
 
-#### Ollama (Recommended - Local AI)
+#### Gemini (Recommended - Cloud AI)
+1. Get your free API key from [Google AI Studio](https://aistudio.google.com/apikey)
+2. Open Hintify Settings
+3. Enter your API key in the Gemini API Key field
+4. Select your preferred model (gemini-2.0-flash recommended)
+5. Click "Test Connection" to verify
+6. Save settings
+
+#### Ollama (Alternative - Local AI)
 1. Install Ollama from [ollama.com](https://ollama.com/download)
 2. Start Ollama service
 3. Pull the required model:
@@ -74,10 +82,7 @@ npm run build-linux
    ```
 4. In app settings, select "Ollama" as provider
 
-#### Gemini (Cloud AI)
-1. Get API key from [Google AI Studio](https://aistudio.google.com/apikey)
-2. In app settings, select "Gemini" as provider
-3. Enter your API key in the settings
+
 
 ## Usage
 
