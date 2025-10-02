@@ -1,6 +1,38 @@
-# Hintify - Electron Version
+# Hintify - AI-Powered Study Assistant
+
+<div align="center">
+
+[![Website](https://img.shields.io/badge/Website-hintify.nexus--v.tech-blue?style=for-the-badge)](https://hintify.nexus-v.tech/)
+[![GitHub Release](https://img.shields.io/github/v/release/AryanVBW/Hintify-app?style=for-the-badge)](https://github.com/AryanVBW/Hintify-app/releases/latest)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=for-the-badge)](https://github.com/AryanVBW/Hintify-app)
+
+**🌐 Visit our website:** [hintify.nexus-v.tech](https://hintify.nexus-v.tech/)
+
+</div>
+
+---
 
 This is the Electron desktop application version of Hintify, a real-time clipboard-to-hints assistant that helps students with their studies by providing AI-generated hints for questions captured in screenshots.
+
+## 🚀 Quick Install (macOS)
+
+Install Hintify with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify/main/install.sh | bash
+```
+
+This script will:
+- ✅ Install Homebrew (if not already installed)
+- ✅ Download the latest version of Hintify
+- ✅ Install it to your Applications folder
+- ✅ Code sign the application
+- ✅ Launch Hintify automatically
+
+**Manual Installation:** Download the latest `.dmg` file from [Releases](https://github.com/AryanVBW/Hintify-app/releases/latest)
+
+---
 
 ## Features
 

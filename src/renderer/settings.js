@@ -831,6 +831,8 @@ function setUpdateBtnState({ text, disabled = false, primary = false }) {
 }
 
 function initializeUpdatesSection() {
+  console.log('[Settings] 🔄 Initializing updates section...');
+
   let version = '';
   try {
     const pkg = require('../../package.json');
@@ -840,132 +842,297 @@ function initializeUpdatesSection() {
     elements.currentVersion.textContent = version || 'Unknown';
   }
 
-  // Event wiring
+  // Get update notification elements
+  const updateNotification = document.getElementById('update-notification');
+  const updateNewVersion = document.getElementById('update-new-version');
+  const updateReleaseNotes = document.getElementById('update-release-notes');
+  const updateNowBtn = document.getElementById('update-now-btn');
+  const updateLaterBtn = document.getElementById('update-later-btn');
+
+  // Event wiring for Check for Updates button
   if (elements.checkUpdateBtn) {
-    elements.checkUpdateBtn.addEventListener('click', onCheckOrUpdateClick);
+    console.log('[Settings] ✅ Attaching click handler to Check for Updates button');
+    elements.checkUpdateBtn.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Check for Updates button clicked!');
+      onCheckOrUpdateClick();
+    });
+  } else {
+    console.error('[Settings] ❌ Check for Updates button not found!');
+  }
+
+  // Wire up update notification banner buttons
+  if (updateNowBtn) {
+    updateNowBtn.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Update Now button clicked!');
+      // Hide notification
+      if (updateNotification) updateNotification.classList.add('hidden');
+      // Trigger download
+      onCheckOrUpdateClick();
+    });
+  }
+
+  if (updateLaterBtn) {
+    updateLaterBtn.addEventListener('click', () => {
+      console.log('[Settings] 🖱️ Update Later button clicked!');
+      // Hide notification
+      if (updateNotification) updateNotification.classList.add('hidden');
+      // Dismiss for 24 hours
+      ipcRenderer.send('dismiss-update', 24 * 60 * 60 * 1000);
+
+      // Show toast
+      if (typeof toast !== 'undefined') {
+        toast.info('Update reminder dismissed for 24 hours', 3000);
+      }
+    });
   }
 
   // Listen for updater events to reflect progress
   ipcRenderer.on('update-status', (_e, payload) => {
+    console.log('[Settings] 📡 Update status:', payload);
     if (payload?.status === 'checking') {
       setUpdateBtnState({ text: 'Checking…', disabled: true });
+
+      // Show toast
+      if (typeof toast !== 'undefined') {
+        toast.checkingUpdates();
+      }
     }
   });
 
   ipcRenderer.on('update-available', (_e, info) => {
+    console.log('[Settings] 📡 Update available:', info);
+
     if (elements.latestVersionText) {
       elements.latestVersionText.textContent = `Update available: v${info?.version}`;
       elements.latestVersionText.classList.remove('hidden');
     }
+
     setUpdateBtnState({ text: `Update Now`, disabled: false, primary: true });
     elements.checkUpdateBtn.dataset.state = 'ready-to-download';
+
+    // Show update notification banner
+    if (updateNotification && updateNewVersion) {
+      updateNewVersion.textContent = info?.version || 'Unknown';
+
+      // Show release notes if available
+      if (updateReleaseNotes && info?.releaseNotes) {
+        const notes = typeof info.releaseNotes === 'string'
+          ? info.releaseNotes
+          : info.releaseNotes[0]?.note || '';
+        updateReleaseNotes.textContent = notes.substring(0, 200) + (notes.length > 200 ? '...' : '');
+      }
+
+      updateNotification.classList.remove('hidden');
+    }
+
+    // Show toast
+    if (typeof toast !== 'undefined') {
+      toast.updateAvailable(info?.version || 'Unknown');
+    }
   });
 
   ipcRenderer.on('update-not-available', (_e, info) => {
+    console.log('[Settings] 📡 Update not available:', info);
+
     if (elements.latestVersionText) {
       elements.latestVersionText.textContent = `You are on the latest version${info?.currentVersion ? ` (v${info.currentVersion})` : ''}`;
       elements.latestVersionText.classList.remove('hidden');
     }
+
     setUpdateBtnState({ text: 'Check for Updates', disabled: false, primary: false });
     elements.checkUpdateBtn.dataset.state = 'check';
+
+    // Hide update notification banner
+    if (updateNotification) {
+      updateNotification.classList.add('hidden');
+    }
+
+    // Show toast
+    if (typeof toast !== 'undefined') {
+      toast.updateNotAvailable();
+    }
   });
 
   ipcRenderer.on('update-download-progress', (_e, progress) => {
+    console.log('[Settings] 📡 Download progress:', progress);
+
     if (elements.updateProgress) {
       elements.updateProgress.classList.remove('hidden');
       const pct = Math.max(0, Math.min(100, Math.round(progress?.percent || 0)));
       elements.updateProgress.innerHTML = `<small>Downloading… ${pct}%</small>`;
     }
+
     setUpdateBtnState({ text: 'Downloading…', disabled: true, primary: true });
+
+    // Update toast with progress (remove old toast and show new one)
+    if (typeof toast !== 'undefined' && progress?.percent) {
+      toast.updateDownloading(Math.round(progress.percent));
+    }
   });
 
   ipcRenderer.on('update-downloaded', (_e, info) => {
+    console.log('[Settings] 📡 Update downloaded:', info);
+
     if (elements.updateProgress) {
       elements.updateProgress.innerHTML = `<small>Update downloaded (v${info?.version}). Installing…</small>`;
     }
+
     setUpdateBtnState({ text: 'Installing…', disabled: true, primary: true });
+
+    // Show toast
+    if (typeof toast !== 'undefined') {
+      toast.updateDownloaded();
+    }
   });
 
   ipcRenderer.on('update-error', (_e, err) => {
+    console.error('[Settings] 📡 Update error:', err);
+
     const errorMsg = err?.message || String(err);
-    let displayMsg = `Update error: ${errorMsg}`;
-    
+    let displayMsg = errorMsg;
+
     // Provide helpful context for common errors
     if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
-      displayMsg += '. This may be a private repository requiring an update token.';
+      displayMsg = 'Update not found. Please check the repository releases.';
     } else if (errorMsg.includes('network') || errorMsg.includes('ENOTFOUND')) {
-      displayMsg += '. Please check your internet connection.';
+      displayMsg = 'Network error. Please check your internet connection.';
+    } else if (errorMsg.includes('ECONNREFUSED')) {
+      displayMsg = 'Connection refused. Please try again later.';
     }
-    
-    showStatus(displayMsg, 'error', 6000);
+
+    // Show toast
+    if (typeof toast !== 'undefined') {
+      toast.updateError(displayMsg);
+    } else {
+      showStatus(`Update error: ${displayMsg}`, 'error', 6000);
+    }
+
     setUpdateBtnState({ text: 'Check for Updates', disabled: false, primary: false });
     if (elements.updateProgress) elements.updateProgress.classList.add('hidden');
     elements.checkUpdateBtn.dataset.state = 'check';
-    
-    console.error('Update error details:', err);
+
+    // Hide update notification banner
+    if (updateNotification) {
+      updateNotification.classList.add('hidden');
+    }
   });
 }
 
 async function onCheckOrUpdateClick() {
+  console.log('[Settings] 🔄 onCheckOrUpdateClick() called');
+
   const state = elements.checkUpdateBtn.dataset.state || 'check';
+
   if (state === 'ready-to-download') {
+    console.log('[Settings] 📥 Starting update download...');
+
     // Start download
     setUpdateBtnState({ text: 'Preparing…', disabled: true, primary: true });
     if (elements.updateProgress) {
       elements.updateProgress.classList.remove('hidden');
       elements.updateProgress.innerHTML = `<small>Preparing update…</small>`;
     }
+
+    // Show toast
+    if (typeof toast !== 'undefined') {
+      toast.info('Preparing to download update...', 2000, 'cloud_download');
+    }
+
     ipcRenderer.send('download-update');
     return;
   }
 
   // Otherwise, perform a check
+  console.log('[Settings] 🔍 Checking for updates...');
+
   setUpdateBtnState({ text: 'Checking…', disabled: true });
   if (elements.latestVersionText) {
     elements.latestVersionText.classList.add('hidden');
   }
+
+  // Show toast
+  if (typeof toast !== 'undefined') {
+    toast.checkingUpdates();
+  }
+
   try {
     const res = await ipcRenderer.invoke('check-for-updates');
+    console.log('[Settings] 📡 Update check result:', res);
+
     if (res?.unsupported) {
-      showStatus('Auto-update is not supported in this build.', 'info', 3500);
+      if (typeof toast !== 'undefined') {
+        toast.warning('Auto-update is not supported in this build', 3500);
+      } else {
+        showStatus('Auto-update is not supported in this build.', 'info', 3500);
+      }
       setUpdateBtnState({ text: 'Check for Updates', disabled: false });
       return;
     }
+
     if (res?.success && res.available) {
+      console.log('[Settings] ✅ Update available:', res.latestVersion);
+
       if (elements.latestVersionText) {
         elements.latestVersionText.textContent = `Update available: v${res.latestVersion} (current v${res.currentVersion})`;
         elements.latestVersionText.classList.remove('hidden');
       }
+
       setUpdateBtnState({ text: 'Update Now', disabled: false, primary: true });
       elements.checkUpdateBtn.dataset.state = 'ready-to-download';
+
+      // Show toast
+      if (typeof toast !== 'undefined') {
+        toast.updateAvailable(res.latestVersion);
+      }
     } else if (res?.success) {
+      console.log('[Settings] ✅ Already on latest version:', res.currentVersion);
+
       if (elements.latestVersionText) {
         elements.latestVersionText.textContent = `You are on the latest version (v${res.currentVersion})`;
         elements.latestVersionText.classList.remove('hidden');
       }
+
       setUpdateBtnState({ text: 'Check for Updates', disabled: false });
       elements.checkUpdateBtn.dataset.state = 'check';
+
+      // Show toast
+      if (typeof toast !== 'undefined') {
+        toast.updateNotAvailable();
+      }
     } else {
+      console.error('[Settings] ❌ Update check failed:', res);
+
       // Show detailed error message
       const errorMsg = res?.error || 'Unknown error';
-      const fullMsg = res?.needsToken ? 
-        `${errorMsg} You may need to set an update token for private repository access.` : 
-        errorMsg;
-      
-      showStatus(`Update check failed: ${fullMsg}`, 'error', 6000);
+
+      // Show toast
+      if (typeof toast !== 'undefined') {
+        toast.updateError(errorMsg);
+      } else {
+        showStatus(`Update check failed: ${errorMsg}`, 'error', 6000);
+      }
+
       setUpdateBtnState({ text: 'Check for Updates', disabled: false });
       elements.checkUpdateBtn.dataset.state = 'check';
-      
+
       // Show raw error in console for debugging
       if (res?.rawError) {
         console.error('Raw update error:', res.rawError);
       }
     }
   } catch (e) {
+    console.error('[Settings] ❌ Update check exception:', e);
+
     const errorMsg = e?.message || String(e);
-    showStatus(`Update check failed: ${errorMsg}`, 'error', 6000);
+
+    // Show toast
+    if (typeof toast !== 'undefined') {
+      toast.updateError(errorMsg);
+    } else {
+      showStatus(`Update check failed: ${errorMsg}`, 'error', 6000);
+    }
+
     setUpdateBtnState({ text: 'Check for Updates', disabled: false });
     elements.checkUpdateBtn.dataset.state = 'check';
-    console.error('Update check exception:', e);
   }
 }

@@ -4,17 +4,20 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*.*.*'  # Trigger on version tags
   workflow_dispatch:  # Allows manual trigger from GitHub Actions tab
 
 jobs:
   build-and-release:
     runs-on: macos-14  # macOS with ARM64 (Apple Silicon) support
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history for versioning
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -22,16 +25,57 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Get version from package.json
-        id: package-version
+      - name: Auto-increment version
+        id: version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+
+          # Check if this is a tag push
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Use the tag version
+            TAG_VERSION="${{ github.ref_name }}"
+            VERSION="${TAG_VERSION#v}"  # Remove 'v' prefix
+            echo "Using tag version: $VERSION"
+          else
+            # Auto-increment patch version
+            IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
+            MAJOR="${VERSION_PARTS[0]}"
+            MINOR="${VERSION_PARTS[1]}"
+            PATCH="${VERSION_PARTS[2]}"
+
+            # Increment patch version
+            NEW_PATCH=$((PATCH + 1))
+            VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+            echo "Auto-incremented version: $CURRENT_VERSION -> $VERSION"
+
+            # Update package.json with new version
+            npm version $VERSION --no-git-tag-version
+
+            # Commit the version bump
+            git add package.json package-lock.json
+            git commit -m "chore: bump version to $VERSION [skip ci]" || echo "No changes to commit"
+
+            # Push the changes back to the repository
+            git push origin HEAD:main || echo "Failed to push version bump"
+          fi
+
+          # Set outputs
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          echo "✅ Version set to: $VERSION"
 
       - name: Build unsigned macOS ARM64 (DMG + ZIP)
         run: npm run build-mac-arm64-prod-unsigned
@@ -48,65 +92,90 @@ jobs:
       - name: Prepare release artifacts
         id: artifacts
         run: |
-          VERSION="${{ steps.package-version.outputs.version }}"
+          VERSION="${{ steps.version.outputs.version }}"
           cd dist
-          
+
           # Find all artifacts for this version
           ARTIFACTS=$(ls -1 *${VERSION}* 2>/dev/null || true)
-          
+
           if [ -z "$ARTIFACTS" ]; then
             echo "❌ No artifacts found for version $VERSION"
             exit 1
           fi
-          
+
           echo "📦 Release artifacts:"
           echo "$ARTIFACTS"
-          
+
           # Save artifact list for upload
           echo "$ARTIFACTS" > ../artifact-list.txt
           cd ..
 
+      - name: Generate Release Notes
+        id: release-notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          CURRENT_VERSION="${{ steps.version.outputs.current_version }}"
+
+          # Generate release notes from recent commits
+          if [ "$VERSION" != "$CURRENT_VERSION" ]; then
+            echo "## What's New in v$VERSION" > release-notes.md
+            echo "" >> release-notes.md
+            echo "### 🚀 Changes" >> release-notes.md
+            git log --pretty=format:"- %s" v$CURRENT_VERSION..HEAD >> release-notes.md 2>/dev/null || echo "- Version bump from $CURRENT_VERSION to $VERSION" >> release-notes.md
+          else
+            echo "## Hintify v$VERSION" > release-notes.md
+            echo "" >> release-notes.md
+            echo "### 📝 Release Notes" >> release-notes.md
+            echo "- Latest release build" >> release-notes.md
+          fi
+
+          echo "" >> release-notes.md
+          echo "### 📦 Installation" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "**Quick Install (macOS):**" >> release-notes.md
+          echo '```bash' >> release-notes.md
+          echo 'curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify/main/install.sh | bash' >> release-notes.md
+          echo '```' >> release-notes.md
+          echo "" >> release-notes.md
+          echo "**Manual Installation:**" >> release-notes.md
+          echo "1. Download the \`.dmg\` file below" >> release-notes.md
+          echo "2. Open the DMG and drag Hintify to Applications" >> release-notes.md
+          echo "3. Right-click the app and select \"Open\" (first time only)" >> release-notes.md
+          echo "4. Click \"Open\" in the security dialog" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### 📋 What's Included" >> release-notes.md
+          echo "- 📀 DMG installer for easy installation" >> release-notes.md
+          echo "- 📦 ZIP archive for portable use" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "---" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "**Platform:** macOS 11+ (Big Sur and later)" >> release-notes.md
+          echo "**Architecture:** ARM64 (Apple Silicon M1/M2/M3/M4)" >> release-notes.md
+          echo "**Version:** $VERSION" >> release-notes.md
+          echo "**Built:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release-notes.md
+          echo "**Commit:** ${{ github.sha }}" >> release-notes.md
+
+          cat release-notes.md
+
       - name: Create or Update Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.package-version.outputs.tag }}
-          name: Release ${{ steps.package-version.outputs.tag }}
-          body: |
-            ## Hintify ${{ steps.package-version.outputs.version }}
-            
-            ### 🍎 macOS ARM64 (Apple Silicon)
-            
-            **Unsigned Build** - This build is not signed or notarized.
-            
-            #### Installation:
-            1. Download the `.dmg` file
-            2. Open the DMG and drag Hintify to Applications
-            3. Right-click the app and select "Open" (first time only)
-            4. Click "Open" in the security dialog
-            
-            #### What's Included:
-            - 📀 DMG installer for easy installation
-            - 📦 ZIP archive for portable use
-            
-            ---
-            
-            **Platform:** macOS 11+ (Big Sur and later)  
-            **Architecture:** ARM64 (Apple Silicon M1/M2/M3)  
-            **Built:** ${{ github.event.head_commit.timestamp }}
-            **Commit:** ${{ github.sha }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Hintify ${{ steps.version.outputs.tag }}
+          body_path: release-notes.md
           draft: false
           prerelease: false
           files: |
-            dist/*${{ steps.package-version.outputs.version }}*.dmg
-            dist/*${{ steps.package-version.outputs.version }}*.zip
-            dist/*${{ steps.package-version.outputs.version }}*.blockmap
+            dist/*${{ steps.version.outputs.version }}*.dmg
+            dist/*${{ steps.version.outputs.version }}*.zip
+            dist/*${{ steps.version.outputs.version }}*.blockmap
             dist/latest-mac.yml
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts to workflow
         uses: actions/upload-artifact@v4
         with:
-          name: hintify-macos-arm64-${{ steps.package-version.outputs.version }}
+          name: hintify-macos-arm64-${{ steps.version.outputs.version }}
           path: |
             dist/*.dmg
             dist/*.zip
@@ -116,9 +185,23 @@ jobs:
 
       - name: Release Summary
         run: |
-          echo "✅ Release ${{ steps.package-version.outputs.tag }} published!"
-          echo "🔗 View release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.package-version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          echo "╔═══════════════════════════════════════════════════════════════╗"
+          echo "║                    🎉 RELEASE SUCCESSFUL! 🎉                  ║"
+          echo "╚═══════════════════════════════════════════════════════════════╝"
+          echo ""
+          echo "✅ Release $TAG published successfully!"
+          echo "� Version: $VERSION"
+          echo "�🔗 View release: https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          echo "🌐 Website: https://hintify.nexus-v.tech/"
+          echo ""
+          echo "📥 Quick Install Command:"
+          echo "   curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify/main/install.sh | bash"
           echo ""
           echo "📦 Artifacts uploaded:"
           cat artifact-list.txt
+          echo ""
+          echo "✨ Users can now download and install Hintify $VERSION!"
 
