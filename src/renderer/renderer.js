@@ -3264,10 +3264,102 @@ function startClipboardMonitor() {
   }, 2000); // Check every 2 seconds
 }
 
+// ============================================================================
+// SETTINGS MODAL HANDLERS
+// ============================================================================
+
+/**
+ * Open the app settings modal and load settings.html into iframe
+ */
+function openAppSettingsModal() {
+  console.log('[Settings] Opening app settings modal...');
+
+  const modal = document.getElementById('app-settings-modal');
+  const iframe = document.getElementById('app-settings-iframe');
+
+  if (!modal || !iframe) {
+    console.error('[Settings] Modal or iframe not found');
+    return;
+  }
+
+  // Show the modal
+  modal.classList.remove('hidden');
+
+  // Load settings.html into iframe if not already loaded
+  if (iframe.src === 'about:blank' || iframe.src === '') {
+    console.log('[Settings] Loading settings.html into iframe...');
+    iframe.src = 'settings.html';
+  } else {
+    console.log('[Settings] Settings already loaded, reloading...');
+    iframe.contentWindow.location.reload();
+  }
+}
+
+/**
+ * Close the app settings modal
+ */
+function closeAppSettingsModal() {
+  console.log('[Settings] Closing app settings modal...');
+
+  const modal = document.getElementById('app-settings-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+// Listen for messages from settings iframe
+window.addEventListener('message', (event) => {
+  // Security check - only accept messages from same origin
+  if (event.origin !== window.location.origin) {
+    return;
+  }
+
+  if (event.data && event.data.type === 'close-embedded-settings') {
+    console.log('[Settings] Received close message from settings iframe');
+    closeAppSettingsModal();
+  }
+});
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     await initializeApp();
+
+    // Set up settings button handler
+    const settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        console.log('[Settings] Settings button clicked');
+        openAppSettingsModal();
+      });
+      console.log('[Settings] Settings button handler attached');
+    } else {
+      console.warn('[Settings] Settings button not found');
+    }
+
+    // Set up close settings modal handler
+    const closeSettingsBtn = document.getElementById('close-app-settings-modal');
+    if (closeSettingsBtn) {
+      closeSettingsBtn.addEventListener('click', () => {
+        console.log('[Settings] Close button clicked');
+        closeAppSettingsModal();
+      });
+      console.log('[Settings] Close settings button handler attached');
+    } else {
+      console.warn('[Settings] Close settings button not found');
+    }
+
+    // Close modal when clicking outside
+    const settingsModal = document.getElementById('app-settings-modal');
+    if (settingsModal) {
+      settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) {
+          console.log('[Settings] Clicked outside modal, closing...');
+          closeAppSettingsModal();
+        }
+      });
+    }
+
     // Uncomment to enable auto clipboard monitoring
     // startClipboardMonitor();
   } catch (error) {
