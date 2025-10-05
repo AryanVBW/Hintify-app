@@ -1,6 +1,6 @@
 {
   "name": "hintify",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Hintify – Your intelligent study companion for instant homework hints and guidance",
   "main": "src/main.js",
   "author": {
