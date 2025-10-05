@@ -1,26 +1,30 @@
 /**
  * Hintify Settings Page - Production-Ready Implementation
- * 
+ *
  * This file handles all settings page functionality including:
  * - User authentication UI
  * - AI provider configuration
  * - Theme and appearance settings
  * - Update management
  * - Settings persistence
- * 
+ *
  * @version 2.0.0
  * @author Hintify Team
  */
 
 'use strict';
 
+console.log('🚀🚀🚀 [Settings] settings.js is loading! 🚀🚀🚀');
+
 // ============================================================================
 // MODULE IMPORTS
 // ============================================================================
 
+console.log('[Settings] Loading Electron modules...');
 const { ipcRenderer } = require('electron');
 const Store = require('electron-store');
 const axios = require('axios');
+console.log('[Settings] ✅ Electron modules loaded successfully');
 
 // ============================================================================
 // INITIALIZATION

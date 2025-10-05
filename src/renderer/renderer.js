@@ -3287,12 +3287,51 @@ function openAppSettingsModal() {
   console.log('[Settings Modal] Modal shown');
 
   // Load settings.html into iframe if not already loaded
-  if (iframe.src === 'about:blank' || iframe.src === '') {
+  const currentSrc = iframe.src || '';
+  console.log('[Settings Modal] Current iframe src:', currentSrc);
+
+  // Get the current page's base URL to construct the correct path
+  const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+  const settingsUrl = baseUrl + 'settings.html';
+  console.log('[Settings Modal] Base URL:', baseUrl);
+  console.log('[Settings Modal] Settings URL:', settingsUrl);
+
+  if (currentSrc === 'about:blank' || currentSrc === '' || currentSrc.endsWith('about:blank')) {
     console.log('[Settings Modal] Loading settings.html into iframe...');
-    iframe.src = 'settings.html';
+    iframe.src = settingsUrl;
+    console.log('[Settings Modal] Iframe src set to:', settingsUrl);
+
+    // Add load event listener to debug
+    iframe.onload = function() {
+      console.log('[Settings Modal] ✅ Iframe loaded successfully');
+      console.log('[Settings Modal] Final iframe src:', iframe.src);
+      console.log('[Settings Modal] Iframe contentWindow:', iframe.contentWindow ? 'Available' : 'Not available');
+
+      // Check if the iframe document is accessible
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        console.log('[Settings Modal] Iframe document:', iframeDoc ? 'Accessible' : 'Not accessible');
+        console.log('[Settings Modal] Iframe document body:', iframeDoc?.body ? 'Found' : 'Not found');
+        if (iframeDoc?.body) {
+          console.log('[Settings Modal] Iframe body innerHTML length:', iframeDoc.body.innerHTML.length);
+        }
+      } catch (error) {
+        console.error('[Settings Modal] Cannot access iframe document:', error);
+      }
+    };
+
+    iframe.onerror = function(error) {
+      console.error('[Settings Modal] ❌ Iframe failed to load:', error);
+    };
   } else {
     console.log('[Settings Modal] Settings already loaded, reloading...');
-    iframe.contentWindow.location.reload();
+    try {
+      iframe.contentWindow.location.reload();
+    } catch (error) {
+      console.error('[Settings Modal] Failed to reload iframe:', error);
+      // Fallback: reload by resetting src
+      iframe.src = settingsUrl;
+    }
   }
 }
 
