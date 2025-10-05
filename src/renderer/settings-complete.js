@@ -187,7 +187,7 @@ async function handleSaveButton() {
     // Save Gemini API key separately (encrypted storage)
     const geminiApiKey = elements.geminiApiKey?.value?.trim();
     if (geminiApiKey) {
-      console.log("Saving Gemini API key");
+      console.log("Saving API key");
       store.set("gemini_api_key", geminiApiKey);
     }
 

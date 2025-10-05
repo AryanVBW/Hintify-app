@@ -157,7 +157,7 @@ class SupabaseService {
   // Listen for auth state changes
   onAuthStateChange(callback) {
     return this.supabase.auth.onAuthStateChange((event, session) => {
-      console.log('🔄 Supabase auth state changed:', event, session?.user?.email);
+      console.log('🔄 Supabase auth state changed:', event);
       callback(event, session);
     });
   }

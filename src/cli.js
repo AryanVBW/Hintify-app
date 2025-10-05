@@ -85,7 +85,7 @@ program
       
       if (status.authenticated) {
         console.log('✅ Authenticated');
-        console.log(`📧 User: ${status.session?.user?.email || 'Unknown'}`);
+        console.log(`📧 User: ${status.session?.user?.email ? 'Authenticated' : 'Unknown'}`);
       } else {
         console.log('❌ Not authenticated');
         console.log('💡 Run "hintify login" to sign in');

@@ -113,7 +113,7 @@ class AuthService {
         identifier: email
       });
       
-      console.log('Password reset email sent to:', email);
+      console.log('Password reset email sent successfully');
       return { success: true, message: 'Password reset email sent. Please check your inbox.' };
     } catch (error) {
       console.error('Failed to request password reset:', error);
@@ -139,7 +139,7 @@ class AuthService {
       // If successful, sign in the user
       if (signIn.status === 'complete') {
         await this.clerk.setActive({ session: signIn.createdSessionId });
-        console.log('Password reset successful for:', email);
+        console.log('Password reset successful');
         return { success: true, message: 'Password reset successful. You are now signed in.' };
       } else {
         throw new Error('Password reset failed. Please try again.');
