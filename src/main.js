@@ -1078,11 +1078,7 @@ async function handleDeepLink(url) {
         if (userDataStr) {
           try {
             userData = JSON.parse(decodeURIComponent(userDataStr));
-            console.log('👤 User data parsed:', {
-              id: userData.id,
-              email: userData.email,
-              name: userData.name
-            });
+            console.log('👤 User data parsed successfully');
           } catch (error) {
             console.warn('⚠️ Failed to parse user data from deep link:', error);
           }
