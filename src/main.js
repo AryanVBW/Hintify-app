@@ -596,21 +596,27 @@ function registerIpcHandlers() {
 
   // Auto-update IPC handlers
   ipcMain.handle('check-for-updates', async () => {
+    // Disable in development mode
+    if (isDevelopment || !app.isPackaged) {
+      console.log('🚫 Update check: Disabled in development mode');
+      return { success: false, unsupported: true, error: 'Auto-updater disabled in development mode' };
+    }
+
     if (!autoUpdater) return { success: false, unsupported: true, error: 'Auto-updater not available in this build' };
-    
+
     try {
       console.log('🔄 Checking for updates...');
       const res = await autoUpdater.checkForUpdates();
       const currentVersion = app.getVersion();
       const latestVersion = res?.updateInfo?.version;
       const available = !!latestVersion && latestVersion !== currentVersion;
-      
+
       console.log('✅ Update check completed:', { currentVersion, latestVersion, available });
       return { success: true, available, currentVersion, latestVersion };
     } catch (e) {
       const errorMsg = e?.message || String(e);
       console.error('❌ Update check failed:', errorMsg, e);
-      
+
       // Provide specific error messages for common issues
       let userFriendlyError = errorMsg;
       if (errorMsg.includes('404') || errorMsg.includes('Not Found')) {
@@ -620,9 +626,9 @@ function registerIpcHandlers() {
       } else if (errorMsg.includes('token') || errorMsg.includes('authentication')) {
         userFriendlyError = 'Authentication failed. Please check your update token in Settings.';
       }
-      
-      return { 
-        success: false, 
+
+      return {
+        success: false,
         error: userFriendlyError,
         rawError: errorMsg,
         needsToken: errorMsg.includes('404') || errorMsg.includes('authentication')
@@ -631,6 +637,12 @@ function registerIpcHandlers() {
   });
 
   ipcMain.on('download-update', () => {
+    // Disable in development mode
+    if (isDevelopment || !app.isPackaged) {
+      console.log('🚫 Download update: Disabled in development mode');
+      return;
+    }
+
     if (!autoUpdater) return;
     try { autoUpdater.downloadUpdate(); } catch (e) {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -640,6 +652,12 @@ function registerIpcHandlers() {
   });
 
   ipcMain.on('install-update', () => {
+    // Disable in development mode
+    if (isDevelopment || !app.isPackaged) {
+      console.log('🚫 Install update: Disabled in development mode');
+      return;
+    }
+
     if (!autoUpdater) return;
     try { autoUpdater.quitAndInstall(false, true); } catch (e) {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -968,6 +986,15 @@ function createMenuTemplate() {
           label: 'Check for Updates…',
           click: () => {
             try {
+              // Disable in development mode
+              if (isDevelopment || !app.isPackaged) {
+                console.log('🚫 Check for updates (menu): Disabled in development mode');
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send('update-status', { status: 'unsupported' });
+                }
+                return;
+              }
+
               if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('update-status', { status: 'checking' });
               }
@@ -1179,6 +1206,12 @@ async function processDeepLinkAuth(tokens) {
 // Auto-update setup (uses electron-updater if available)
 // Configured for public GitHub repository - no authentication required
 function setupAutoUpdater() {
+  // Completely disable auto-updater in development mode
+  if (isDevelopment || !app.isPackaged) {
+    console.log('🚫 AutoUpdater: Disabled in development mode');
+    return;
+  }
+
   if (!autoUpdater) {
     console.log('AutoUpdater: Not available in this build');
     return;
@@ -1363,18 +1396,23 @@ app.whenReady().then(() => {
   setupApp();
 
   // Initial update check for public repository (no token needed)
-  try {
-    if (autoUpdater) {
-      console.log('🔄 Scheduling initial update check in 3 seconds...');
-      setTimeout(() => {
-        console.log('🔍 Performing initial update check...');
-        try { autoUpdater.checkForUpdates(); } catch (e) {
-          console.error('❌ Initial update check failed:', e);
-        }
-      }, 3000);
+  // Only run in production (packaged app)
+  if (!isDevelopment && app.isPackaged) {
+    try {
+      if (autoUpdater) {
+        console.log('🔄 Scheduling initial update check in 3 seconds...');
+        setTimeout(() => {
+          console.log('🔍 Performing initial update check...');
+          try { autoUpdater.checkForUpdates(); } catch (e) {
+            console.error('❌ Initial update check failed:', e);
+          }
+        }, 3000);
+      }
+    } catch (e) {
+      console.error('❌ Failed to schedule initial update check:', e);
     }
-  } catch (e) {
-    console.error('❌ Failed to schedule initial update check:', e);
+  } else {
+    console.log('🚫 Initial update check: Skipped (development mode)');
   }
 
   // Run migrations on version change
@@ -1388,15 +1426,18 @@ app.whenReady().then(() => {
   } catch {}
 
   // Initialize auto-updater and perform an initial check (if not dismissed recently)
+  // Only in production mode
   setupAutoUpdater();
-  try {
-    if (autoUpdater) {
-      const dismissedUntil = store.get('update_dismissed_until', 0);
-      if (!dismissedUntil || Date.now() > dismissedUntil) {
-        autoUpdater.checkForUpdates();
+  if (!isDevelopment && app.isPackaged) {
+    try {
+      if (autoUpdater) {
+        const dismissedUntil = store.get('update_dismissed_until', 0);
+        if (!dismissedUntil || Date.now() > dismissedUntil) {
+          autoUpdater.checkForUpdates();
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
 
   app.on('activate', () => {
