@@ -3272,25 +3272,26 @@ function startClipboardMonitor() {
  * Open the app settings modal and load settings.html into iframe
  */
 function openAppSettingsModal() {
-  console.log('[Settings] Opening app settings modal...');
+  console.log('[Settings Modal] Opening app settings modal...');
 
   const modal = document.getElementById('app-settings-modal');
   const iframe = document.getElementById('app-settings-iframe');
 
   if (!modal || !iframe) {
-    console.error('[Settings] Modal or iframe not found');
+    console.error('[Settings Modal] Modal or iframe not found');
     return;
   }
 
   // Show the modal
   modal.classList.remove('hidden');
+  console.log('[Settings Modal] Modal shown');
 
   // Load settings.html into iframe if not already loaded
   if (iframe.src === 'about:blank' || iframe.src === '') {
-    console.log('[Settings] Loading settings.html into iframe...');
+    console.log('[Settings Modal] Loading settings.html into iframe...');
     iframe.src = 'settings.html';
   } else {
-    console.log('[Settings] Settings already loaded, reloading...');
+    console.log('[Settings Modal] Settings already loaded, reloading...');
     iframe.contentWindow.location.reload();
   }
 }
@@ -3299,11 +3300,12 @@ function openAppSettingsModal() {
  * Close the app settings modal
  */
 function closeAppSettingsModal() {
-  console.log('[Settings] Closing app settings modal...');
+  console.log('[Settings Modal] Closing app settings modal...');
 
   const modal = document.getElementById('app-settings-modal');
   if (modal) {
     modal.classList.add('hidden');
+    console.log('[Settings Modal] Modal hidden');
   }
 }
 
@@ -3311,11 +3313,14 @@ function closeAppSettingsModal() {
 window.addEventListener('message', (event) => {
   // Security check - only accept messages from same origin
   if (event.origin !== window.location.origin) {
+    console.warn('[Settings Modal] Rejected message from different origin:', event.origin);
     return;
   }
 
+  console.log('[Settings Modal] Received message:', event.data);
+
   if (event.data && event.data.type === 'close-embedded-settings') {
-    console.log('[Settings] Received close message from settings iframe');
+    console.log('[Settings Modal] Received close message from settings iframe');
     closeAppSettingsModal();
   }
 });
@@ -3329,24 +3334,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
-        console.log('[Settings] Settings button clicked');
+        console.log('[Settings Modal] Settings button clicked');
         openAppSettingsModal();
       });
-      console.log('[Settings] Settings button handler attached');
+      console.log('[Settings Modal] ✅ Settings button handler attached');
     } else {
-      console.warn('[Settings] Settings button not found');
+      console.warn('[Settings Modal] ⚠️ Settings button not found');
     }
 
     // Set up close settings modal handler
     const closeSettingsBtn = document.getElementById('close-app-settings-modal');
     if (closeSettingsBtn) {
       closeSettingsBtn.addEventListener('click', () => {
-        console.log('[Settings] Close button clicked');
+        console.log('[Settings Modal] Close button clicked');
         closeAppSettingsModal();
       });
-      console.log('[Settings] Close settings button handler attached');
+      console.log('[Settings Modal] ✅ Close settings button handler attached');
     } else {
-      console.warn('[Settings] Close settings button not found');
+      console.warn('[Settings Modal] ⚠️ Close settings button not found');
     }
 
     // Close modal when clicking outside
@@ -3354,10 +3359,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (settingsModal) {
       settingsModal.addEventListener('click', (e) => {
         if (e.target === settingsModal) {
-          console.log('[Settings] Clicked outside modal, closing...');
+          console.log('[Settings Modal] Clicked outside modal, closing...');
           closeAppSettingsModal();
         }
       });
+      console.log('[Settings Modal] ✅ Click-outside-to-close handler attached');
     }
 
     // Uncomment to enable auto clipboard monitoring
