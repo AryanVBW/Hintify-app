@@ -171,12 +171,38 @@ body.material-ui .material-icons {
   gap: 6px;
   align-items: center;
 }
+
+/* General action button styling */
 .action-buttons .btn {
   padding: 6px;
-  width: 36px;
-  height: 32px;
-  min-width: 36px;
+  min-height: 32px;
   border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Settings button (icon only) */
+.action-buttons .btn:not(#capture-btn) {
+  width: 36px;
+  min-width: 36px;
+}
+
+/* Capture button (icon + text) - specific styling */
+#capture-btn {
+  padding: 6px 12px;
+  min-width: auto;
+  width: auto;
+  gap: 6px;
+}
+
+#capture-btn .material-icons {
+  font-size: 18px;
+}
+
+#capture-btn .btn-text {
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .btn {
@@ -193,6 +219,9 @@ body.material-ui .material-icons {
   transition: transform var(--transition-speed), box-shadow var(--transition-speed), background-color var(--transition-speed), filter var(--transition-speed);
   font-family: var(--font-family);
   font-size: 14px;
+  text-decoration: none;
+  border: none;
+  outline: none;
   /* Allow buttons to be clickable within draggable topbar */
   -webkit-app-region: no-drag;
   box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 4px 12px rgba(0,0,0,0.06);
@@ -204,10 +233,30 @@ body.material-ui .material-icons {
   font-weight: 500;
   gap: 6px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .material-btn .material-icons {
   font-size: 20px;
+  line-height: 1;
+}
+
+/* Specific styling for capture button */
+#capture-btn.material-btn {
+  padding: 8px 16px;
+  min-height: 36px;
+}
+
+#capture-btn.material-btn .material-icons {
+  font-size: 18px;
+}
+
+#capture-btn.material-btn .btn-text {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .material-btn.btn-primary {
@@ -1212,6 +1261,20 @@ body.material-ui .material-icons {
     font-size: 16px;
   }
 
+  /* Responsive capture button */
+  #capture-btn {
+    padding: 6px 10px;
+    min-width: auto;
+  }
+
+  #capture-btn .btn-text {
+    font-size: 12px;
+  }
+
+  #capture-btn .material-icons {
+    font-size: 16px;
+  }
+
   .welcome-message {
     padding-top: 20px;
   }
@@ -1222,6 +1285,23 @@ body.material-ui .material-icons {
 
   .instructions {
     padding: 16px;
+  }
+}
+
+/* Extra small screens - hide text on capture button if needed */
+@media (max-width: 400px) {
+  #capture-btn .btn-text {
+    display: none;
+  }
+  
+  #capture-btn {
+    padding: 6px 8px;
+    min-width: 36px;
+    width: 36px;
+  }
+  
+  #capture-btn .material-icons {
+    font-size: 18px;
   }
 }
 
