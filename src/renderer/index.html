@@ -254,18 +254,8 @@
         </div>
     </div>
 
-    <!-- App Settings Modal (embedded settings.html inside main window) -->
-    <div id="app-settings-modal" class="modal hidden">
-        <div class="modal-content" style="width: 95vw; height: 92vh; max-width: 1400px;">
-            <div class="modal-header">
-                <h3>Settings</h3>
-                <button id="close-app-settings-modal" class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body" style="padding: 0; height: calc(100% - 56px); overflow: hidden;">
-                <iframe id="app-settings-iframe" src="about:blank" style="border:0; width:100%; height:100%;" title="App Settings"></iframe>
-            </div>
-        </div>
-    </div>
+    <!-- Settings are now handled in a separate window -->
+    <!-- Embedded settings modal removed -->
 
     <script src="renderer.js"></script>
 </body>

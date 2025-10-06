@@ -15,18 +15,52 @@
 'use strict';
 
 // ============================================================================
-// MODULE IMPORTS
+// MODULE IMPORTS WITH ERROR HANDLING
 // ============================================================================
 
-const { ipcRenderer } = require('electron');
-const Store = require('electron-store');
-const axios = require('axios');
+let ipcRenderer, Store, axios;
+
+try {
+    ({ ipcRenderer } = require('electron'));
+    Store = require('electron-store');
+    axios = require('axios');
+    console.log('[Settings] All modules loaded successfully');
+} catch (error) {
+    console.error('[Settings] Failed to load modules:', error);
+    // Create fallback objects to prevent crashes
+    ipcRenderer = {
+        invoke: () => Promise.resolve({}),
+        send: () => {},
+        on: () => {}
+    };
+    Store = class FallbackStore {
+        get(key, defaultValue) { return defaultValue; }
+        set() {}
+    };
+    axios = {
+        get: () => Promise.reject(new Error('axios not available')),
+        post: () => Promise.reject(new Error('axios not available'))
+    };
+}
 
 // ============================================================================
-// INITIALIZATION
+// INITIALIZATION WITH ERROR HANDLING
 // ============================================================================
 
-const store = new Store();
+let store;
+try {
+    store = new Store();
+    console.log('[Settings] Store initialized successfully');
+} catch (error) {
+    console.error('[Settings] Failed to initialize store:', error);
+    // Create fallback store
+    store = {
+        get: (key, defaultValue) => defaultValue,
+        set: () => {},
+        delete: () => {}
+    };
+}
+
 let isInitialized = false;
 let elements = {};
 
@@ -413,7 +447,7 @@ async function handleSaveSettings() {
 
     // Close settings window after short delay
     setTimeout(() => {
-      window.parent.postMessage({ type: 'close-embedded-settings' }, '*');
+      ipcRenderer.send('close-settings');
     }, 1000);
 
   } catch (error) {
@@ -430,8 +464,8 @@ async function handleSaveSettings() {
 function handleCancel() {
   console.log('[Settings] Cancel button clicked');
 
-  // Close settings without saving
-  window.parent.postMessage({ type: 'close-embedded-settings' }, '*');
+  // Close settings window by sending IPC message
+  ipcRenderer.send('close-settings');
 
   if (typeof toast !== 'undefined') {
     toast.info('Settings not saved', 2000);
@@ -735,89 +769,96 @@ function initializeUpdatesSection() {
 function attachEventListeners() {
   console.log('[Settings] Attaching event listeners...');
 
-  // Save button
-  if (elements.saveBtn) {
-    elements.saveBtn.addEventListener('click', handleSaveSettings);
-    console.log('[Settings] ✓ Save button listener attached');
+  // Track successful and failed listener attachments
+  const attached = [];
+  const failed = [];
+
+  // Helper function to safely attach event listeners
+  function safeAttach(element, elementName, event, handler) {
+    try {
+      if (element && typeof element.addEventListener === 'function') {
+        element.addEventListener(event, (e) => {
+          try {
+            console.log(`[Settings] Button clicked: ${elementName}`);
+            // Prevent default behavior for buttons
+            if (e.preventDefault) e.preventDefault();
+            
+            // Call the handler
+            handler(e);
+          } catch (error) {
+            console.error(`[Settings] Error in ${elementName} handler:`, error);
+          }
+        });
+        attached.push(elementName);
+        console.log(`[Settings] ✓ ${elementName} listener attached`);
+        return true;
+      } else {
+        failed.push(`${elementName} (element not found or invalid)`);
+        console.error(`[Settings] ❌ ${elementName} element not found or invalid:`, element);
+        return false;
+      }
+    } catch (error) {
+      failed.push(`${elementName} (error: ${error.message})`);
+      console.error(`[Settings] ❌ Failed to attach ${elementName} listener:`, error);
+      return false;
+    }
   }
 
-  // Cancel button
-  if (elements.cancelBtn) {
-    elements.cancelBtn.addEventListener('click', handleCancel);
-    console.log('[Settings] ✓ Cancel button listener attached');
-  }
+  // Attach all event listeners
+  safeAttach(elements.saveBtn, 'Save button', 'click', handleSaveSettings);
+  safeAttach(elements.cancelBtn, 'Cancel button', 'click', handleCancel);
+  safeAttach(elements.testConnectionBtn, 'Test connection button', 'click', handleTestConnection);
+  safeAttach(elements.signInBtn, 'Sign in button', 'click', handleSignIn);
+  safeAttach(elements.signOutBtn, 'Sign out button', 'click', handleSignOut);
+  safeAttach(elements.refreshOllamaBtn, 'Refresh Ollama models button', 'click', handleRefreshOllamaModels);
+  safeAttach(elements.pasteKeyBtn, 'Paste API key button', 'click', handlePasteApiKey);
+  safeAttach(elements.toggleKeyVisibility, 'Toggle key visibility button', 'click', handleToggleKeyVisibility);
+  safeAttach(elements.checkUpdateBtn, 'Check for updates button', 'click', handleCheckForUpdates);
 
-  // Test connection button
-  if (elements.testConnectionBtn) {
-    elements.testConnectionBtn.addEventListener('click', handleTestConnection);
-    console.log('[Settings] ✓ Test connection button listener attached');
-  }
-
-  // Sign in button
-  if (elements.signInBtn) {
-    elements.signInBtn.addEventListener('click', handleSignIn);
-    console.log('[Settings] ✓ Sign in button listener attached');
-  }
-
-  // Sign out button
-  if (elements.signOutBtn) {
-    elements.signOutBtn.addEventListener('click', handleSignOut);
-    console.log('[Settings] ✓ Sign out button listener attached');
-  }
-
-  // Refresh Ollama models button
-  if (elements.refreshOllamaBtn) {
-    elements.refreshOllamaBtn.addEventListener('click', handleRefreshOllamaModels);
-    console.log('[Settings] ✓ Refresh Ollama models button listener attached');
-  }
-
-  // Paste API key button
-  if (elements.pasteKeyBtn) {
-    elements.pasteKeyBtn.addEventListener('click', handlePasteApiKey);
-    console.log('[Settings] ✓ Paste API key button listener attached');
-  }
-
-  // Toggle key visibility button
-  if (elements.toggleKeyVisibility) {
-    elements.toggleKeyVisibility.addEventListener('click', handleToggleKeyVisibility);
-    console.log('[Settings] ✓ Toggle key visibility button listener attached');
-  }
-
-  // Check for updates button
-  if (elements.checkUpdateBtn) {
-    elements.checkUpdateBtn.addEventListener('click', handleCheckForUpdates);
-    console.log('[Settings] ✓ Check for updates button listener attached');
-  }
-
-  // Update now button
+  // Update-related buttons (may not be cached in elements object)
   const updateNowBtn = document.getElementById('update-now-btn');
-  if (updateNowBtn) {
-    updateNowBtn.addEventListener('click', handleUpdateNow);
-    console.log('[Settings] ✓ Update now button listener attached');
-  }
-
-  // Update later button
   const updateLaterBtn = document.getElementById('update-later-btn');
-  if (updateLaterBtn) {
-    updateLaterBtn.addEventListener('click', handleUpdateLater);
-    console.log('[Settings] ✓ Update later button listener attached');
+  safeAttach(updateNowBtn, 'Update now button', 'click', handleUpdateNow);
+  safeAttach(updateLaterBtn, 'Update later button', 'click', handleUpdateLater);
+
+  // Provider and theme change listeners
+  safeAttach(elements.providerSelect, 'Provider select', 'change', updateProviderFields);
+  safeAttach(elements.themeSelect, 'Theme select', 'change', (e) => {
+    applyTheme(e.target.value);
+  });
+
+  // Summary
+  console.log(`[Settings] Event listeners summary:`);
+  console.log(`[Settings] ✓ Successfully attached: ${attached.length} listeners`);
+  if (attached.length > 0) {
+    console.log(`[Settings]   - ${attached.join(', ')}`);
+  }
+  
+  if (failed.length > 0) {
+    console.error(`[Settings] ❌ Failed to attach: ${failed.length} listeners`);
+    console.error(`[Settings]   - ${failed.join(', ')}`);
   }
 
-  // Provider select change
-  if (elements.providerSelect) {
-    elements.providerSelect.addEventListener('change', updateProviderFields);
-    console.log('[Settings] ✓ Provider select listener attached');
+  // If critical buttons failed, try alternative approach
+  if (failed.some(f => f.includes('Save button') || f.includes('Cancel button'))) {
+    console.log('[Settings] Attempting alternative button selection...');
+    
+    // Try to find buttons by different methods
+    const saveBtn = document.querySelector('#save-btn, button[id="save-btn"], .btn-primary[type="button"]');
+    const cancelBtn = document.querySelector('#cancel-btn, button[id="cancel-btn"], .btn-secondary[type="button"]');
+    
+    if (saveBtn) {
+      console.log('[Settings] Found Save button via alternative selector');
+      safeAttach(saveBtn, 'Save button (alternative)', 'click', handleSaveSettings);
+    }
+    
+    if (cancelBtn) {
+      console.log('[Settings] Found Cancel button via alternative selector');
+      safeAttach(cancelBtn, 'Cancel button (alternative)', 'click', handleCancel);
+    }
   }
 
-  // Theme select change (apply immediately)
-  if (elements.themeSelect) {
-    elements.themeSelect.addEventListener('change', (e) => {
-      applyTheme(e.target.value);
-    });
-    console.log('[Settings] ✓ Theme select listener attached');
-  }
-
-  console.log('[Settings] All event listeners attached successfully');
+  return { attached: attached.length, failed: failed.length };
 }
 
 // ============================================================================
@@ -864,14 +905,32 @@ function cacheElements() {
     statusMessage: document.getElementById('status-message')
   };
 
-  // Log which elements were found
+  // Log which elements were found and ensure they exist
   const foundElements = Object.entries(elements).filter(([_, el]) => el !== null);
   const missingElements = Object.entries(elements).filter(([_, el]) => el === null);
 
-  console.log(`[Settings] Found ${foundElements.length} elements`);
+  console.log(`[Settings] Found ${foundElements.length}/${Object.keys(elements).length} elements`);
+  
   if (missingElements.length > 0) {
-    console.warn('[Settings] Missing elements:', missingElements.map(([name]) => name));
+    console.error('[Settings] Missing critical elements:', missingElements.map(([name]) => name));
+    
+    // For critical buttons, try alternative selection methods
+    const criticalButtons = ['saveBtn', 'cancelBtn', 'testConnectionBtn'];
+    criticalButtons.forEach(btnName => {
+      if (!elements[btnName]) {
+        const btnId = btnName.replace('Btn', '-btn');
+        const element = document.querySelector(`#${btnId}`) || document.querySelector(`button[id="${btnId}"]`);
+        if (element) {
+          elements[btnName] = element;
+          console.log(`[Settings] ✓ Found ${btnName} using fallback selector`);
+        } else {
+          console.error(`[Settings] ❌ Critical button ${btnName} (id: ${btnId}) not found`);
+        }
+      }
+    });
   }
+
+  return elements;
 }
 
 // ============================================================================
@@ -891,41 +950,149 @@ async function initializeSettings() {
   console.log('[Settings] 🚀 Initializing settings page...');
 
   try {
-    // Step 1: Cache DOM elements
-    cacheElements();
+    // Step 1: Wait for DOM to be fully ready
+    if (document.readyState !== 'complete') {
+      console.log('[Settings] Waiting for document ready state...');
+      await new Promise(resolve => {
+        if (document.readyState === 'complete') {
+          resolve();
+        } else {
+          window.addEventListener('load', resolve, { once: true });
+          // Fallback timeout
+          setTimeout(resolve, 2000);
+        }
+      });
+    }
 
-    // Step 2: Attach event listeners
-    attachEventListeners();
+    // Step 2: Cache DOM elements with retry logic
+    console.log('[Settings] Step 1/7: Caching DOM elements...');
+    const elementsFound = cacheElements();
+    
+    // Retry element caching if critical elements are missing
+    const criticalElements = ['saveBtn', 'cancelBtn'];
+    const missingCritical = criticalElements.filter(name => !elements[name]);
+    
+    if (missingCritical.length > 0) {
+      console.warn('[Settings] Missing critical elements, retrying after delay...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      cacheElements();
+    }
 
-    // Step 3: Load settings into form
+    // Step 3: Attach event listeners
+    console.log('[Settings] Step 2/7: Attaching event listeners...');
+    const listenerResults = attachEventListeners();
+    
+    if (listenerResults.failed > 0) {
+      console.warn(`[Settings] Some event listeners failed to attach (${listenerResults.failed} failed, ${listenerResults.attached} succeeded)`);
+    }
+
+    // Step 4: Load settings into form
+    console.log('[Settings] Step 3/7: Loading settings into form...');
     loadSettingsIntoForm();
 
-    // Step 4: Refresh user card
+    // Step 5: Refresh user card
+    console.log('[Settings] Step 4/7: Refreshing user card...');
     await refreshUserCard();
 
-    // Step 5: Initialize updates section
+    // Step 6: Initialize updates section
+    console.log('[Settings] Step 5/7: Initializing updates section...');
     initializeUpdatesSection();
 
-    // Step 6: Update Ollama models if Ollama is selected
+    // Step 7: Update Ollama models if Ollama is selected
+    console.log('[Settings] Step 6/7: Checking Ollama configuration...');
     const config = loadConfig();
     if (config.provider === 'ollama') {
       await updateOllamaModelList();
     }
 
-    // Step 7: Apply current theme
+    // Step 8: Apply current theme
+    console.log('[Settings] Step 7/7: Applying theme...');
     applyTheme(config.theme);
 
     // Mark as initialized
     isInitialized = true;
 
     console.log('[Settings] ✅ Settings page initialized successfully');
+    
+    // Add a small delay and then test button functionality
+    setTimeout(() => {
+      console.log('[Settings] Running post-initialization button test...');
+      testButtonFunctionality();
+    }, 1000);
 
   } catch (error) {
     console.error('[Settings] ❌ Failed to initialize settings page:', error);
+    
+    // Show error to user if toast is available
     if (typeof toast !== 'undefined') {
       toast.error('Failed to load settings. Please refresh the page.', 5000);
+    } else {
+      // Fallback: show alert
+      alert('Failed to load settings. Please refresh the page.\n\nError: ' + error.message);
     }
+    
+    // Try to recover by retrying initialization after a delay
+    console.log('[Settings] Attempting recovery in 3 seconds...');
+    setTimeout(async () => {
+      isInitialized = false;
+      await initializeSettings();
+    }, 3000);
   }
+}
+
+/**
+ * Test button functionality after initialization
+ */
+function testButtonFunctionality() {
+  console.log('[Settings] 🧪 Testing button functionality...');
+  
+  const buttonsToTest = [
+    { name: 'Save', element: elements.saveBtn, id: 'save-btn' },
+    { name: 'Cancel', element: elements.cancelBtn, id: 'cancel-btn' },
+    { name: 'Test Connection', element: elements.testConnectionBtn, id: 'test-connection-btn' }
+  ];
+  
+  const workingButtons = [];
+  const brokenButtons = [];
+  
+  buttonsToTest.forEach(({ name, element, id }) => {
+    if (element && element.onclick !== undefined) {
+      // Check if element is visible and not disabled
+      const isVisible = !element.classList.contains('hidden') && 
+                       element.style.display !== 'none' &&
+                       element.offsetParent !== null;
+      const isEnabled = !element.disabled;
+      
+      if (isVisible && isEnabled) {
+        workingButtons.push(name);
+        console.log(`[Settings] ✓ ${name} button: Working (visible: ${isVisible}, enabled: ${isEnabled})`);
+      } else {
+        brokenButtons.push(`${name} (visible: ${isVisible}, enabled: ${isEnabled})`);
+        console.warn(`[Settings] ⚠️ ${name} button: Issue detected (visible: ${isVisible}, enabled: ${isEnabled})`);
+      }
+    } else {
+      brokenButtons.push(`${name} (element not found)`);
+      console.error(`[Settings] ❌ ${name} button: Not found or invalid`);
+      
+      // Try to find the element again
+      const fallbackElement = document.getElementById(id);
+      if (fallbackElement) {
+        console.log(`[Settings] Found ${name} button using fallback selector`);
+      }
+    }
+  });
+  
+  if (workingButtons.length === buttonsToTest.length) {
+    console.log('[Settings] ✅ All critical buttons are working!');
+  } else {
+    console.error(`[Settings] ❌ ${brokenButtons.length} buttons have issues:`, brokenButtons);
+  }
+  
+  return {
+    working: workingButtons,
+    broken: brokenButtons,
+    total: buttonsToTest.length
+  };
 }
 
 // ============================================================================
@@ -993,22 +1160,46 @@ function setupIpcListeners() {
 // DOCUMENT READY
 // ============================================================================
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-  console.log('[Settings] Waiting for DOM to load...');
-  document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[Settings] DOM loaded, initializing...');
-    setupIpcListeners();
-    await initializeSettings();
-  });
-} else {
-  console.log('[Settings] DOM already loaded, initializing immediately...');
+// ============================================================================
+// DOCUMENT READY HANDLING
+// ============================================================================
+
+/**
+ * Robust initialization that handles various document ready states
+ */
+function initializeWhenReady() {
+  console.log('[Settings] Document ready state:', document.readyState);
+  
+  // Set up IPC listeners immediately
   setupIpcListeners();
-  // Use setTimeout to ensure all scripts are loaded
-  setTimeout(async () => {
-    await initializeSettings();
-  }, 100);
+  
+  // Initialize based on current document state
+  if (document.readyState === 'loading') {
+    console.log('[Settings] Document still loading, waiting for DOMContentLoaded...');
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('[Settings] DOMContentLoaded fired, initializing...');
+      // Add small delay to ensure all scripts are loaded
+      setTimeout(async () => {
+        await initializeSettings();
+      }, 100);
+    });
+  } else if (document.readyState === 'interactive') {
+    console.log('[Settings] Document interactive, initializing with delay...');
+    // Document has finished loading but sub-resources might still be loading
+    setTimeout(async () => {
+      await initializeSettings();
+    }, 200);
+  } else {
+    console.log('[Settings] Document complete, initializing immediately...');
+    // Document and all sub-resources have finished loading
+    setTimeout(async () => {
+      await initializeSettings();
+    }, 50);
+  }
 }
+
+// Start initialization
+initializeWhenReady();
 
 // ============================================================================
 // DEBUG UTILITIES
@@ -1034,10 +1225,19 @@ window.debugSettingsButtons = function() {
 
   Object.entries(buttons).forEach(([name, btn]) => {
     if (btn) {
+      const isVisible = !btn.classList.contains('hidden') && 
+                       btn.style.display !== 'none' &&
+                       btn.offsetParent !== null;
+      const isEnabled = !btn.disabled;
+      
       console.log(`✅ ${name} button:`, {
         id: btn.id,
         disabled: btn.disabled,
-        visible: !btn.classList.contains('hidden')
+        visible: isVisible,
+        enabled: isEnabled,
+        hasEventListeners: btn.onclick !== null || btn._listeners !== undefined,
+        classList: Array.from(btn.classList),
+        style: btn.style.cssText
       });
     } else {
       console.error(`❌ ${name} button: NOT FOUND`);
@@ -1045,6 +1245,74 @@ window.debugSettingsButtons = function() {
   });
 
   console.log('🧪 === DEBUG COMPLETE ===');
+};
+
+/**
+ * Test button click functionality
+ */
+window.testButtonClicks = function() {
+  console.log('🧪 === TESTING BUTTON CLICKS ===');
+  
+  const testButtons = [
+    { name: 'Save', element: elements.saveBtn, handler: handleSaveSettings },
+    { name: 'Cancel', element: elements.cancelBtn, handler: handleCancel },
+    { name: 'Test Connection', element: elements.testConnectionBtn, handler: handleTestConnection }
+  ];
+  
+  testButtons.forEach(({ name, element, handler }) => {
+    if (element) {
+      console.log(`Testing ${name} button...`);
+      try {
+        // Test if we can call the handler directly
+        console.log(`  - Handler function exists: ${typeof handler === 'function'}`);
+        
+        // Test if click event can be dispatched
+        const clickEvent = new MouseEvent('click', { bubbles: true });
+        element.dispatchEvent(clickEvent);
+        console.log(`  ✅ ${name} click event dispatched successfully`);
+        
+      } catch (error) {
+        console.error(`  ❌ ${name} click test failed:`, error);
+      }
+    } else {
+      console.error(`  ❌ ${name} button element not found`);
+    }
+  });
+  
+  console.log('🧪 === CLICK TESTING COMPLETE ===');
+};
+
+/**
+ * Manual button test - actually trigger functionality
+ */
+window.manualButtonTest = function(buttonName) {
+  console.log(`🧪 === MANUAL TEST: ${buttonName.toUpperCase()} ===`);
+  
+  const handlers = {
+    'save': handleSaveSettings,
+    'cancel': handleCancel,
+    'test': handleTestConnection,
+    'signin': handleSignIn,
+    'signout': handleSignOut,
+    'refresh': handleRefreshOllamaModels,
+    'paste': handlePasteApiKey,
+    'toggle': handleToggleKeyVisibility,
+    'update': handleCheckForUpdates
+  };
+  
+  const handler = handlers[buttonName.toLowerCase()];
+  if (handler && typeof handler === 'function') {
+    try {
+      console.log(`Manually calling ${buttonName} handler...`);
+      handler();
+      console.log(`✅ ${buttonName} handler executed successfully`);
+    } catch (error) {
+      console.error(`❌ ${buttonName} handler failed:`, error);
+    }
+  } else {
+    console.error(`❌ Handler for ${buttonName} not found or not a function`);
+    console.log('Available handlers:', Object.keys(handlers));
+  }
 };
 
 /**
@@ -1057,9 +1325,25 @@ window.debugSettingsConfig = function() {
   console.log('🔧 === CONFIG COMPLETE ===');
 };
 
+/**
+ * Force reinitialize settings (useful for debugging)
+ */
+window.forceReinitialize = function() {
+  console.log('🔄 === FORCING REINITIALIZATION ===');
+  isInitialized = false;
+  setTimeout(async () => {
+    await initializeSettings();
+    console.log('✅ Reinitialization complete');
+  }, 100);
+};
+
 console.log('[Settings] 💡 Debug utilities available:');
 console.log('[Settings] - window.debugSettingsButtons() - Check all buttons');
+console.log('[Settings] - window.testButtonClicks() - Test button click events');
+console.log('[Settings] - window.manualButtonTest("save") - Manually test specific button');
 console.log('[Settings] - window.debugSettingsConfig() - View current config');
+console.log('[Settings] - window.forceReinitialize() - Force settings reinit');
+console.log('[Settings] - Available manual tests: save, cancel, test, signin, signout, refresh, paste, toggle, update');
 
 // ============================================================================
 // EXPORTS (for potential use by other modules)

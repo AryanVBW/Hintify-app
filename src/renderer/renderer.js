@@ -1528,7 +1528,11 @@ Math formatting:
 - Include units and symbols clearly, e.g., $v=\\frac{\\Delta x}{\\Delta t}$, $$\\int e^{x}\\,dx$$, matrix forms \\begin{bmatrix}a&b\\\\c&d\\end{bmatrix}, limits/derivatives, and \\ce{...} for chemical equations if applicable.
 
 Output format (TEXT ONLY):
-Hint 1: ...\nHint 2: ...\nHint 3: ...\n(Hint 4..6 if useful)\n<encouragement line>`;
+Hint 1: ...
+Hint 2: ...
+Hint 3: ...
+(Hint 4..6 if useful)
+<encouragement line>`;
 }
 
 // Specialized prompt for direct image hinting (no OCR)
@@ -2936,8 +2940,7 @@ function setupEventListeners() {
     handleSignIn();
   });
 
-  // Open embedded settings when asked by main process (menu or IPC)
-  ipcRenderer.on('show-embedded-settings', openEmbeddedSettings);
+  // Settings are now opened in separate window via IPC
 
   // Allow embedded settings (iframe) to request closing the modal
   window.addEventListener('message', (e) => {
@@ -3085,22 +3088,14 @@ function setupModals() {
 
 // Handle sync data manually
 
-// Open Settings inside main window (embedded settings.html via iframe)
+// Open Settings in separate window
 function openEmbeddedSettings() {
-  const modal = document.getElementById('app-settings-modal');
-  const iframe = document.getElementById('app-settings-iframe');
-  if (!modal || !iframe) return;
-  iframe.src = 'settings.html';
-  modal.classList.remove('hidden');
+  console.log('🔧 Opening settings in separate window...');
+  ipcRenderer.send('open-settings');
 }
 
-// Close button for embedded settings
-(() => {
-  const btn = document.getElementById('close-app-settings-modal');
-  if (btn) {
-    btn.addEventListener('click', () => closeModal('app-settings-modal'));
-  }
-})();
+// Settings are now opened in separate window
+// Modal close functionality no longer needed
 
 async function handleSyncData() {
   if (!userInfo) {

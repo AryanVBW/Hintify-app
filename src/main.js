@@ -259,10 +259,34 @@ function registerIpcHandlers() {
     createSettingsWindow();
   });
 
+  // Close settings window
+  ipcMain.on('close-settings', () => {
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.close();
+    }
+  });
+
+  // Focus settings window
+  ipcMain.handle('focus-settings-window', () => {
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      if (settingsWindow.isMinimized()) {
+        settingsWindow.restore();
+      }
+      settingsWindow.show();
+      settingsWindow.focus();
+      return true;
+    }
+    return false;
+  });
+
   ipcMain.on('config-updated', (event, newConfig) => {
     saveConfig(newConfig);
+    // Notify both main window and settings window
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('config-updated', newConfig);
+    }
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('config-updated', newConfig);
     }
   });
 
@@ -788,23 +812,59 @@ function saveWindowBounds() {
 }
 
 function createSettingsWindow() {
-  // Open settings INSIDE the main window instead of a separate BrowserWindow
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    try {
-      mainWindow.webContents.send('show-embedded-settings');
-      mainWindow.focus();
-      return;
-    } catch {}
+  // Prevent multiple settings windows
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return;
   }
-  // If mainWindow is not available, create it first, then show embedded settings
-  try {
-    createMainWindow();
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('show-embedded-settings');
-      }
-    }, 300);
-  } catch {}
+
+  // Create a separate BrowserWindow for settings
+  settingsWindow = new BrowserWindow({
+    width: 900,
+    height: 700,
+    minWidth: 800,
+    minHeight: 600,
+    parent: mainWindow, // Make it a child of main window
+    modal: false, // Allow interaction with main window
+    show: false, // Don't show until ready
+    webPreferences: {
+      nodeIntegration: true,
+      nodeIntegrationInSubFrames: true,
+      contextIsolation: false,
+      enableRemoteModule: true,
+      webSecurity: false  // Disabled for proper CSS loading and button visibility
+    },
+    icon: resolveAsset('logo_m.png'),
+    title: 'Hintify Settings',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    autoHideMenuBar: true
+  });
+
+  // Load the settings HTML file
+  settingsWindow.loadFile(path.join(__dirname, 'renderer', 'settings.html'));
+
+  // Handle window ready-to-show
+  settingsWindow.once('ready-to-show', () => {
+    settingsWindow.show();
+    settingsWindow.focus();
+    
+    if (isDevelopment) {
+      settingsWindow.webContents.openDevTools();
+    }
+  });
+
+  // Handle window closed
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+
+  // Handle external links
+  settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  return settingsWindow;
 }
 
 

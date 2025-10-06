@@ -8,19 +8,54 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="settings.css">
-    <link rel="stylesheet" href="glassy-theme.css">
-    <link rel="stylesheet" href="toast.css">
+    <!-- Local CSS files with error handling -->
+    <link rel="stylesheet" href="styles.css" onerror="console.error('Failed to load styles.css')">
+    <link rel="stylesheet" href="settings.css" onerror="console.error('Failed to load settings.css')">
+    <link rel="stylesheet" href="glassy-theme.css" onerror="console.error('Failed to load glassy-theme.css')">
+    <link rel="stylesheet" href="toast.css" onerror="console.error('Failed to load toast.css')">
+    
+    <!-- Fallback styles -->
+    <style>
+        /* Fallback styles in case CSS files fail to load */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #0f172a;
+            color: #e5e7eb;
+            margin: 0;
+            padding: 0;
+        }
+        .btn {
+            background-color: #374151;
+            color: #e5e7eb;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 4px;
+        }
+        .btn-primary {
+            background-color: #22c55e;
+            color: #0f172a;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
 </head>
 <body class="theme-dark" id="settings-body">
 <script>
-    // Load glassy mode preference
-    const Store = require('electron-store');
-    const store = new Store();
-    if (store.get('glassy_mode', false)) {
-        document.body.classList.add('glassy-mode');
-        document.documentElement.classList.add('theme-glassy');
+    // Load glassy mode preference - with error handling
+    try {
+        const Store = require('electron-store');
+        const store = new Store();
+        if (store.get('glassy_mode', false)) {
+            document.body.classList.add('glassy-mode');
+            document.documentElement.classList.add('theme-glassy');
+        }
+        console.log('[Settings HTML] Store initialized successfully');
+    } catch (error) {
+        console.error('[Settings HTML] Failed to initialize store:', error);
+        // Continue without store - settings will use defaults
     }
 </script>
     <div class="settings-container">
@@ -271,7 +306,51 @@
         <div id="status-message" class="status-message hidden"></div>
     </div>
 
-    <script src="toast.js"></script>
-    <script src="settings.js"></script>
+    <script src="toast.js" onerror="console.error('Failed to load toast.js')"></script>
+    <script src="settings.js" onerror="console.error('Failed to load settings.js')"></script>
+    
+    <!-- Fallback script in case settings.js fails -->
+    <script>
+        // Fallback initialization if main scripts fail
+        setTimeout(() => {
+            console.log('[Fallback] Checking if settings initialized...');
+            if (typeof window.debugSettingsButtons !== 'function') {
+                console.warn('[Fallback] Main settings script failed, setting up basic functionality');
+                
+                // Basic button functionality
+                const buttons = {
+                    'save-btn': () => {
+                        console.log('Fallback: Save button clicked');
+                        alert('Settings save functionality not available. Please refresh the page.');
+                    },
+                    'cancel-btn': () => {
+                        console.log('Fallback: Cancel button clicked');
+                        if (typeof require !== 'undefined') {
+                            try {
+                                const { ipcRenderer } = require('electron');
+                                ipcRenderer.send('close-settings');
+                            } catch (e) {
+                                console.error('Fallback: IPC failed', e);
+                            }
+                        }
+                    },
+                    'test-connection-btn': () => {
+                        console.log('Fallback: Test connection clicked');
+                        alert('Test connection functionality not available. Please refresh the page.');
+                    }
+                };
+                
+                Object.entries(buttons).forEach(([id, handler]) => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.addEventListener('click', handler);
+                        console.log(`[Fallback] Attached handler to ${id}`);
+                    }
+                });
+            } else {
+                console.log('[Fallback] Main settings script loaded successfully');
+            }
+        }, 2000);
+    </script>
 </body>
 </html>
