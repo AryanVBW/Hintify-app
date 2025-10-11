@@ -1,12 +1,22 @@
-# 🎨 UI Redesign: Modern Student Interface
+# 🎨 UI Redesign: Modern Student Interface with Theme Switcher
 
 ## 📋 Description
-Complete redesign of the student interface to create a more engaging, intuitive, and modern user experience. This PR addresses the UI/UX enhancement issue for Hacktoberfest 2025.
+Complete redesign of the student interface to create a more engaging, intuitive, and modern user experience with **3 beautiful themes** to choose from! This PR addresses the UI/UX enhancement issue for Hacktoberfest 2025.
 
 ## ✨ What's Changed
 
+### 🎨 **NEW: Theme Switcher**
+- **3 Beautiful Themes**: Dark, Cute Sky Blue, and Light
+- **One-Click Toggle**: Palette button in top bar to cycle through themes
+- **Persistent Preference**: Theme choice saved automatically
+- **Smooth Transitions**: Animated theme changes
+- **Student-Friendly**: Cute sky blue theme with soft gradients perfect for students
+
 ### 🎯 Main Interface (`index.html` & `styles.css`)
-- **Modern Color Scheme**: Implemented vibrant gradient color scheme with emerald green (#10b981) and blue (#3b82f6) accents
+- **Modern Color Schemes**: 
+  - **Dark Theme**: Emerald green (#10b981) to blue (#3b82f6) gradients
+  - **Sky Theme**: Soft sky blue (#0ea5e9) to pink (#f472b6) gradients  
+  - **Light Theme**: Blue (#2563eb) to purple (#8b5cf6) gradients
 - **Enhanced Typography**: Improved font hierarchy with larger, bolder headings and better spacing
 - **Glassmorphism Effects**: Added backdrop blur and translucent panels for a modern aesthetic
 - **Animated Background**: Subtle pulsing gradient background for visual interest
@@ -110,10 +120,11 @@ A modern, engaging interface that students enjoy using, featuring:
 - 💫 Professional glassmorphism effects
 
 ## 🚀 Files Modified
-- `src/renderer/index.html` - Added animation delay variables
-- `src/renderer/styles.css` - Complete UI redesign with animations
+- `src/renderer/index.html` - Added animation delay variables + theme toggle button
+- `src/renderer/styles.css` - Complete UI redesign with 3 themes + animations
 - `src/renderer/auth.html` - Added animation delay variables
-- `src/renderer/auth.css` - Complete auth screen redesign
+- `src/renderer/auth.css` - Complete auth screen redesign with 3 themes
+- `src/renderer/renderer.js` - Added theme switcher functionality
 
 ## 🔒 What's NOT Changed
 - ❌ No backend modifications

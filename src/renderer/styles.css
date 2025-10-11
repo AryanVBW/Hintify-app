@@ -41,6 +41,42 @@
   --input-bg: rgba(31, 41, 55, 0.8);
 }
 
+/* Soft Pastel theme - Aesthetic & Calming */
+.theme-pastel {
+  --bg-root: linear-gradient(135deg, #fce7f3 0%, #e0e7ff 50%, #ddd6fe 100%);
+  --bg-root-solid: #fce7f3;
+  --fg-text: #4c1d95;
+  --panel-bg: rgba(255, 255, 255, 0.75);
+  --border: #d8b4fe;
+  --accent: #a855f7;
+  --accent-secondary: #ec4899;
+  --accent-gradient: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  --accent-text: #ffffff;
+  --label-color: #7c3aed;
+  --enc-color: #f472b6;
+  --hover-bg: rgba(233, 213, 255, 0.6);
+  --button-bg: rgba(216, 180, 254, 0.6);
+  --button-hover: rgba(192, 132, 252, 0.7);
+  --glow-color: rgba(168, 85, 247, 0.4);
+
+  /* Onboarding variables */
+  --bg-color: #fce7f3;
+  --text-color: #4c1d95;
+  --card-bg: rgba(255, 255, 255, 0.75);
+  --border-color: #d8b4fe;
+  --primary-color: #a855f7;
+  --primary-color-rgb: 168, 85, 247;
+  --accent-color: #7c3aed;
+  --accent-bg: rgba(168, 85, 247, 0.15);
+  --input-bg: rgba(233, 213, 255, 0.5);
+}
+
+/* Soft Pastel theme - Background particles */
+body.theme-pastel::before {
+  background: radial-gradient(circle at 20% 50%, rgba(168, 85, 247, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.08) 0%, transparent 50%);
+}
+
 /* Light theme */
 .theme-light {
   --bg-root: #f8fafc;
@@ -48,12 +84,15 @@
   --panel-bg: #ffffff;
   --border: #e2e8f0;
   --accent: #2563eb;
+  --accent-secondary: #8b5cf6;
+  --accent-gradient: linear-gradient(135deg, #2563eb 0%, #8b5cf6 100%);
   --accent-text: #ffffff;
-  --label-color: #1d4ed8;
-  --enc-color: #059669;
+  --label-color: #3b82f6;
+  --enc-color: #10b981;
   --hover-bg: #f1f5f9;
-  --button-bg: #f1f5f9;
-  --button-hover: #e2e8f0;
+  --button-bg: #e2e8f0;
+  --button-hover: #cbd5e1;
+  --glow-color: rgba(37, 99, 235, 0.3);
 
   /* Onboarding variables */
   --bg-color: #f8fafc;
@@ -62,9 +101,9 @@
   --border-color: #e2e8f0;
   --primary-color: #2563eb;
   --primary-color-rgb: 37, 99, 235;
-  --accent-color: #1d4ed8;
-  --accent-bg: rgba(29, 78, 216, 0.1);
-  --input-bg: #ffffff;
+  --accent-color: #3b82f6;
+  --accent-bg: rgba(59, 130, 246, 0.1);
+  --input-bg: #f1f5f9;
 }
 
 /* Glass theme */

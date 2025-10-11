@@ -8,6 +8,17 @@
     <!-- Supabase authentication handled by auth.js -->
 </head>
 <body class="theme-dark">
+<script>
+    // Load saved theme preference
+    try {
+        const Store = require('electron-store');
+        const store = new Store();
+        const savedTheme = store.get('app-theme', 'theme-dark');
+        document.body.className = savedTheme;
+    } catch (error) {
+        console.error('Failed to load theme:', error);
+    }
+</script>
     <div class="auth-container">
         <!-- Background decoration -->
         <div class="background-decoration">

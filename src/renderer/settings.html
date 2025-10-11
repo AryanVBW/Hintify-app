@@ -42,19 +42,46 @@
         }
     </style>
 </head>
-<body class="theme-dark" id="settings-body">
+<body class="theme-dark material-ui" id="settings-body">
 <script>
-    // Load glassy mode preference - with error handling
+    const { ipcRenderer } = require('electron');
+    
+    // Load theme and glassy mode preference - with error handling
     try {
         const Store = require('electron-store');
         const store = new Store();
+        
+        // Load saved theme
+        const savedTheme = store.get('app-theme', 'theme-dark');
+        console.log('[Settings] Loading theme:', savedTheme);
+        
+        // Apply theme class
+        document.body.className = savedTheme + ' material-ui';
+        
+        // Load glassy mode if applicable
         if (store.get('glassy_mode', false)) {
             document.body.classList.add('glassy-mode');
             document.documentElement.classList.add('theme-glassy');
         }
-        console.log('[Settings HTML] Store initialized successfully');
+        
+        console.log('[Settings] Theme applied successfully:', document.body.className);
+        
+        // Listen for theme updates from main process
+        ipcRenderer.on('apply-theme', (event, theme) => {
+            console.log('[Settings] Received theme from main process:', theme);
+            document.body.className = theme + ' material-ui';
+            
+            // Reapply glassy mode if needed
+            if (store.get('glassy_mode', false)) {
+                document.body.classList.add('glassy-mode');
+                document.documentElement.classList.add('theme-glassy');
+            }
+            
+            console.log('[Settings] Theme updated to:', document.body.className);
+        });
+        
     } catch (error) {
-        console.error('[Settings HTML] Failed to initialize store:', error);
+        console.error('[Settings] Failed to load theme:', error);
         // Continue without store - settings will use defaults
     }
 </script>
