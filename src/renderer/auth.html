@@ -14,7 +14,11 @@
         const Store = require('electron-store');
         const store = new Store();
         const savedTheme = store.get('app-theme', 'theme-dark');
-        document.body.className = savedTheme;
+        
+        // Remove existing theme classes and add the saved theme
+        const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
+        document.body.classList.remove(...themeClasses);
+        document.body.classList.add(savedTheme);
     } catch (error) {
         console.error('Failed to load theme:', error);
     }

@@ -55,8 +55,10 @@
         const savedTheme = store.get('app-theme', 'theme-dark');
         console.log('[Settings] Loading theme:', savedTheme);
         
-        // Apply theme class
-        document.body.className = savedTheme + ' material-ui';
+        // Apply theme class - preserve existing classes
+        const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
+        document.body.classList.remove(...themeClasses);
+        document.body.classList.add(savedTheme, 'material-ui');
         
         // Load glassy mode if applicable
         if (store.get('glassy_mode', false)) {
@@ -69,7 +71,11 @@
         // Listen for theme updates from main process
         ipcRenderer.on('apply-theme', (event, theme) => {
             console.log('[Settings] Received theme from main process:', theme);
-            document.body.className = theme + ' material-ui';
+            
+            // Apply theme - preserve existing classes
+            const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
+            document.body.classList.remove(...themeClasses);
+            document.body.classList.add(theme, 'material-ui');
             
             // Reapply glassy mode if needed
             if (store.get('glassy_mode', false)) {

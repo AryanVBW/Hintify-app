@@ -157,9 +157,12 @@ function validateConfig(config) {
  */
 function applyTheme(theme) {
   try {
-    // Remove all theme classes
-    document.body.className = '';
-    document.documentElement.className = '';
+    // Remove only theme-related classes, preserve other classes
+    const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light', 'glassy-mode'];
+    const glassyClasses = ['theme-glassy'];
+    
+    document.body.classList.remove(...themeClasses);
+    document.documentElement.classList.remove(...glassyClasses);
     
     // Apply the selected theme
     if (theme === 'glass') {
