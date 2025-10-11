@@ -3287,13 +3287,20 @@ function initializeThemeToggle() {
   };
   let currentThemeIndex = 0;
   
+  const applyThemeClass = (themeClass) => {
+    const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
+    document.body.classList.remove(...themeClasses);
+    document.body.classList.add(themeClass);
+    document.body.classList.add('material-ui');
+  };
+  
   // Load saved theme
   const savedTheme = store.get('app-theme', 'theme-dark');
   currentThemeIndex = themes.indexOf(savedTheme);
   if (currentThemeIndex === -1) currentThemeIndex = 0;
   
   // Apply saved theme
-  document.body.className = themes[currentThemeIndex] + ' material-ui';
+  applyThemeClass(themes[currentThemeIndex]);
   
   // Theme toggle button click handler
   if (themeToggleBtn) {
@@ -3304,7 +3311,7 @@ function initializeThemeToggle() {
       
       // Apply theme with animation
       document.body.style.transition = 'background 0.3s ease, color 0.3s ease';
-      document.body.className = newTheme + ' material-ui';
+      applyThemeClass(newTheme);
       
       // Save theme preference
       store.set('app-theme', newTheme);
