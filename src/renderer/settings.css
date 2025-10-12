@@ -28,6 +28,23 @@
     --input-border: #374151;
 }
 
+/* Soft Pastel theme - Aesthetic & Calming */
+.theme-pastel {
+    --bg-root: #fce7f3;
+    --fg-text: #4c1d95;
+    --panel-bg: rgba(255, 255, 255, 0.75);
+    --border: #d8b4fe;
+    --accent: #a855f7;
+    --accent-text: #ffffff;
+    --label-color: #7c3aed;
+    --enc-color: #f472b6;
+    --hover-bg: rgba(233, 213, 255, 0.6);
+    --button-bg: rgba(216, 180, 254, 0.6);
+    --button-hover: rgba(192, 132, 252, 0.7);
+    --input-bg: rgba(233, 213, 255, 0.5);
+    --input-border: #d8b4fe;
+}
+
 /* Light theme */
 .theme-light {
     --bg-root: #f8fafc;
@@ -70,13 +87,30 @@
 
 body {
     font-family: var(--font-family);
-    background-color: var(--bg-root);
+    background: var(--bg-root);
     color: var(--fg-text);
     height: 100vh;
     overflow-y: auto;
     transition:
-        background-color var(--transition-speed),
+        background var(--transition-speed),
         color var(--transition-speed);
+}
+
+/* Theme-specific backgrounds */
+body.theme-dark {
+    background: var(--bg-root);
+}
+
+body.theme-pastel {
+    background: linear-gradient(135deg, #fce7f3 0%, #e0e7ff 50%, #ddd6fe 100%);
+}
+
+body.theme-light {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%);
+}
+
+body.theme-glass {
+    background: var(--bg-root);
 }
 
 .settings-container {
