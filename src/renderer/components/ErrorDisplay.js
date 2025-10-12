@@ -42,11 +42,11 @@ class ErrorDisplay {
           </h3>
           <p class="error-message text-glass-secondary">${message}</p>
         </div>
-        <div class="error-actions">
+        <div class="error-actions" role="group" aria-label="Error actions">
           ${actions.map((action, index) => `
-            <button class="btn ${action.variant || 'btn-secondary'} glass-btn" data-action="${index}">
-              ${action.icon ? `<span class="material-icons">${action.icon}</span>` : ''}
-              ${action.text}
+            <button class="btn ${action.variant || 'btn-secondary'} glass-btn" data-action="${index}" role="button" tabindex="0" aria-label="${(action.text||'Action').replace(/"/g,'&quot;')}">
+              ${action.icon ? `<span class="material-icons" aria-hidden="true">${action.icon}</span>` : ''}
+              <span>${action.text}</span>
             </button>
           `).join('')}
         </div>
