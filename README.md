@@ -198,6 +198,32 @@ Hintify_app/
 └── README.md                  # This file
 ```
 
+## Accessibility Improvements (WCAG 2.1)
+
+This release adds accessibility improvements to make Hintify usable by all students, including those with disabilities.
+
+Key features added:
+- Screen reader support: ARIA roles and labels on interactive elements and dynamic hint content.
+- Keyboard navigation: Tab/Shift+Tab, ArrowUp/ArrowDown to navigate hints, Enter/Space to activate actions.
+- Text-to-Speech (TTS): Toggle TTS in the status bar ("TTS" button). Hints can be read aloud.
+- Color contrast: Theme variables adjusted for stronger contrast; added high-contrast mode toggle.
+- Font size adjustment: A+/A- buttons in the status bar to increase/decrease font size.
+- Focus indicators: Strong visible focus outlines for keyboard users.
+
+How to use the accessibility controls:
+- Toggle TTS: Click the "TTS" button in the top-right status area.
+- Increase font size: Click "A+". Decrease with "A-".
+- Toggle high contrast: Click "Contrast".
+
+Automated & manual testing recommendations:
+- Lighthouse (Chrome/Edge): Run Lighthouse Accessibility audit and target 90+.
+- axe DevTools: Run axe to find any remaining ARIA or color contrast issues.
+- NVDA (Windows) / VoiceOver (macOS): Test screen reader flows for hints, buttons, and dialogs.
+- Keyboard-only: Use Tab/Shift+Tab, Arrow keys, Enter, and Space to navigate and activate features.
+
+If you find an accessibility issue, please open an issue with steps to reproduce and attach a short recording or notes from the assistive technology.
+
+
 ### Key Features Implemented
 
 #### ✅ Exact Feature Parity with Python Version

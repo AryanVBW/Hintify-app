@@ -6,6 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const os = require('os');
 const ErrorDisplay = require('./components/ErrorDisplay');
+const A11y = require('./a11y');
 
 // Initialize store and error display
 const store = new Store();
@@ -574,6 +575,36 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
     console.log('❌ User not authenticated - sign-in UI shown');
   }
 }
+
+// Initialize accessibility after DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const a11y = A11y.init();
+
+    // Expose to window for debugging/tests
+    window.__A11Y = a11y;
+
+    // Hook into hint rendering: when hints are added, ensure accessible attributes
+    const hintsContainer = document.getElementById('hints-display');
+    if (hintsContainer) {
+      // Ensure the container has aria-live for dynamic hint announcements
+      hintsContainer.setAttribute('aria-live', 'polite');
+      hintsContainer.setAttribute('aria-atomic', 'false');
+    }
+
+    // Example: add text-to-speech button actions for future hint items
+    document.body.addEventListener('click', (e) => {
+      const target = e.target;
+      if (target && target.classList && target.classList.contains('hint-tts-btn')) {
+        const hint = target.closest('.hint-item');
+        const text = hint ? (hint.querySelector('.hint-text')?.textContent || hint.textContent) : null;
+        if (text) a11y.speak(text);
+      }
+    });
+  } catch (e) {
+    console.warn('Accessibility module failed to initialize', e);
+  }
+});
 
 // Handle sign-in button click with improved error handling
 function handleSignIn() {
@@ -1351,6 +1382,7 @@ function createHintActions({ hints, questionText }) {
   const mkBtn = (action, title, iconName) => {
     const b = document.createElement('button');
     b.className = 'icon-btn';
+    b.setAttribute('role', 'button');
     b.title = title;
     b.setAttribute('aria-label', title);
     b.dataset.action = action;
@@ -1364,8 +1396,18 @@ function createHintActions({ hints, questionText }) {
             updateStatus('All hints copied');
             break;
           case 'speak': {
-            const u = new SpeechSynthesisUtterance(flatList);
-            window.speechSynthesis.cancel(); window.speechSynthesis.speak(u);
+            // Respect accessibility TTS toggle if available
+            try {
+              if (window.__A11Y && typeof window.__A11Y.speak === 'function') {
+                window.__A11Y.speak(flatList);
+              } else if (window.speechSynthesis) {
+                const u = new SpeechSynthesisUtterance(flatList);
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(u);
+              }
+            } catch (ttsErr) {
+              console.warn('TTS failed', ttsErr);
+            }
             updateStatus('Speaking all hints...');
             break; }
           case 'like':
@@ -1411,13 +1453,16 @@ function createHintActions({ hints, questionText }) {
       } catch (err) { updateStatus('Action failed'); }
     });
     bar.appendChild(b);
+    return b;
   };
 
   // Icons: like, dislike, copy, speak, regenerate, share (Lucide)
   mkBtn('like','Liked the hints','thumbs-up');
   mkBtn('dislike','Disliked the hints','thumbs-down');
   mkBtn('copy','Copy all hints','clipboard');
-  mkBtn('speak','Speak all hints','volume-2');
+  // TTS button: add class for accessibility module to pick up
+  const speakBtn = mkBtn('speak','Speak all hints','volume-2');
+  speakBtn.classList.add('hint-tts-btn');
   mkBtn('regen','Regenerate hints','refresh-ccw');
   mkBtn('share','Share','share-2');
 

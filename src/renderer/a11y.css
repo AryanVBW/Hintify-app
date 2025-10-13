@@ -1,0 +1,44 @@
+/* Accessibility specific styles: focus outlines, high contrast mode, font scale variable */
+:root {
+  --app-font-scale: 1;
+}
+
+/* Focus outlines for keyboard navigation */
+button:focus, .btn:focus, [role="button"]:focus, .hint-item:focus, .modal-close:focus, .account-menu-btn:focus {
+  outline: 3px solid #ffbf00;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(255,191,0,0.12);
+}
+
+/* High contrast mode */
+.high-contrast {
+  --bg-root: #000000 !important;
+  --fg-text: #ffffff !important;
+  --panel-bg: #000000 !important;
+  --border: #ffffff !important;
+  --accent: #ffff00 !important;
+  --accent-text: #000000 !important;
+  --button-bg: #111111 !important;
+  --button-hover: #222222 !important;
+}
+
+/* Larger click targets and visible focus for hint items */
+.hint-item {
+  padding: 18px;
+}
+
+/* Respect user font scale via root variable */
+html {
+  font-size: calc(16px * var(--app-font-scale));
+}
+
+/* Ensure enough contrast for important buttons */
+.btn-primary {
+  background-color: var(--accent) !important;
+  color: var(--accent-text) !important;
+}
+
+/* Make icon buttons accessible */
+.icon-btn:focus {
+  transform: none;
+}

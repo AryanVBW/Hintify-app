@@ -11,6 +11,7 @@
     
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="glassy-theme.css">
+    <link rel="stylesheet" href="a11y.css">
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- KaTeX for LaTeX math rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
@@ -28,10 +29,12 @@
                 <h1 class="app-title">Hintify</h1>
             </div>
 
+
             <div class="action-buttons">
                 <button id="theme-toggle-btn" class="btn btn-secondary material-btn" title="Change Theme" aria-label="Change Theme">
                     <span class="material-icons">palette</span>
                 </button>
+
                 <button id="capture-btn" class="btn btn-primary material-btn" title="Capture Screenshot" aria-label="Capture Screenshot">
                     <span class="material-icons">screenshot</span>
                     <span class="btn-text">Capture</span>
@@ -60,7 +63,7 @@
 
 
         <!-- Main content area -->
-        <div class="content-area">
+        <div class="content-area" role="main" aria-label="Application main content">
             <div class="text-container">
                 <div id="hints-display" class="hints-display">
                     <div class="welcome-message material-welcome">
@@ -114,11 +117,18 @@
             <div class="status-section">
                 <span id="status-text">Ready</span>
             </div>
-            <div class="status-section" style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                <div class="status-section" style="margin-left:auto; display:flex; align-items:center; gap:8px;">
                 <label for="mode-toggle" class="mode-toggle-label" title="Toggle between Standard (OCR) and Advanced (Direct Vision) modes" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                     <input type="checkbox" id="mode-toggle" style="accent-color: var(--accent, #6ea8fe); cursor:pointer;">
                     <span id="mode-toggle-text">Advanced Mode</span>
                 </label>
+                <!-- Accessibility controls -->
+                <div id="accessibility-controls" style="display:flex; gap:8px; align-items:center; margin-left:8px;">
+                    <button id="tts-toggle" class="btn btn-secondary" aria-pressed="false" aria-label="Toggle text to speech">TTS</button>
+                    <button id="font-decrease" class="btn btn-secondary" aria-label="Decrease font size">A-</button>
+                    <button id="font-increase" class="btn btn-secondary" aria-label="Increase font size">A+</button>
+                    <button id="high-contrast" class="btn btn-secondary" aria-pressed="false" aria-label="Toggle high contrast">Contrast</button>
+                </div>
             </div>
         </div>
     </div>

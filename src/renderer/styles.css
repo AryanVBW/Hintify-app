@@ -1,4 +1,3 @@
-/* CSS Variables for themes */
 :root {
   --transition-speed: 0.3s;
   --transition-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
@@ -28,6 +27,7 @@
   --button-bg: rgba(55, 65, 81, 0.8);
   --button-hover: rgba(75, 85, 99, 0.9);
   --glow-color: rgba(16, 185, 129, 0.3);
+
 
   /* Onboarding variables */
   --bg-color: #0f172a;
@@ -79,13 +79,15 @@ body.theme-pastel::before {
 
 /* Light theme */
 .theme-light {
-  --bg-root: #f8fafc;
-  --fg-text: #0f172a;
+  --bg-root: #ffffff;
+  --fg-text: #0b1220;
   --panel-bg: #ffffff;
   --border: #e2e8f0;
+
   --accent: #2563eb;
   --accent-secondary: #8b5cf6;
   --accent-gradient: linear-gradient(135deg, #2563eb 0%, #8b5cf6 100%);
+
   --accent-text: #ffffff;
   --label-color: #3b82f6;
   --enc-color: #10b981;
@@ -358,6 +360,12 @@ body.material-ui .material-icons {
 .btn:hover::before {
   width: 300px;
   height: 300px;
+}
+
+/* Visible focus for interactive elements to assist keyboard users */
+.btn:focus, button:focus, a:focus, input:focus, select:focus, textarea:focus {
+  outline: 3px solid rgba(99, 102, 241, 0.95);
+  outline-offset: 2px;
 }
 
 /* Material Button Enhancements */
