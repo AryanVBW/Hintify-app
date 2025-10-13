@@ -255,8 +255,10 @@ function registerIpcHandlers() {
   });
 
   // Settings and configuration handlers
-  ipcMain.on('open-settings', () => {
-    createSettingsWindow();
+  ipcMain.on('open-settings', (event, data) => {
+    const theme = data?.theme || 'theme-dark';
+    console.log('[Main] Opening settings with theme:', theme);
+    createSettingsWindow(theme);
   });
 
   // Close settings window
@@ -811,12 +813,14 @@ function saveWindowBounds() {
   }
 }
 
-function createSettingsWindow() {
+function createSettingsWindow(theme = 'theme-dark') {
   // Prevent multiple settings windows
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.focus();
     return;
   }
+
+  console.log('[Main] Creating settings window with theme:', theme);
 
   // Create a separate BrowserWindow for settings
   settingsWindow = new BrowserWindow({
@@ -845,6 +849,10 @@ function createSettingsWindow() {
 
   // Handle window ready-to-show
   settingsWindow.once('ready-to-show', () => {
+    // Send theme to settings window after it's ready
+    console.log('[Main] Settings window ready, sending theme:', theme);
+    settingsWindow.webContents.send('apply-theme', theme);
+    
     settingsWindow.show();
     settingsWindow.focus();
     

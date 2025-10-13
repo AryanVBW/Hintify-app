@@ -3136,7 +3136,24 @@ function setupModals() {
 // Open Settings in separate window
 function openEmbeddedSettings() {
   console.log('🔧 Opening settings in separate window...');
-  ipcRenderer.send('open-settings');
+  
+  // Get current theme from the actual body class (more reliable)
+  const bodyClasses = document.body.className;
+  let currentTheme = 'theme-dark'; // default
+  
+  if (bodyClasses.includes('theme-pastel')) {
+    currentTheme = 'theme-pastel';
+  } else if (bodyClasses.includes('theme-light')) {
+    currentTheme = 'theme-light';
+  } else if (bodyClasses.includes('theme-dark')) {
+    currentTheme = 'theme-dark';
+  }
+  
+  console.log('🎨 Current body classes:', bodyClasses);
+  console.log('🎨 Detected current theme:', currentTheme);
+  console.log('🎨 Sending theme to settings:', currentTheme);
+  
+  ipcRenderer.send('open-settings', { theme: currentTheme });
 }
 
 // Settings are now opened in separate window
@@ -3304,10 +3321,59 @@ function startClipboardMonitor() {
   }, 2000); // Check every 2 seconds
 }
 
+// Theme Toggle Functionality
+function initializeThemeToggle() {
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const themes = ['theme-dark', 'theme-pastel', 'theme-light'];
+  const themeNames = {
+    'theme-dark': 'Dark',
+    'theme-pastel': 'Pastel',
+    'theme-light': 'Light'
+  };
+  let currentThemeIndex = 0;
+  
+  const applyThemeClass = (themeClass) => {
+    const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
+    document.body.classList.remove(...themeClasses);
+    document.body.classList.add(themeClass);
+    document.body.classList.add('material-ui');
+  };
+  
+  // Load saved theme
+  const savedTheme = store.get('app-theme', 'theme-dark');
+  currentThemeIndex = themes.indexOf(savedTheme);
+  if (currentThemeIndex === -1) currentThemeIndex = 0;
+  
+  // Apply saved theme
+  applyThemeClass(themes[currentThemeIndex]);
+  
+  // Theme toggle button click handler
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      // Cycle to next theme
+      currentThemeIndex = (currentThemeIndex + 1) % themes.length;
+      const newTheme = themes[currentThemeIndex];
+      
+      // Apply theme with animation
+      document.body.style.transition = 'background 0.3s ease, color 0.3s ease';
+      applyThemeClass(newTheme);
+      
+      // Save theme preference
+      store.set('app-theme', newTheme);
+      
+      // Show theme name briefly
+      const themeName = themeNames[newTheme] || 'Unknown';
+      updateStatus(`Theme: ${themeName}`);
+      setTimeout(() => updateStatus('Ready'), 2000);
+    });
+  }
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     await initializeApp();
+    initializeThemeToggle(); // Initialize theme toggle
     // Uncomment to enable auto clipboard monitoring
     // startClipboardMonitor();
   } catch (error) {

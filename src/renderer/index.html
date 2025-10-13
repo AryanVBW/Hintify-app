@@ -29,7 +29,12 @@
                 <h1 class="app-title">Hintify</h1>
             </div>
 
-                <div class="action-buttons" role="toolbar" aria-label="Main actions">
+
+            <div class="action-buttons">
+                <button id="theme-toggle-btn" class="btn btn-secondary material-btn" title="Change Theme" aria-label="Change Theme">
+                    <span class="material-icons">palette</span>
+                </button>
+
                 <button id="capture-btn" class="btn btn-primary material-btn" title="Capture Screenshot" aria-label="Capture Screenshot">
                     <span class="material-icons">screenshot</span>
                     <span class="btn-text">Capture</span>
@@ -73,22 +78,22 @@
                                 Quick Start
                             </h3>
                             <div class="instruction-grid">
-                                <div class="instruction-card">
+                                <div class="instruction-card" style="--card-index: 0;">
                                     <span class="material-icons">photo_camera</span>
                                     <h4>Capture Screenshot</h4>
                                     <p>Click the <strong>Capture</strong> button to take a screenshot</p>
                                 </div>
-                                <div class="instruction-card">
+                                <div class="instruction-card" style="--card-index: 1;">
                                     <span class="material-icons">content_paste</span>
                                     <h4>From Clipboard</h4>
                                     <p>Copy an image and press <strong>Cmd/Ctrl+Shift+V</strong></p>
                                 </div>
-                                <div class="instruction-card">
+                                <div class="instruction-card" style="--card-index: 2;">
                                     <span class="material-icons">keyboard</span>
                                     <h4>Global Hotkey</h4>
                                     <p><strong>Cmd+Shift+H</strong> (Mac) or <strong>Ctrl+Shift+H</strong> (Windows)</p>
                                 </div>
-                                <div class="instruction-card">
+                                <div class="instruction-card" style="--card-index: 3;">
                                     <span class="material-icons">psychology</span>
                                     <h4>AI Analysis</h4>
                                     <p>AI analyzes your questions and provides helpful hints</p>
