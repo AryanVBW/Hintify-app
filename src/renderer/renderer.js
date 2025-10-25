@@ -7,10 +7,14 @@ const { spawn } = require('child_process');
 const os = require('os');
 const ErrorDisplay = require('./components/ErrorDisplay');
 const A11y = require('./a11y');
+const { getInstance: getClerkAuthHelper } = require('./clerk-auth-helper');
 
 // Initialize store and error display
 const store = new Store();
 const errorDisplay = new ErrorDisplay();
+
+// Initialize Clerk authentication helper
+const clerkAuth = getClerkAuthHelper();
 
 // Global variables
 let currentConfig = {};
@@ -430,7 +434,17 @@ async function checkAuthStatus() {
 
 // Update authentication UI
 function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
+  // New auth button and dropdown elements
   const authBtn = document.getElementById('auth-btn');
+  const authBtnIcon = authBtn?.querySelector('.material-icons');
+  const authBtnText = authBtn?.querySelector('.btn-text');
+  const accountDropdown = document.getElementById('account-dropdown');
+  const dropdownAvatar = document.getElementById('account-dropdown-avatar');
+  const dropdownAvatarIcon = document.getElementById('account-dropdown-avatar-icon');
+  const dropdownName = document.getElementById('account-dropdown-name');
+  const dropdownEmail = document.getElementById('account-dropdown-email');
+
+  // Legacy elements (for backward compatibility)
   const userAccountSection = document.getElementById('user-account-section');
   const userAvatar = document.getElementById('user-avatar');
   const userName = document.getElementById('user-name');
@@ -442,33 +456,79 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
   console.log('🎨 Updating enhanced auth UI:', { isAuthenticated, userData });
 
   if (isAuthenticated && userData) {
-    // Show user account section, hide sign-in button
+    // Update auth button to show account info
     if (authBtn) {
-      authBtn.classList.add('hidden');
-      console.log('🚫 Sign-in button hidden');
-    }
-    if (userAccountSection) {
-      userAccountSection.classList.remove('hidden');
-      console.log('✅ User account section shown');
+      authBtn.classList.add('authenticated');
+      authBtn.title = 'Account';
+
+      // Update icon and text
+      if (authBtnIcon) {
+        authBtnIcon.textContent = 'account_circle';
+      }
+      if (authBtnText) {
+        const displayName = userData.name ||
+                           userData.fullName ||
+                           (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
+                           userData.firstName ||
+                           userData.displayName ||
+                           userData.username ||
+                           userData.email?.split('@')[0] ||
+                           'Account';
+        authBtnText.textContent = displayName;
+      }
+
+      console.log('✅ Auth button updated to show account');
     }
 
-    // Update user avatar with better error handling
+    // Update dropdown content
+    if (dropdownName) {
+      const displayName = userData.name ||
+                         userData.fullName ||
+                         (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
+                         userData.firstName ||
+                         userData.displayName ||
+                         userData.username ||
+                         userData.email ||
+                         'User';
+      dropdownName.textContent = displayName;
+    }
+
+    if (dropdownEmail && userData.email) {
+      dropdownEmail.textContent = userData.email;
+    }
+
+    // Update dropdown avatar
+    if (dropdownAvatar && dropdownAvatarIcon) {
+      const imageUrl = userData.image_url || userData.imageUrl || userData.avatar || userData.picture;
+      if (imageUrl) {
+        dropdownAvatar.src = imageUrl;
+        dropdownAvatar.classList.remove('hidden');
+        dropdownAvatarIcon.classList.add('hidden');
+        dropdownAvatar.onerror = () => {
+          dropdownAvatar.classList.add('hidden');
+          dropdownAvatarIcon.classList.remove('hidden');
+        };
+      } else {
+        dropdownAvatar.classList.add('hidden');
+        dropdownAvatarIcon.classList.remove('hidden');
+      }
+    }
+
+    // Legacy UI updates (for backward compatibility)
+    if (userAccountSection) {
+      userAccountSection.classList.remove('hidden');
+    }
     if (userAvatar) {
       const imageUrl = userData.image_url || userData.imageUrl || userData.avatar || userData.picture;
       if (imageUrl) {
         userAvatar.src = imageUrl;
-        userAvatar.onerror = (e) => {
-          console.warn('Avatar image failed to load, using fallback:', e);
+        userAvatar.onerror = () => {
           userAvatar.src = '../../assets/logo_m.png';
         };
-        console.log('🖼️ Avatar set:', imageUrl);
       } else {
-        userAvatar.src = '../../assets/logo_m.png'; // Default avatar
-        console.log('🖼️ Using default avatar');
+        userAvatar.src = '../../assets/logo_m.png';
       }
     }
-
-    // Update user name with comprehensive fallbacks
     if (userName) {
       const displayName = userData.name ||
                          userData.fullName ||
@@ -478,25 +538,14 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
                          userData.username ||
                          userData.email ||
                          'User';
-
       userName.textContent = displayName;
-
-      console.log('📝 User name set:', displayName);
     }
-
-    // Update account email
     if (accountEmail && userData.email) {
       accountEmail.textContent = userData.email;
-      console.log('📧 Account email set:', userData.email);
     }
-
-    // Update sync status
     if (syncIndicator && syncText) {
       const syncStatusData = userData.sync_status || 'active';
-
-      // Reset classes
       syncIndicator.classList.remove('active', 'error');
-
       switch (syncStatusData) {
         case 'active':
           syncIndicator.classList.add('active');
@@ -513,63 +562,56 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
         default:
           syncText.textContent = 'Unknown';
       }
-
-      console.log('🔄 Sync status updated:', syncStatusData);
     }
 
     console.log('✅ Enhanced user authentication UI updated successfully');
   } else if (isGuestMode) {
-    // Guest mode UI: keep the topbar minimal — no big Guest Mode button
+    // Guest mode: show sign-in button
     if (authBtn) {
-      authBtn.classList.add('hidden');
-      authBtn.textContent = 'Sign In';
-      authBtn.style.backgroundColor = '';
-      authBtn.style.color = '';
-      authBtn.title = 'Sign In to Hintify';
+      authBtn.classList.remove('authenticated');
+      authBtn.title = 'Sign In';
+      if (authBtnIcon) authBtnIcon.textContent = 'login';
+      if (authBtnText) authBtnText.textContent = 'Sign In';
     }
+    if (accountDropdown) {
+      accountDropdown.classList.add('hidden');
+    }
+
+    // Legacy UI for guest mode
     if (userAccountSection) {
       userAccountSection.classList.remove('hidden');
       userAccountSection.classList.add('guest');
-      console.log('✅ User account section shown for guest mode');
     }
-
-    // Update UI elements for guest mode
     if (userAvatar) {
-      userAvatar.src = '../../assets/logo_m.png'; // Default avatar for guest
+      userAvatar.src = '../../assets/logo_m.png';
     }
-
     if (userName) {
       userName.textContent = 'Guest User';
-      userName.style.color = 'var(--fg-text)';
-      console.log('👤 Guest user name set');
     }
-
     if (accountEmail) {
       accountEmail.textContent = 'Using app without account';
-      console.log('📧 Guest mode email text set');
     }
-
     if (syncIndicator && syncText) {
       syncIndicator.classList.remove('active', 'error');
       syncIndicator.classList.add('guest');
       syncText.textContent = 'Guest Mode';
-      console.log('🔄 Guest mode sync status set');
     }
 
     console.log('✅ Guest mode UI updated successfully');
   } else {
-    // Show sign-in button, hide user account section
+    // Not authenticated: show sign-in button
     if (authBtn) {
-      authBtn.classList.remove('hidden');
-      authBtn.textContent = 'Sign In';
-      authBtn.style.backgroundColor = '';
-      authBtn.style.color = '';
-      authBtn.title = 'Sign In to Hintify';
+      authBtn.classList.remove('authenticated');
+      authBtn.title = 'Sign In';
+      if (authBtnIcon) authBtnIcon.textContent = 'login';
+      if (authBtnText) authBtnText.textContent = 'Sign In';
       console.log('✅ Sign-in button shown');
+    }
+    if (accountDropdown) {
+      accountDropdown.classList.add('hidden');
     }
     if (userAccountSection) {
       userAccountSection.classList.add('hidden');
-      console.log('🚫 User account section hidden');
     }
 
     console.log('❌ User not authenticated - sign-in UI shown');
@@ -605,6 +647,145 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Accessibility module failed to initialize', e);
   }
 });
+
+// ============================================================================
+// CLERK OAUTH AUTHENTICATION
+// ============================================================================
+
+/**
+ * Handle Clerk OAuth sign-in
+ *
+ * This function initiates the Clerk OAuth flow:
+ * 1. Calls main process to generate state and open browser
+ * 2. User completes Google OAuth via Clerk in browser
+ * 3. Web app redirects to myapp://auth/callback?token=...&state=...
+ * 4. Main process validates and sends success/error events
+ * 5. Event listeners update UI accordingly
+ */
+async function handleClerkSignIn() {
+  console.log('🔐 Starting Clerk OAuth sign-in...');
+
+  try {
+    const result = await clerkAuth.startLogin();
+
+    if (result.success) {
+      updateStatus('Please complete sign-in in your browser...');
+
+      // Set a timeout to offer guest mode if authentication takes too long
+      setTimeout(() => {
+        if (!userInfo) {
+          console.log('⏰ Authentication timeout - offering guest mode');
+          showAuthenticationTimeoutDialog();
+        }
+      }, 5 * 60 * 1000); // 5 minutes timeout (matches main process timeout)
+
+    } else {
+      console.error('❌ Failed to start Clerk login:', result.error);
+      // Fallback: open the browser sign-in directly via main process
+      try {
+        const { ipcRenderer } = require('electron');
+        updateStatus('Opening browser for sign-in...');
+        const fb = await ipcRenderer.invoke('open-browser-auth');
+        if (fb?.success) {
+          updateStatus('Please complete sign-in in your browser...');
+        } else {
+          handleAuthenticationError('Failed to open browser for sign-in', fb?.error || 'Unknown error');
+        }
+      } catch (fbErr) {
+        handleAuthenticationError('Failed to open browser for sign-in', fbErr.message);
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Clerk sign-in error:', error);
+    // Fallback: attempt direct browser sign-in
+    try {
+      const { ipcRenderer } = require('electron');
+      updateStatus('Opening browser for sign-in...');
+      const fb = await ipcRenderer.invoke('open-browser-auth');
+      if (fb?.success) {
+        updateStatus('Please complete sign-in in your browser...');
+      } else {
+        handleAuthenticationError('Failed to open browser for sign-in', fb?.error || error.message);
+      }
+    } catch (fbErr) {
+      handleAuthenticationError('Failed to open browser for sign-in', fbErr.message);
+    }
+  }
+}
+
+/**
+ * Handle Clerk authentication success
+ * Called when main process sends 'auth:clerk-success' event
+ */
+function handleClerkAuthSuccess(user) {
+  console.log('🎉 Clerk authentication successful:', user);
+
+  // Update user info
+  userInfo = user;
+
+  // Update UI to show authenticated state
+  updateAuthUI(true, user);
+
+  // Update status
+  updateStatus('Signed in successfully!');
+
+  // Show success notification
+  showNotification('Welcome!', `Signed in as ${user.email || user.name || 'User'}`);
+}
+
+/**
+ * Handle Clerk authentication error
+ * Called when main process sends 'auth:clerk-error' event
+ */
+function handleClerkAuthError(error) {
+  console.error('❌ Clerk authentication error:', error);
+
+  handleAuthenticationError('Authentication failed', error);
+}
+
+/**
+ * Handle Clerk logout
+ */
+async function handleClerkLogout() {
+  console.log('🚪 Signing out from Clerk...');
+
+  try {
+    const result = await clerkAuth.logout();
+
+    if (result.success) {
+      console.log('✅ Clerk logout successful');
+
+      // Clear user info
+      userInfo = null;
+
+      // Update UI
+      updateAuthUI(false);
+
+      // Update status
+      updateStatus('Signed out successfully');
+
+    } else {
+      console.error('❌ Clerk logout failed:', result.error);
+    }
+
+  } catch (error) {
+    console.error('❌ Error during Clerk logout:', error);
+  }
+}
+
+// Set up Clerk authentication event listeners
+clerkAuth.on('success', handleClerkAuthSuccess);
+clerkAuth.on('error', handleClerkAuthError);
+clerkAuth.on('logout', () => {
+  console.log('🚪 User logged out');
+  userInfo = null;
+  updateAuthUI(false);
+});
+
+// ============================================================================
+// LEGACY SUPABASE AUTHENTICATION (for backward compatibility)
+// ============================================================================
 
 // Handle sign-in button click with improved error handling
 function handleSignIn() {
@@ -658,6 +839,7 @@ function handleAuthenticationError(message, error) {
   // Add event listeners
   document.getElementById('retry-auth-btn')?.addEventListener('click', () => {
     document.body.removeChild(errorDialog);
+    // Retry using direct browser sign-in to avoid environment/config issues
     handleSignIn();
   });
 
@@ -1112,6 +1294,15 @@ function updateStatus(text) {
   if (statusEl) {
     statusEl.textContent = text;
   }
+}
+
+// Show notification (simple implementation)
+function showNotification(title, body) {
+  console.log(`📢 ${title}: ${body}`);
+
+  // You can enhance this with a toast notification UI
+  // For now, just update the status
+  updateStatus(body);
 }
 
 // Update mode toggle UI (bottom status bar)
@@ -2756,8 +2947,26 @@ function setupEventListeners() {
   }
 
   if (authBtn) {
-    authBtn.addEventListener('click', handleSignIn);
+    // Handle auth button click - either sign in or show account dropdown
+    authBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      // Check if user is authenticated
+      if (authBtn.classList.contains('authenticated')) {
+        // Show account dropdown
+        const accountDropdown = document.getElementById('account-dropdown');
+        if (accountDropdown) {
+          accountDropdown.classList.toggle('hidden');
+        }
+      } else {
+        // Start sign-in flow
+        handleClerkSignIn();
+      }
+    });
   }
+
+  // Set up account dropdown event listeners
+  setupAccountDropdown();
 
   // Mode toggle handler
   if (modeToggle) {
@@ -2777,7 +2986,7 @@ function setupEventListeners() {
 
   // If main process wants to show sign-in
   ipcRenderer.on('show-sign-in', () => {
-    handleSignIn();
+    handleClerkSignIn(); // Use Clerk OAuth
   });
 
   // Setup account menu and modals
@@ -2982,7 +3191,7 @@ function setupEventListeners() {
   // Listen for sign-in request from menu
   ipcRenderer.on('show-sign-in', () => {
     console.log('🔐 Sign-in requested from menu');
-    handleSignIn();
+    handleClerkSignIn(); // Use Clerk OAuth
   });
 
   // Settings are now opened in separate window via IPC
@@ -3006,7 +3215,56 @@ function setupEventListeners() {
   });
 }
 
-// Handle account menu dropdown
+// Set up account dropdown (new auth button dropdown)
+function setupAccountDropdown() {
+  const accountDropdown = document.getElementById('account-dropdown');
+  const profileBtn = document.getElementById('account-dropdown-profile');
+  const settingsBtn = document.getElementById('account-dropdown-settings');
+  const logoutBtn = document.getElementById('account-dropdown-logout');
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (accountDropdown && !accountDropdown.classList.contains('hidden')) {
+      const authBtn = document.getElementById('auth-btn');
+      if (!accountDropdown.contains(e.target) && e.target !== authBtn && !authBtn?.contains(e.target)) {
+        accountDropdown.classList.add('hidden');
+      }
+    }
+  });
+
+  // Prevent dropdown from closing when clicking inside it
+  if (accountDropdown) {
+    accountDropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+
+  // Profile button
+  if (profileBtn) {
+    profileBtn.addEventListener('click', () => {
+      if (accountDropdown) accountDropdown.classList.add('hidden');
+      showProfileModal();
+    });
+  }
+
+  // Settings button
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      if (accountDropdown) accountDropdown.classList.add('hidden');
+      showAccountSettingsModal();
+    });
+  }
+
+  // Logout button
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      if (accountDropdown) accountDropdown.classList.add('hidden');
+      await handleClerkLogout();
+    });
+  }
+}
+
+// Handle account menu dropdown (legacy)
 function setupAccountMenu() {
   const accountMenuBtn = document.getElementById('account-menu-btn');
   const accountDropdown = document.getElementById('account-dropdown');
@@ -3273,7 +3531,7 @@ function displayGuestModeMessage() {
   if (signInPromptBtn) {
     signInPromptBtn.addEventListener('click', () => {
       console.log('🔐 User chose to sign in from guest prompt');
-      handleSignIn();
+      handleClerkSignIn(); // Use Clerk OAuth
     });
   }
 }

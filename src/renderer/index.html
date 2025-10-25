@@ -39,10 +39,43 @@
                     <span class="material-icons">screenshot</span>
                     <span class="btn-text">Capture</span>
                 </button>
+
+                <!-- Sign In / Account Button -->
+                <button id="auth-btn" class="btn btn-secondary material-btn" title="Sign In" aria-label="Sign In">
+                    <span class="material-icons">login</span>
+                    <span class="btn-text">Sign In</span>
+                </button>
+
                 <button id="settings-btn" class="btn btn-secondary material-btn" title="Settings" aria-label="Settings">
                     <span class="material-icons">settings</span>
                 </button>
             </div>
+        </div>
+
+        <!-- Account Dropdown Menu (shown when authenticated) -->
+        <div id="account-dropdown" class="account-dropdown hidden">
+            <div class="account-dropdown-header">
+                <img id="account-dropdown-avatar" src="" alt="User Avatar" class="account-dropdown-avatar hidden">
+                <span id="account-dropdown-avatar-icon" class="material-icons account-dropdown-avatar-icon">account_circle</span>
+                <div class="account-dropdown-info">
+                    <div id="account-dropdown-name" class="account-dropdown-name">User Name</div>
+                    <div id="account-dropdown-email" class="account-dropdown-email">user@example.com</div>
+                </div>
+            </div>
+            <div class="account-dropdown-divider"></div>
+            <button id="account-dropdown-profile" class="account-dropdown-item">
+                <span class="material-icons">person</span>
+                <span>View Profile</span>
+            </button>
+            <button id="account-dropdown-settings" class="account-dropdown-item">
+                <span class="material-icons">settings</span>
+                <span>Account Settings</span>
+            </button>
+            <div class="account-dropdown-divider"></div>
+            <button id="account-dropdown-logout" class="account-dropdown-item">
+                <span class="material-icons">logout</span>
+                <span>Sign Out</span>
+            </button>
         </div>
 
         <!-- Update banner -->

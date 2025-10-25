@@ -2203,3 +2203,139 @@ input:checked + .toggle-slider:before {
 .progress-bar { width: 160px; height: 8px; border-radius: 999px; background: var(--button-bg); border: 1px solid var(--border); overflow: hidden; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #7c3aed); }
 .progress-text { font-size: 12px; opacity: 0.8; }
+
+/* ============================================================================
+   ACCOUNT DROPDOWN STYLES
+   ============================================================================ */
+
+/* Account dropdown container */
+.account-dropdown {
+  position: absolute;
+  top: 60px;
+  right: 60px;
+  width: 280px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  z-index: 10000;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Account dropdown header */
+.account-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.account-dropdown-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent);
+}
+
+.account-dropdown-avatar-icon {
+  font-size: 48px;
+  color: var(--accent);
+}
+
+.account-dropdown-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-dropdown-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-dropdown-email {
+  font-size: 12px;
+  color: var(--fg-text);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Account dropdown divider */
+.account-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+/* Account dropdown items */
+.account-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--fg-text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.account-dropdown-item:hover {
+  background: var(--hover-bg);
+}
+
+.account-dropdown-item .material-icons {
+  font-size: 20px;
+  opacity: 0.8;
+}
+
+.account-dropdown-item:last-child {
+  color: #ef4444;
+}
+
+.account-dropdown-item:last-child:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Auth button states */
+#auth-btn.authenticated {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+#auth-btn.authenticated:hover {
+  background: var(--accent);
+  opacity: 0.9;
+}
+
+#auth-btn .btn-text {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -4,10 +4,16 @@
   "productName": "Hintify (Dev)",
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
   "copyright": "Copyright © 2025 AryanVBW",
-  "protocols": {
-    "name": "hintify",
-    "schemes": ["hintify"]
-  },
+  "protocols": [
+    {
+      "name": "hintify",
+      "schemes": ["hintify"]
+    },
+    {
+      "name": "myapp-protocol",
+      "schemes": ["myapp"]
+    }
+  ],
   "directories": {
     "output": "dist",
     "buildResources": "build"

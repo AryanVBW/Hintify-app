@@ -47,6 +47,7 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
+    "@clerk/backend": "^2.19.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.3",
@@ -60,6 +61,8 @@
     "electron-updater": "^6.6.2",
     "framer-motion": "^12.23.22",
     "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "keytar": "^7.9.0",
     "lottie-web": "^5.13.0",
     "lucide-react": "^0.544.0",
     "ogl": "^1.0.11",
@@ -75,12 +78,20 @@
     "productName": "Hintify",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "copyright": "Copyright © 2025 AryanVBW",
-    "protocols": {
-      "name": "hintify",
-      "schemes": [
-        "hintify"
-      ]
-    },
+    "protocols": [
+      {
+        "name": "hintify",
+        "schemes": [
+          "hintify"
+        ]
+      },
+      {
+        "name": "myapp-protocol",
+        "schemes": [
+          "myapp"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist",
       "buildResources": "build"

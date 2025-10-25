@@ -1,5 +1,5 @@
 const electron = require('electron');
-const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, protocol, screen, systemPreferences } = electron;
+const { app, BrowserWindow, Menu, dialog, globalShortcut, clipboard, nativeImage, shell, ipcMain, session, protocol, screen, systemPreferences } = electron;
 const path = require('path');
 const fs = require('fs');
 const Store = require('electron-store');
@@ -14,6 +14,7 @@ const AuthService = require('./services/AuthService');
 const DatabaseService = require('./services/DatabaseService');
 const PortalDataTransferService = require('./services/PortalDataTransferService');
 const SupabaseService = require('./services/SupabaseService');
+const ClerkAuthService = require('./services/ClerkAuthService');
 
 // Initialize electron-store for persistent settings
 const store = new Store();
@@ -28,13 +29,14 @@ try {
 }
 
 // Initialize services with error handling
-let authService, dbService, portalService, supabaseService;
+let authService, dbService, portalService, supabaseService, clerkAuthService;
 
 try {
   authService = new AuthService();
   dbService = new DatabaseService();
   portalService = new PortalDataTransferService();
   supabaseService = new SupabaseService();
+  clerkAuthService = new ClerkAuthService();
   console.log('✅ All services initialized successfully');
 } catch (error) {
   console.error('❌ Failed to initialize services:', error.message);
@@ -60,6 +62,17 @@ try {
     isAuthenticated: () => false,
     getAuthStatus: () => ({ authenticated: false, session: null, lastActivity: null, sessionValid: false })
   };
+
+  // Create mock Clerk auth service
+  clerkAuthService = {
+    startLogin: async () => ({ state: null, authUrl: null }),
+    processCallback: async () => ({ success: false, error: 'Service unavailable' }),
+    restoreSession: async () => null,
+    signOut: async () => {},
+    getAuthStatus: () => ({ authenticated: false, user: null }),
+    isAuthenticated: () => false,
+    getCurrentUser: () => null
+  };
 }
 
 // Global variables
@@ -80,6 +93,45 @@ function resolveAsset(relPath) {
     ? path.join(__dirname, '..', 'assets')
     : path.join(process.resourcesPath || path.join(__dirname, '..', '..'), 'assets');
   return path.join(base, relPath);
+}
+// Development-mode cache clearing
+async function clearDevCachesIfDev() {
+  try {
+    const dev = isDevelopment || process.env.NODE_ENV === 'development' || !app.isPackaged;
+    if (!dev) {
+      return;
+    }
+    console.log('🧹 Development mode detected — clearing caches before initialization...');
+
+    // 1) Clear electron-store
+    try {
+      const devStore = new Store();
+      devStore.clear();
+      console.log('🧹 Cleared electron-store');
+    } catch (e) {
+      console.warn('⚠️ Failed to clear electron-store:', e?.message || e);
+    }
+
+    // 2) Clear Chromium storage and cache
+    try {
+      const s = session?.defaultSession;
+      if (s) {
+        // Clear all storage data types that can retain state between runs
+        await s.clearStorageData({
+          storages: ['appcache','cookies','filesystem','indexdb','localstorage','serviceworkers','shadercache','websql','cachestorage','sessions'],
+          quotas: ['temporary','persistent','syncable']
+        });
+        console.log('🧹 Cleared session storage data');
+
+        // Clear HTTP cache
+        try { await s.clearCache(); console.log('🧹 Cleared HTTP cache'); } catch {}
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to clear session storage/cache:', e?.message || e);
+    }
+  } catch (e) {
+    console.warn('⚠️ Dev cache clearing encountered an error:', e?.message || e);
+  }
 }
 
 // Default configuration
@@ -506,6 +558,133 @@ function registerIpcHandlers() {
   }
 });
 
+  // ============================================================================
+  // CLERK OAUTH AUTHENTICATION HANDLERS
+  // ============================================================================
+
+  /**
+   * Start Clerk OAuth login flow
+   *
+   * This handler:
+   * 1. Generates a cryptographically secure state parameter using crypto.randomUUID()
+   * 2. Opens the system browser to the web app's auth page with the state parameter
+   * 3. Returns the state for tracking (though the main process manages validation)
+   *
+   * Security: The state parameter prevents CSRF attacks by ensuring the callback
+   * matches the original request. It's validated when the deep link callback is received.
+   */
+  ipcMain.handle('auth:start-clerk-login', async () => {
+    try {
+      console.log('🔐 Starting Clerk OAuth login flow...');
+
+      // Generate state and get auth URL from ClerkAuthService
+      const { state, authUrl } = clerkAuthService.startLogin();
+
+      if (!authUrl || typeof authUrl !== 'string') {
+        throw new Error('Invalid auth URL from ClerkAuthService');
+      }
+
+      // Open system browser to the auth URL
+      // Using shell.openExternal() is more secure than embedding a webview because:
+      // 1. Uses the system's default browser with its security features
+      // 2. Leverages browser's password managers and autofill
+      // 3. Prevents credential theft through compromised webviews
+      // 4. Users can see the actual URL in their trusted browser
+      await shell.openExternal(authUrl);
+
+      console.log('✅ Browser opened for Clerk authentication');
+
+      return {
+        success: true,
+        message: 'Please complete sign-in in your browser'
+      };
+
+    } catch (error) {
+      console.error('❌ Failed to start Clerk login:', error);
+
+      // Fallback to direct browser sign-in so users can still authenticate
+      try {
+        const fallbackUrl = 'https://hintify.nexus-v.tech/sign-in?source=app';
+        await shell.openExternal(fallbackUrl);
+        console.log('✅ Fallback: Browser opened for authentication');
+        return {
+          success: true,
+          message: 'Please complete sign-in in your browser'
+        };
+      } catch (fallbackError) {
+        console.error('❌ Fallback sign-in failed:', fallbackError);
+        return {
+          success: false,
+          error: error.message || fallbackError.message
+        };
+      }
+    }
+  });
+
+  /**
+   * Get Clerk authentication status
+   *
+   * Returns the current authentication state including:
+   * - Whether user is authenticated
+   * - User information
+   * - Session validity
+   */
+  ipcMain.handle('auth:get-clerk-status', async () => {
+    try {
+      const authStatus = clerkAuthService.getAuthStatus();
+
+      return {
+        success: true,
+        authenticated: authStatus.authenticated,
+        user: authStatus.user,
+        sessionValid: authStatus.sessionValid
+      };
+
+    } catch (error) {
+      console.error('❌ Failed to get Clerk auth status:', error);
+      return {
+        success: false,
+        error: error.message,
+        authenticated: false
+      };
+    }
+  });
+
+  /**
+   * Sign out from Clerk
+   *
+   * This handler:
+   * 1. Clears credentials from system keychain (via keytar)
+   * 2. Clears session state
+   * 3. Notifies renderer of logout
+   */
+  ipcMain.handle('auth:clerk-logout', async () => {
+    try {
+      console.log('🚪 Signing out from Clerk...');
+
+      await clerkAuthService.signOut();
+
+      // Notify renderer of logout
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('auth:clerk-status-changed', {
+          authenticated: false,
+          user: null
+        });
+      }
+
+      console.log('✅ Clerk logout successful');
+
+      return { success: true };
+
+    } catch (error) {
+      console.error('❌ Clerk logout failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  });
+
   // Validate current session
   ipcMain.handle('validate-session', async () => {
   try {
@@ -852,10 +1031,10 @@ function createSettingsWindow(theme = 'theme-dark') {
     // Send theme to settings window after it's ready
     console.log('[Main] Settings window ready, sending theme:', theme);
     settingsWindow.webContents.send('apply-theme', theme);
-    
+
     settingsWindow.show();
     settingsWindow.focus();
-    
+
     if (isDevelopment) {
       settingsWindow.webContents.openDevTools();
     }
@@ -1107,7 +1286,22 @@ function registerGlobalShortcuts() {
   console.log(`Global shortcut registered: ${captureShortcut}`);
 }
 
-// Handle deep link authentication
+/**
+ * Handle deep link authentication callbacks
+ *
+ * This function handles two types of authentication:
+ * 1. Supabase OAuth (legacy): hintify://auth?token=...&refresh_token=...
+ * 2. Clerk OAuth (new): myapp://auth/callback?token=...&state=...
+ *
+ * Platform-specific deep link handling:
+ * - macOS: Uses 'open-url' event
+ * - Windows/Linux: Uses 'second-instance' event and parses process.argv
+ *
+ * Security:
+ * - Validates state parameter for Clerk OAuth (prevents CSRF attacks)
+ * - Verifies JWT tokens before trusting them
+ * - Uses secure credential storage (keytar)
+ */
 async function handleDeepLink(url) {
   try {
     console.log('🔗 Processing deep link:', url);
@@ -1116,30 +1310,107 @@ async function handleDeepLink(url) {
     const protocol = urlObj.protocol;
     const pathname = urlObj.pathname;
 
-    if (protocol !== 'hintify:') {
+    // Support both hintify:// and myapp:// protocols
+    if (protocol !== 'hintify:' && protocol !== 'myapp:') {
       console.warn('⚠️ Invalid protocol for deep link:', protocol);
       return;
     }
 
-    // Handle authentication deep link
+    // ========================================================================
+    // CLERK OAUTH CALLBACK: myapp://auth/callback?token=...&state=...
+    // ========================================================================
+    if ((protocol === 'myapp:' && pathname === '//auth/callback') || pathname === '/auth/callback') {
+      const searchParams = urlObj.searchParams;
+      const token = searchParams.get('token');
+      const state = searchParams.get('state');
+
+      console.log('🔗 Clerk OAuth callback received:', {
+        hasToken: !!token,
+        hasState: !!state,
+        tokenLength: token?.length
+      });
+
+      if (!token || !state) {
+        console.error('❌ Missing required parameters for Clerk OAuth callback');
+
+        if (mainWindow) {
+          dialog.showErrorBox(
+            'Authentication Error',
+            'The authentication link is missing required information. Please try signing in again.'
+          );
+        }
+        return;
+      }
+
+      // Process Clerk authentication callback
+      // This will:
+      // 1. Validate the state parameter (CSRF protection)
+      // 2. Verify the JWT token using Clerk's JWKS endpoint
+      // 3. Store credentials securely in system keychain
+      // 4. Establish the user session
+      const result = await clerkAuthService.processCallback({ token, state });
+
+      if (result.success) {
+        console.log('🎉 Clerk authentication successful');
+
+        // Notify renderer of successful authentication
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('auth:clerk-success', {
+            user: result.user,
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        // Show and focus main window
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createMainWindow();
+        }
+
+      } else {
+        console.error('❌ Clerk authentication failed:', result.error);
+
+        // Show error dialog
+        if (mainWindow) {
+          dialog.showErrorBox(
+            'Authentication Failed',
+            result.error || 'Failed to complete authentication. Please try again.'
+          );
+        }
+
+        // Notify renderer of error
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('auth:clerk-error', {
+            error: result.error,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+
+      return;
+    }
+
+    // ========================================================================
+    // SUPABASE OAUTH (LEGACY): hintify://auth?token=...&refresh_token=...
+    // ========================================================================
     if (pathname === '//auth' || pathname === '/auth') {
       const searchParams = urlObj.searchParams;
-      const accessToken = searchParams.get('token') || searchParams.get('access_token'); // Support both formats
+      const accessToken = searchParams.get('token') || searchParams.get('access_token');
       const refreshToken = searchParams.get('refresh_token');
       const userDataStr = searchParams.get('user');
       const expiresIn = searchParams.get('expires_in');
       const tokenType = searchParams.get('token_type');
 
-      console.log('🔗 Deep link parameters received:', {
+      console.log('🔗 Supabase OAuth callback received:', {
         hasAccessToken: !!accessToken,
         hasRefreshToken: !!refreshToken,
-        hasUserData: !!userDataStr,
-        accessTokenLength: accessToken?.length,
-        refreshTokenLength: refreshToken?.length
+        hasUserData: !!userDataStr
       });
 
       if (accessToken && refreshToken) {
-        console.log('🔐 Authentication tokens received via deep link');
+        console.log('🔐 Supabase authentication tokens received via deep link');
 
         // Parse user data
         let userData = null;
@@ -1173,12 +1444,9 @@ async function handleDeepLink(url) {
           createMainWindow();
         }
 
-        // Auth window no longer used - authentication handled via browser
-
       } else {
         console.warn('⚠️ Deep link missing required authentication tokens');
 
-        // Show error dialog
         if (mainWindow) {
           dialog.showErrorBox(
             'Authentication Error',
@@ -1186,9 +1454,12 @@ async function handleDeepLink(url) {
           );
         }
       }
-    } else {
-      console.warn('⚠️ Unknown deep link path:', pathname);
+
+      return;
     }
+
+    // Unknown deep link path
+    console.warn('⚠️ Unknown deep link path:', pathname);
 
   } catch (error) {
     console.error('❌ Error processing deep link:', error);
@@ -1369,13 +1640,30 @@ function setupApp() {
     isAuthenticated: authStatus.authenticated
   });
 
-  // Initialize authentication from storage
+  // Initialize authentication from storage (Supabase)
   authService.initializeFromStorage(store).then(authInitialized => {
     if (authInitialized) {
-      console.log('🔄 Authentication restored from storage');
+      console.log('🔄 Supabase authentication restored from storage');
     }
   }).catch(error => {
-    console.error('❌ Failed to initialize authentication:', error);
+    console.error('❌ Failed to initialize Supabase authentication:', error);
+  });
+
+  // Initialize Clerk authentication from storage
+  clerkAuthService.restoreSession().then(userData => {
+    if (userData) {
+      console.log('🔄 Clerk authentication restored from storage');
+
+      // Notify renderer if main window exists
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('auth:clerk-status-changed', {
+          authenticated: true,
+          user: userData
+        });
+      }
+    }
+  }).catch(error => {
+    console.error('❌ Failed to restore Clerk session:', error);
   });
 
   // Create and show main window
@@ -1405,16 +1693,57 @@ function setupApp() {
   }, 300000); // Every 5 minutes
 }
 
-// Protocol registration for deep linking
-if (process.defaultApp) {
-  if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('hintify', process.execPath, [path.resolve(process.argv[1])]);
-  }
+// ============================================================================
+// PROTOCOL REGISTRATION FOR DEEP LINKING
+// ============================================================================
+// Register both hintify:// (legacy Supabase) and myapp:// (Clerk OAuth) protocols
+//
+// Platform-specific behavior:
+// - macOS: Protocols are registered via Info.plist (configured in package.json build settings)
+// - Windows: Protocols are registered in the Windows Registry during installation
+// - Linux: Protocols are registered via .desktop files
+//
+// Single instance lock ensures only one app instance runs at a time
+// This is critical for deep link handling - when a deep link is triggered:
+// - If app is not running: App launches and receives URL via process.argv
+// - If app is already running: 'second-instance' event fires with the URL
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is already running, quit this one
+  console.log('⚠️ Another instance is already running, quitting...');
+  app.quit();
 } else {
-  app.setAsDefaultProtocolClient('hintify');
+  // Register protocols for deep linking
+  if (process.defaultApp) {
+    // Development mode - register with electron executable path
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient('hintify', process.execPath, [path.resolve(process.argv[1])]);
+      app.setAsDefaultProtocolClient('myapp', process.execPath, [path.resolve(process.argv[1])]);
+    }
+  } else {
+    // Production mode - register normally
+    app.setAsDefaultProtocolClient('hintify');
+    app.setAsDefaultProtocolClient('myapp');
+  }
+
+  console.log('✅ Protocols registered: hintify://, myapp://');
 }
 
-// Handle deep linking on Windows/Linux
+// ============================================================================
+// DEEP LINK HANDLERS
+// ============================================================================
+
+/**
+ * Handle deep linking on Windows/Linux
+ *
+ * When a deep link is triggered while the app is already running,
+ * this event fires with the command line arguments including the URL.
+ *
+ * This is part of the single instance lock mechanism - when a second
+ * instance tries to launch, we focus the existing window and handle
+ * the deep link instead of launching a new instance.
+ */
 app.on('second-instance', (event, commandLine) => {
   console.log('🔗 Second instance detected, handling deep link...');
 
@@ -1425,14 +1754,24 @@ app.on('second-instance', (event, commandLine) => {
   }
 
   // Handle deep link from command line
-  const url = commandLine.find(arg => arg.startsWith('hintify://'));
+  // Support both hintify:// and myapp:// protocols
+  const url = commandLine.find(arg => arg.startsWith('hintify://') || arg.startsWith('myapp://'));
   if (url) {
     console.log('🔗 Deep link URL from second instance:', url);
     handleDeepLink(url);
   }
 });
 
-// Handle deep linking on macOS
+/**
+ * Handle deep linking on macOS
+ *
+ * macOS uses the 'open-url' event to handle custom protocol URLs.
+ * This event fires when:
+ * 1. User clicks a custom protocol link (hintify:// or myapp://)
+ * 2. Another app opens a URL with our custom protocol
+ *
+ * The event is fired regardless of whether the app is already running.
+ */
 app.on('open-url', (event, url) => {
   event.preventDefault();
   console.log('🔗 Deep link URL from macOS:', url);
@@ -1440,7 +1779,10 @@ app.on('open-url', (event, url) => {
 });
 
 // App event handlers
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Clear caches in development before any initialization
+  await clearDevCachesIfDev();
+
   // About panel with author credit
   if (app.setAboutPanelOptions) {
     app.setAboutPanelOptions({
@@ -1455,7 +1797,8 @@ app.whenReady().then(() => {
   registerIpcHandlers();
 
   // Handle deep link from command line arguments (Windows/Linux)
-  const url = process.argv.find(arg => arg.startsWith('hintify://'));
+  // Support both hintify:// and myapp:// protocols
+  const url = process.argv.find(arg => arg.startsWith('hintify://') || arg.startsWith('myapp://'));
   if (url) {
     console.log('🔗 Deep link URL from command line:', url);
     deeplinkingUrl = url;

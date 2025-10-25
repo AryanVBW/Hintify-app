@@ -1,13 +1,13 @@
 /**
  * Hintify Settings Page - Production-Ready Implementation
- * 
+ *
  * This file handles all settings page functionality including:
  * - User authentication UI
  * - AI provider configuration
  * - Theme and appearance settings
  * - Update management
  * - Settings persistence
- * 
+ *
  * @version 2.0.0
  * @author Hintify Team
  */
@@ -160,10 +160,10 @@ function applyTheme(theme) {
     // Remove only theme-related classes, preserve other classes
     const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light', 'glassy-mode'];
     const glassyClasses = ['theme-glassy'];
-    
+
     document.body.classList.remove(...themeClasses);
     document.documentElement.classList.remove(...glassyClasses);
-    
+
     // Apply the selected theme
     if (theme === 'glass') {
       document.body.classList.add('theme-dark', 'glassy-mode');
@@ -173,7 +173,7 @@ function applyTheme(theme) {
       document.body.classList.add(`theme-${theme || 'dark'}`);
       store.set('glassy_mode', false);
     }
-    
+
     console.log('[Settings] Theme applied:', theme);
   } catch (error) {
     console.error('[Settings] Failed to apply theme:', error);
@@ -195,14 +195,14 @@ async function refreshUserCard() {
 
     // Update user name
     if (elements.userName) {
-      elements.userName.textContent = isAuthed 
+      elements.userName.textContent = isAuthed
         ? (status.user.name || status.user.firstName || status.user.email || 'User')
         : 'Guest User';
     }
 
     // Update user email
     if (elements.userEmail) {
-      elements.userEmail.textContent = isAuthed 
+      elements.userEmail.textContent = isAuthed
         ? (status.user.email || '')
         : (isGuest ? 'Guest Mode' : 'Using app without account');
     }
@@ -210,7 +210,7 @@ async function refreshUserCard() {
     // Handle avatar
     if (elements.userAvatar && elements.userAvatarIcon) {
       const avatarUrl = status?.user?.avatar || status?.user?.imageUrl || status?.user?.image_url || '';
-      
+
       if (isAuthed && avatarUrl) {
         elements.userAvatar.src = avatarUrl;
         elements.userAvatar.classList.remove('hidden');
@@ -243,7 +243,7 @@ async function refreshUserCard() {
  */
 function updateProviderFields() {
   const provider = elements.providerSelect?.value;
-  
+
   if (!provider) return;
 
   // Show/hide Ollama fields
@@ -380,9 +380,9 @@ async function updateOllamaModelList() {
     console.log('[Settings] Ollama models updated:', models.length);
   } catch (error) {
     console.error('[Settings] Failed to fetch Ollama models:', error);
-    
+
     modelSelect.innerHTML = '<option value="">Ollama not available</option>';
-    
+
     if (statusText) {
       statusText.textContent = '✗ Ollama not running or not installed';
       statusText.className = 'text-error';
@@ -627,7 +627,25 @@ async function handlePasteApiKey() {
   try {
     console.log('[Settings] Paste API key button clicked');
 
-    const text = await navigator.clipboard.readText();
+    let text = '';
+    // Try navigator.clipboard first
+    try {
+      if (navigator.clipboard?.readText) {
+        text = await navigator.clipboard.readText();
+      }
+    } catch (e) {
+      console.warn('[Settings] navigator.clipboard.readText() failed:', e?.message);
+    }
+
+    // Fallback to Electron clipboard
+    if (!text) {
+      try {
+        const { clipboard } = require('electron');
+        text = clipboard.readText();
+      } catch (e) {
+        console.warn('[Settings] Electron clipboard fallback failed:', e?.message);
+      }
+    }
 
     if (text && elements.geminiApiKey) {
       elements.geminiApiKey.value = text.trim();
@@ -785,7 +803,10 @@ function attachEventListeners() {
             console.log(`[Settings] Button clicked: ${elementName}`);
             // Prevent default behavior for buttons
             if (e.preventDefault) e.preventDefault();
-            
+            // Stop bubbling in case any parent overlay captures clicks
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+
             // Call the handler
             handler(e);
           } catch (error) {
@@ -836,7 +857,7 @@ function attachEventListeners() {
   if (attached.length > 0) {
     console.log(`[Settings]   - ${attached.join(', ')}`);
   }
-  
+
   if (failed.length > 0) {
     console.error(`[Settings] ❌ Failed to attach: ${failed.length} listeners`);
     console.error(`[Settings]   - ${failed.join(', ')}`);
@@ -845,16 +866,16 @@ function attachEventListeners() {
   // If critical buttons failed, try alternative approach
   if (failed.some(f => f.includes('Save button') || f.includes('Cancel button'))) {
     console.log('[Settings] Attempting alternative button selection...');
-    
+
     // Try to find buttons by different methods
     const saveBtn = document.querySelector('#save-btn, button[id="save-btn"], .btn-primary[type="button"]');
     const cancelBtn = document.querySelector('#cancel-btn, button[id="cancel-btn"], .btn-secondary[type="button"]');
-    
+
     if (saveBtn) {
       console.log('[Settings] Found Save button via alternative selector');
       safeAttach(saveBtn, 'Save button (alternative)', 'click', handleSaveSettings);
     }
-    
+
     if (cancelBtn) {
       console.log('[Settings] Found Cancel button via alternative selector');
       safeAttach(cancelBtn, 'Cancel button (alternative)', 'click', handleCancel);
@@ -913,10 +934,10 @@ function cacheElements() {
   const missingElements = Object.entries(elements).filter(([_, el]) => el === null);
 
   console.log(`[Settings] Found ${foundElements.length}/${Object.keys(elements).length} elements`);
-  
+
   if (missingElements.length > 0) {
     console.error('[Settings] Missing critical elements:', missingElements.map(([name]) => name));
-    
+
     // For critical buttons, try alternative selection methods
     const criticalButtons = ['saveBtn', 'cancelBtn', 'testConnectionBtn'];
     criticalButtons.forEach(btnName => {
@@ -970,11 +991,11 @@ async function initializeSettings() {
     // Step 2: Cache DOM elements with retry logic
     console.log('[Settings] Step 1/7: Caching DOM elements...');
     const elementsFound = cacheElements();
-    
+
     // Retry element caching if critical elements are missing
     const criticalElements = ['saveBtn', 'cancelBtn'];
     const missingCritical = criticalElements.filter(name => !elements[name]);
-    
+
     if (missingCritical.length > 0) {
       console.warn('[Settings] Missing critical elements, retrying after delay...');
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -984,10 +1005,19 @@ async function initializeSettings() {
     // Step 3: Attach event listeners
     console.log('[Settings] Step 2/7: Attaching event listeners...');
     const listenerResults = attachEventListeners();
-    
+
     if (listenerResults.failed > 0) {
       console.warn(`[Settings] Some event listeners failed to attach (${listenerResults.failed} failed, ${listenerResults.attached} succeeded)`);
     }
+    // Step 2.5: Install global click logger and delegated handlers for robustness
+    try {
+      installGlobalClickLogger();
+      installDelegatedHandlers();
+      logElementDiagnostics();
+    } catch (e) {
+      console.warn('[Settings] Failed to install global click handlers/diagnostics:', e?.message);
+    }
+
 
     // Step 4: Load settings into form
     console.log('[Settings] Step 3/7: Loading settings into form...');
@@ -1016,7 +1046,7 @@ async function initializeSettings() {
     isInitialized = true;
 
     console.log('[Settings] ✅ Settings page initialized successfully');
-    
+
     // Add a small delay and then test button functionality
     setTimeout(() => {
       console.log('[Settings] Running post-initialization button test...');
@@ -1025,7 +1055,7 @@ async function initializeSettings() {
 
   } catch (error) {
     console.error('[Settings] ❌ Failed to initialize settings page:', error);
-    
+
     // Show error to user if toast is available
     if (typeof toast !== 'undefined') {
       toast.error('Failed to load settings. Please refresh the page.', 5000);
@@ -1033,7 +1063,7 @@ async function initializeSettings() {
       // Fallback: show alert
       alert('Failed to load settings. Please refresh the page.\n\nError: ' + error.message);
     }
-    
+
     // Try to recover by retrying initialization after a delay
     console.log('[Settings] Attempting recovery in 3 seconds...');
     setTimeout(async () => {
@@ -1048,24 +1078,24 @@ async function initializeSettings() {
  */
 function testButtonFunctionality() {
   console.log('[Settings] 🧪 Testing button functionality...');
-  
+
   const buttonsToTest = [
     { name: 'Save', element: elements.saveBtn, id: 'save-btn' },
     { name: 'Cancel', element: elements.cancelBtn, id: 'cancel-btn' },
     { name: 'Test Connection', element: elements.testConnectionBtn, id: 'test-connection-btn' }
   ];
-  
+
   const workingButtons = [];
   const brokenButtons = [];
-  
+
   buttonsToTest.forEach(({ name, element, id }) => {
     if (element && element.onclick !== undefined) {
       // Check if element is visible and not disabled
-      const isVisible = !element.classList.contains('hidden') && 
+      const isVisible = !element.classList.contains('hidden') &&
                        element.style.display !== 'none' &&
                        element.offsetParent !== null;
       const isEnabled = !element.disabled;
-      
+
       if (isVisible && isEnabled) {
         workingButtons.push(name);
         console.log(`[Settings] ✓ ${name} button: Working (visible: ${isVisible}, enabled: ${isEnabled})`);
@@ -1076,7 +1106,7 @@ function testButtonFunctionality() {
     } else {
       brokenButtons.push(`${name} (element not found)`);
       console.error(`[Settings] ❌ ${name} button: Not found or invalid`);
-      
+
       // Try to find the element again
       const fallbackElement = document.getElementById(id);
       if (fallbackElement) {
@@ -1084,13 +1114,13 @@ function testButtonFunctionality() {
       }
     }
   });
-  
+
   if (workingButtons.length === buttonsToTest.length) {
     console.log('[Settings] ✅ All critical buttons are working!');
   } else {
     console.error(`[Settings] ❌ ${brokenButtons.length} buttons have issues:`, brokenButtons);
   }
-  
+
   return {
     working: workingButtons,
     broken: brokenButtons,
@@ -1172,10 +1202,10 @@ function setupIpcListeners() {
  */
 function initializeWhenReady() {
   console.log('[Settings] Document ready state:', document.readyState);
-  
+
   // Set up IPC listeners immediately
   setupIpcListeners();
-  
+
   // Initialize based on current document state
   if (document.readyState === 'loading') {
     console.log('[Settings] Document still loading, waiting for DOMContentLoaded...');
@@ -1200,6 +1230,94 @@ function initializeWhenReady() {
     }, 50);
   }
 }
+/**
+ * Install a capture-phase click logger to trace where clicks go
+ */
+function installGlobalClickLogger() {
+  if (installGlobalClickLogger._installed) return;
+  installGlobalClickLogger._installed = true;
+  document.addEventListener('click', (e) => {
+    try {
+      const path = (e.composedPath ? e.composedPath() : []).map(el => el?.id || el?.className || el?.tagName).slice(0, 6);
+      const tgt = describeEl(e.target);
+      console.log('[Settings][Capture] click:', { target: tgt, path, x: e.clientX, y: e.clientY });
+    } catch {}
+  }, true);
+}
+
+/**
+ * Delegated handlers to ensure buttons work even if direct listeners fail
+ */
+function installDelegatedHandlers() {
+  if (installDelegatedHandlers._installed) return;
+  installDelegatedHandlers._installed = true;
+  const map = [
+    { id: 'save-btn', name: 'Save', handler: handleSaveSettings },
+    { id: 'test-connection-btn', name: 'Test Connection', handler: handleTestConnection },
+    { id: 'paste-key-btn', name: 'Paste API key', handler: handlePasteApiKey },
+    { id: 'toggle-key-visibility', name: 'Toggle key visibility', handler: handleToggleKeyVisibility },
+    { id: 'settings-signin-btn', name: 'Sign In', handler: handleSignIn }
+  ];
+  document.addEventListener('click', (e) => {
+    try {
+      for (const { id, name, handler } of map) {
+        const el = e.target?.closest ? e.target.closest(`#${id}`) : null;
+        if (el) {
+          console.log(`[Settings][Delegation] Handling ${name} via capture`);
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          try { handler.call(el, e); } catch (err) {
+            console.error(`[Settings] Delegated handler error for ${name}:`, err);
+          }
+          break;
+        }
+      }
+    } catch (err) {
+      console.warn('[Settings] Delegation handler error:', err?.message);
+    }
+  }, true);
+}
+
+/**
+ * Log interactive diagnostics for key buttons
+ */
+function logElementDiagnostics() {
+  const list = [
+    { name: 'Save', el: elements.saveBtn },
+    { name: 'Test Connection', el: elements.testConnectionBtn },
+    { name: 'Paste', el: elements.pasteKeyBtn },
+    { name: 'Toggle', el: elements.toggleKeyVisibility },
+    { name: 'Sign In', el: elements.signInBtn }
+  ];
+  list.forEach(({ name, el }) => {
+    try {
+      if (!el) { console.warn(`[Settings][Diag] ${name}: element not found`); return; }
+      const cs = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      console.log(`[Settings][Diag] ${name}:`, {
+        exists: !!el,
+        display: cs.display,
+        visibility: cs.visibility,
+        opacity: cs.opacity,
+        pointerEvents: cs.pointerEvents,
+        disabled: !!el.disabled,
+        rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+        zIndex: cs.zIndex
+      });
+    } catch (err) {
+      console.warn(`[Settings][Diag] ${name}: failed to inspect`, err?.message);
+    }
+  });
+}
+
+function describeEl(el) {
+  if (!el) return 'null';
+  const id = el.id ? `#${el.id}` : '';
+  const cls = el.className ? `.${String(el.className).split(' ').join('.')}` : '';
+  return `${el.tagName}${id}${cls}`;
+}
+
 
 // Start initialization
 initializeWhenReady();
@@ -1228,11 +1346,11 @@ window.debugSettingsButtons = function() {
 
   Object.entries(buttons).forEach(([name, btn]) => {
     if (btn) {
-      const isVisible = !btn.classList.contains('hidden') && 
+      const isVisible = !btn.classList.contains('hidden') &&
                        btn.style.display !== 'none' &&
                        btn.offsetParent !== null;
       const isEnabled = !btn.disabled;
-      
+
       console.log(`✅ ${name} button:`, {
         id: btn.id,
         disabled: btn.disabled,
@@ -1255,25 +1373,25 @@ window.debugSettingsButtons = function() {
  */
 window.testButtonClicks = function() {
   console.log('🧪 === TESTING BUTTON CLICKS ===');
-  
+
   const testButtons = [
     { name: 'Save', element: elements.saveBtn, handler: handleSaveSettings },
     { name: 'Cancel', element: elements.cancelBtn, handler: handleCancel },
     { name: 'Test Connection', element: elements.testConnectionBtn, handler: handleTestConnection }
   ];
-  
+
   testButtons.forEach(({ name, element, handler }) => {
     if (element) {
       console.log(`Testing ${name} button...`);
       try {
         // Test if we can call the handler directly
         console.log(`  - Handler function exists: ${typeof handler === 'function'}`);
-        
+
         // Test if click event can be dispatched
         const clickEvent = new MouseEvent('click', { bubbles: true });
         element.dispatchEvent(clickEvent);
         console.log(`  ✅ ${name} click event dispatched successfully`);
-        
+
       } catch (error) {
         console.error(`  ❌ ${name} click test failed:`, error);
       }
@@ -1281,7 +1399,7 @@ window.testButtonClicks = function() {
       console.error(`  ❌ ${name} button element not found`);
     }
   });
-  
+
   console.log('🧪 === CLICK TESTING COMPLETE ===');
 };
 
@@ -1290,7 +1408,7 @@ window.testButtonClicks = function() {
  */
 window.manualButtonTest = function(buttonName) {
   console.log(`🧪 === MANUAL TEST: ${buttonName.toUpperCase()} ===`);
-  
+
   const handlers = {
     'save': handleSaveSettings,
     'cancel': handleCancel,
@@ -1302,7 +1420,7 @@ window.manualButtonTest = function(buttonName) {
     'toggle': handleToggleKeyVisibility,
     'update': handleCheckForUpdates
   };
-  
+
   const handler = handlers[buttonName.toLowerCase()];
   if (handler && typeof handler === 'function') {
     try {
