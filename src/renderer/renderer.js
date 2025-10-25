@@ -461,10 +461,42 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
       authBtn.classList.add('authenticated');
       authBtn.title = 'Account';
 
-      // Update icon and text
-      if (authBtnIcon) {
-        authBtnIcon.textContent = 'account_circle';
+      // Check if user has a profile picture
+      const imageUrl = userData.image_url || userData.imageUrl || userData.avatar || userData.picture;
+
+      if (imageUrl) {
+        // Replace icon with profile picture
+        if (authBtnIcon) {
+          // Create or update profile picture element
+          let profilePic = authBtn.querySelector('.auth-profile-pic');
+          if (!profilePic) {
+            profilePic = document.createElement('img');
+            profilePic.className = 'auth-profile-pic';
+            profilePic.style.cssText = 'width: 24px; height: 24px; border-radius: 50%; object-fit: cover; margin-right: 8px;';
+            authBtnIcon.parentNode.insertBefore(profilePic, authBtnIcon);
+          }
+          profilePic.src = imageUrl;
+          profilePic.onerror = () => {
+            // Fallback to icon if image fails to load
+            profilePic.style.display = 'none';
+            authBtnIcon.style.display = 'inline-block';
+            authBtnIcon.textContent = 'account_circle';
+          };
+          profilePic.style.display = 'inline-block';
+          authBtnIcon.style.display = 'none';
+        }
+      } else {
+        // No profile picture, use icon
+        if (authBtnIcon) {
+          authBtnIcon.style.display = 'inline-block';
+          authBtnIcon.textContent = 'account_circle';
+          const profilePic = authBtn.querySelector('.auth-profile-pic');
+          if (profilePic) {
+            profilePic.style.display = 'none';
+          }
+        }
       }
+
       if (authBtnText) {
         const displayName = userData.name ||
                            userData.fullName ||
@@ -477,7 +509,7 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
         authBtnText.textContent = displayName;
       }
 
-      console.log('✅ Auth button updated to show account');
+      console.log('✅ Auth button updated to show account with profile picture:', { hasImage: !!imageUrl });
     }
 
     // Update dropdown content
@@ -570,8 +602,16 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
     if (authBtn) {
       authBtn.classList.remove('authenticated');
       authBtn.title = 'Sign In';
-      if (authBtnIcon) authBtnIcon.textContent = 'login';
+      if (authBtnIcon) {
+        authBtnIcon.style.display = 'inline-block';
+        authBtnIcon.textContent = 'login';
+      }
       if (authBtnText) authBtnText.textContent = 'Sign In';
+      // Hide profile picture if it exists
+      const profilePic = authBtn.querySelector('.auth-profile-pic');
+      if (profilePic) {
+        profilePic.style.display = 'none';
+      }
     }
     if (accountDropdown) {
       accountDropdown.classList.add('hidden');
@@ -603,8 +643,16 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
     if (authBtn) {
       authBtn.classList.remove('authenticated');
       authBtn.title = 'Sign In';
-      if (authBtnIcon) authBtnIcon.textContent = 'login';
+      if (authBtnIcon) {
+        authBtnIcon.style.display = 'inline-block';
+        authBtnIcon.textContent = 'login';
+      }
       if (authBtnText) authBtnText.textContent = 'Sign In';
+      // Hide profile picture if it exists
+      const profilePic = authBtn.querySelector('.auth-profile-pic');
+      if (profilePic) {
+        profilePic.style.display = 'none';
+      }
       console.log('✅ Sign-in button shown');
     }
     if (accountDropdown) {
