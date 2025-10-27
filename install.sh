@@ -269,7 +269,7 @@ command_exists() {
 
 # Install Homebrew
 install_homebrew() {
-    step_indicator 1 7 "Checking Homebrew Installation"
+    step_indicator 1 9 "Checking Homebrew Installation"
     
     if command_exists brew; then
         print_message "$GREEN" "Homebrew is already installed" "$CHECK"
@@ -298,7 +298,7 @@ install_homebrew() {
 
 # Fetch latest release information from GitHub
 fetch_latest_release() {
-    step_indicator 2 8 "Fetching Latest Release Information"
+    step_indicator 2 9 "Fetching Latest Release Information"
 
     print_message "$CYAN" "Connecting to GitHub API..." "$INFO"
 
@@ -396,7 +396,7 @@ fetch_latest_release() {
 
 # Install wget
 install_wget() {
-    step_indicator 3 8 "Checking wget Installation"
+    step_indicator 3 9 "Checking wget Installation"
 
     if command_exists wget; then
         print_message "$GREEN" "wget is already installed" "$CHECK"
@@ -442,7 +442,7 @@ show_installation_plan() {
 
 # Download app with progress and retry logic
 download_app() {
-    step_indicator 4 8 "Downloading ${APP_DISPLAY_NAME} ${LATEST_VERSION}"
+    step_indicator 4 9 "Downloading ${APP_DISPLAY_NAME} ${LATEST_VERSION}"
 
     local file_name=$(basename "$GITHUB_REPO_URL")
     print_message "$CYAN" "Downloading: ${file_name}" "$DOWNLOAD"
@@ -575,7 +575,7 @@ download_app() {
 
 # Extract ZIP
 extract_app() {
-    step_indicator 5 8 "Extracting Application"
+    step_indicator 5 9 "Extracting Application"
 
     print_message "$CYAN" "Extracting ${APP_NAME} ${LATEST_VERSION}..." "$INSTALL"
 
@@ -639,9 +639,155 @@ extract_app() {
     print_message "$GREEN" "App bundle validated successfully" "$SUCCESS"
 }
 
+# Clean old installations and cached data
+clean_old_installations() {
+    step_indicator 6 9 "Cleaning Old Installations & Cache"
+
+    print_message "$CYAN" "Checking for previous installations..." "$INFO"
+
+    local cleaned_something=false
+
+    # 1. Remove old app bundles from both possible locations
+    local app_locations=(
+        "$HOME/Applications/Hintify.app"
+        "/Applications/Hintify.app"
+        "$HOME/Applications/Hintify (Dev).app"
+        "/Applications/Hintify (Dev).app"
+    )
+
+    for app_path in "${app_locations[@]}"; do
+        if [ -d "$app_path" ]; then
+            local old_version=""
+            local old_info_plist="$app_path/Contents/Info.plist"
+            if [ -f "$old_info_plist" ]; then
+                old_version=$(defaults read "$old_info_plist" CFBundleShortVersionString 2>/dev/null || echo "unknown")
+            fi
+
+            print_message "$YELLOW" "Found old installation: $(basename "$app_path") (v$old_version)" "$INFO"
+            print_message "$CYAN" "Removing: $app_path" "$INFO"
+
+            # Check if we need sudo for /Applications
+            if [[ "$app_path" == /Applications/* ]]; then
+                if sudo rm -rf "$app_path" 2>/dev/null; then
+                    print_message "$GREEN" "Removed old app bundle" "$SUCCESS"
+                    cleaned_something=true
+                fi
+            else
+                if rm -rf "$app_path" 2>/dev/null; then
+                    print_message "$GREEN" "Removed old app bundle" "$SUCCESS"
+                    cleaned_something=true
+                fi
+            fi
+        fi
+    done
+
+    # 2. Clean Electron cache directories
+    print_message "$CYAN" "Cleaning cache directories..." "$INFO"
+
+    local cache_dirs=(
+        "$HOME/Library/Caches/Hintify"
+        "$HOME/Library/Caches/com.hintify.snapassist"
+        "$HOME/Library/Caches/com.hintify.snapassist.dev"
+        "$HOME/Library/Caches/hintify"
+    )
+
+    for cache_dir in "${cache_dirs[@]}"; do
+        if [ -d "$cache_dir" ]; then
+            print_message "$YELLOW" "Removing cache: $(basename "$cache_dir")" "$INFO"
+            if rm -rf "$cache_dir" 2>/dev/null; then
+                cleaned_something=true
+            fi
+        fi
+    done
+
+    # 3. Clean Application Support data
+    print_message "$CYAN" "Cleaning application data..." "$INFO"
+
+    local app_support_dirs=(
+        "$HOME/Library/Application Support/Hintify"
+        "$HOME/Library/Application Support/com.hintify.snapassist"
+        "$HOME/Library/Application Support/hintify"
+    )
+
+    for support_dir in "${app_support_dirs[@]}"; do
+        if [ -d "$support_dir" ]; then
+            print_message "$YELLOW" "Removing app data: $(basename "$support_dir")" "$INFO"
+            if rm -rf "$support_dir" 2>/dev/null; then
+                cleaned_something=true
+            fi
+        fi
+    done
+
+    # 4. Clean preferences/settings files
+    print_message "$CYAN" "Cleaning preferences..." "$INFO"
+
+    local pref_files=(
+        "$HOME/Library/Preferences/com.hintify.snapassist.plist"
+        "$HOME/Library/Preferences/com.hintify.snapassist.dev.plist"
+        "$HOME/Library/Preferences/hintify.plist"
+    )
+
+    for pref_file in "${pref_files[@]}"; do
+        if [ -f "$pref_file" ]; then
+            print_message "$YELLOW" "Removing preference: $(basename "$pref_file")" "$INFO"
+            if rm -f "$pref_file" 2>/dev/null; then
+                cleaned_something=true
+            fi
+        fi
+    done
+
+    # 5. Clean saved application state
+    local saved_state_dirs=(
+        "$HOME/Library/Saved Application State/com.hintify.snapassist.savedState"
+        "$HOME/Library/Saved Application State/com.hintify.snapassist.dev.savedState"
+    )
+
+    for state_dir in "${saved_state_dirs[@]}"; do
+        if [ -d "$state_dir" ]; then
+            print_message "$YELLOW" "Removing saved state: $(basename "$state_dir")" "$INFO"
+            if rm -rf "$state_dir" 2>/dev/null; then
+                cleaned_something=true
+            fi
+        fi
+    done
+
+    # 6. Clean logs
+    local log_dirs=(
+        "$HOME/Library/Logs/Hintify"
+        "$HOME/Library/Logs/com.hintify.snapassist"
+    )
+
+    for log_dir in "${log_dirs[@]}"; do
+        if [ -d "$log_dir" ]; then
+            print_message "$YELLOW" "Removing logs: $(basename "$log_dir")" "$INFO"
+            if rm -rf "$log_dir" 2>/dev/null; then
+                cleaned_something=true
+            fi
+        fi
+    done
+
+    # 7. Kill any running instances of the app
+    print_message "$CYAN" "Checking for running instances..." "$INFO"
+    if pgrep -x "Hintify" > /dev/null 2>&1; then
+        print_message "$YELLOW" "Stopping running Hintify instances..." "$INFO"
+        killall "Hintify" 2>/dev/null || true
+        sleep 1
+        cleaned_something=true
+    fi
+
+    if [ "$cleaned_something" = true ]; then
+        print_message "$GREEN" "Cleanup completed - ready for fresh installation" "$SUCCESS"
+    else
+        print_message "$BLUE" "No previous installation found - proceeding with fresh install" "$INFO"
+    fi
+
+    # Small delay to ensure all cleanup operations are complete
+    sleep 0.5
+}
+
 # Move to Applications
 move_to_applications() {
-    step_indicator 6 8 "Installing to Applications Folder"
+    step_indicator 7 9 "Installing to Applications Folder"
 
     local target_dir="$HOME/Applications"
     local needs_sudo=false
@@ -657,20 +803,10 @@ move_to_applications() {
 
     print_message "$CYAN" "Installing ${APP_NAME} ${LATEST_VERSION} to $target_dir..." "$INFO"
 
-    # Check if existing app is present and show version
+    # Final check - ensure no app exists at target location
+    # (cleanup function should have removed it, but double-check)
     if [ -d "$target_dir/$APP_BASENAME" ]; then
-        local old_version=""
-        local old_info_plist="$target_dir/$APP_BASENAME/Contents/Info.plist"
-        if [ -f "$old_info_plist" ]; then
-            old_version=$(defaults read "$old_info_plist" CFBundleShortVersionString 2>/dev/null || echo "unknown")
-        fi
-
-        if [ -n "$old_version" ]; then
-            print_message "$YELLOW" "Replacing existing version: $old_version" "$INFO"
-        else
-            print_message "$YELLOW" "Replacing existing installation" "$INFO"
-        fi
-
+        print_message "$YELLOW" "Removing any remaining files at install location..." "$INFO"
         if [ "$needs_sudo" = true ]; then
             sudo rm -rf "$target_dir/$APP_BASENAME" 2>/dev/null
         else
@@ -679,6 +815,7 @@ move_to_applications() {
     fi
 
     # Move the app
+    print_message "$CYAN" "Installing new version to $target_dir..." "$INFO"
     if [ "$needs_sudo" = true ]; then
         sudo mv "$APP_PATH" "$target_dir/" &
         spinner $! "Moving application"
@@ -700,7 +837,7 @@ move_to_applications() {
 
 # Codesign the app
 codesign_app() {
-    step_indicator 7 8 "Code Signing Application"
+    step_indicator 8 9 "Code Signing Application"
 
     print_message "$CYAN" "Applying ad-hoc signature..." "$INFO"
     wave_animation 1
@@ -792,7 +929,7 @@ show_credits() {
 
 # Launch app with celebration
 launch_app() {
-    step_indicator 8 8 "Launching ${APP_DISPLAY_NAME}"
+    step_indicator 9 9 "Launching ${APP_DISPLAY_NAME}"
 
     print_message "$CYAN" "Preparing to launch ${APP_DISPLAY_NAME}..." "$ROCKET"
 
@@ -889,12 +1026,13 @@ main() {
 
     download_app
     extract_app
+    clean_old_installations
     move_to_applications
     codesign_app
-    
+
     # Show appreciation for the amazing team
     show_credits
-    
+
     launch_app
     
     # Clean up
