@@ -306,6 +306,15 @@ function registerIpcHandlers() {
     try { return app.getName(); } catch { return 'Hintify'; }
   });
 
+  ipcMain.handle('get-app-version', () => {
+    try { return app.getVersion(); } catch { return '1.0.0'; }
+  });
+
+  // Renderer logging handler (for debugging)
+  ipcMain.on('renderer-log', (event, message) => {
+    console.log('[Renderer]', message);
+  });
+
   // Settings and configuration handlers
   ipcMain.on('open-settings', (event, data) => {
     const theme = data?.theme || 'theme-dark';

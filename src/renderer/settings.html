@@ -4,26 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Hintify</title>
-    <!-- Material-UI Fonts and Icons -->
+
+    <!-- Material Icons and Fonts -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    
-    <!-- Local CSS files with error handling -->
-    <link rel="stylesheet" href="styles.css" onerror="console.error('Failed to load styles.css')">
-    <link rel="stylesheet" href="settings.css" onerror="console.error('Failed to load settings.css')">
-    <link rel="stylesheet" href="glassy-theme.css" onerror="console.error('Failed to load glassy-theme.css')">
-    <link rel="stylesheet" href="toast.css" onerror="console.error('Failed to load toast.css')">
-    
-    <!-- Fallback styles -->
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="settings.css">
+    <link rel="stylesheet" href="glassy-theme.css">
+    <link rel="stylesheet" href="toast.css">
+
+    <!-- Inline fallback styles -->
     <style>
-        /* Fallback styles in case CSS files fail to load */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
             background-color: #0f172a;
             color: #e5e7eb;
             margin: 0;
             padding: 0;
         }
+        .hidden { display: none !important; }
         .btn {
             background-color: #374151;
             color: #e5e7eb;
@@ -37,353 +38,329 @@
             background-color: #22c55e;
             color: #0f172a;
         }
-        .hidden {
-            display: none !important;
-        }
     </style>
 </head>
 <body class="theme-dark material-ui" id="settings-body">
+
+<!-- Theme initialization script -->
 <script>
     const { ipcRenderer } = require('electron');
-    
-    // Load theme and glassy mode preference - with error handling
+
     try {
         const Store = require('electron-store');
         const store = new Store();
-        
-        // Load saved theme
+
+        // Load and apply saved theme
         const savedTheme = store.get('app-theme', 'theme-dark');
         console.log('[Settings] Loading theme:', savedTheme);
-        
-        // Apply theme class - preserve existing classes
+
         const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
         document.body.classList.remove(...themeClasses);
         document.body.classList.add(savedTheme, 'material-ui');
-        
-        // Load glassy mode if applicable
+
+        // Apply glassy mode if enabled
         if (store.get('glassy_mode', false)) {
             document.body.classList.add('glassy-mode');
             document.documentElement.classList.add('theme-glassy');
         }
-        
-        console.log('[Settings] Theme applied successfully:', document.body.className);
-        
+
+        console.log('[Settings] Theme applied:', document.body.className);
+
         // Listen for theme updates from main process
         ipcRenderer.on('apply-theme', (event, theme) => {
-            console.log('[Settings] Received theme from main process:', theme);
-            
-            // Apply theme - preserve existing classes
-            const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
+            console.log('[Settings] Theme update received:', theme);
             document.body.classList.remove(...themeClasses);
             document.body.classList.add(theme, 'material-ui');
-            
-            // Reapply glassy mode if needed
+
             if (store.get('glassy_mode', false)) {
                 document.body.classList.add('glassy-mode');
                 document.documentElement.classList.add('theme-glassy');
             }
-            
-            console.log('[Settings] Theme updated to:', document.body.className);
         });
-        
+
     } catch (error) {
-        console.error('[Settings] Failed to load theme:', error);
-        // Continue without store - settings will use defaults
+        console.error('[Settings] Theme initialization failed:', error);
     }
 </script>
-    <div class="settings-container">
-        <div class="settings-header">
-            <span class="material-icons header-icon">tune</span>
-            <div class="header-content">
-                <h1>Settings</h1>
-                <p>Configure Hintify to your preferences</p>
-            </div>
+
+<!-- Main Container -->
+<div class="settings-container">
+
+    <!-- Header -->
+    <header class="settings-header">
+        <span class="material-icons header-icon">tune</span>
+        <div class="header-content">
+            <h1>Settings</h1>
+            <p>Configure Hintify to your preferences</p>
         </div>
+    </header>
 
-        <div class="settings-content">
-            <!-- User section -->
-            <div class="user-card">
-                <div class="user-left">
-                    <div class="avatar-wrap">
-                        <img id="settings-user-avatar" class="user-avatar hidden" alt="User">
-                        <span id="settings-user-avatar-icon" class="material-icons user-avatar-icon">account_circle</span>
-                    </div>
-                    <div class="user-meta">
-                        <div id="settings-user-name" class="user-name">Guest User</div>
-                        <div id="settings-user-email" class="user-email">Using app without account</div>
-                    </div>
+    <!-- Main Content -->
+    <main class="settings-content">
+
+        <!-- User Authentication Card -->
+        <section class="user-card" aria-label="User Account">
+            <div class="user-left">
+                <div class="avatar-wrap">
+                    <img id="user-avatar" class="user-avatar hidden" alt="User avatar">
+                    <span id="user-avatar-icon" class="material-icons user-avatar-icon">account_circle</span>
                 </div>
-                <div class="user-actions">
-                    <button id="settings-signin-btn" class="btn btn-primary">
-                        <span class="material-icons">login</span>
-                        <span>Sign In</span>
-                    </button>
-                    <button id="settings-signout-btn" class="btn btn-secondary hidden">
-                        <span class="material-icons">logout</span>
-                        <span>Sign Out</span>
-                    </button>
+                <div class="user-meta">
+                    <div id="user-name" class="user-name">Guest User</div>
+                    <div id="user-email" class="user-email">Using app without account</div>
                 </div>
             </div>
+            <div class="user-actions">
+                <button id="signin-btn" class="btn btn-primary" type="button">
+                    <span class="material-icons">login</span>
+                    <span>Sign In</span>
+                </button>
+                <button id="signout-btn" class="btn btn-secondary hidden" type="button">
+                    <span class="material-icons">logout</span>
+                    <span>Sign Out</span>
+                </button>
+            </div>
+        </section>
 
-            <!-- Updates Card (moved just below user section) -->
-            <div class="card updates-card">
-                <h3>
-                    <span class="material-icons card-icon">system_update</span>
-                    Updates
-                </h3>
+        <!-- AI Provider Selection Card -->
+        <section class="card" aria-label="AI Provider Selection">
+            <h3>
+                <span class="material-icons card-icon">psychology</span>
+                AI Provider
+            </h3>
+
+            <div class="setting-group">
+                <label for="provider-select">
+                    <span class="material-icons label-icon">cloud</span>
+                    Select AI Provider
+                </label>
+                <select id="provider-select" name="provider">
+                    <option value="gemini">Gemini (Cloud) - Recommended</option>
+                    <option value="ollama">Ollama (Local)</option>
+                </select>
+                <small>Choose between cloud-based Gemini AI or local Ollama models</small>
+            </div>
+        </section>
+
+        <!-- Gemini Configuration Card -->
+        <section class="card gemini-card gemini-field" aria-label="Gemini Configuration">
+            <h3>
+                <span class="material-icons card-icon">auto_awesome</span>
+                Gemini Configuration
+            </h3>
+
+            <div class="setting-group">
+                <label for="gemini-model">
+                    <span class="material-icons label-icon">auto_awesome</span>
+                    Gemini Model
+                </label>
+                <select id="gemini-model" name="gemini-model">
+                    <option value="gemini-2.0-flash">gemini-2.0-flash (Recommended)</option>
+                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                </select>
+                <small>Select the Gemini model to use for AI responses</small>
+            </div>
+
+            <div class="setting-group">
+                <label for="gemini-api-key">
+                    <span class="material-icons label-icon">key</span>
+                    Gemini API Key
+                </label>
+                <div class="api-key-group">
+                    <input type="password" id="gemini-api-key" name="gemini-api-key"
+                           placeholder="Enter your Gemini API key"
+                           autocomplete="off" spellcheck="false" aria-label="Gemini API Key">
+                    <button type="button" id="paste-key-btn" class="btn btn-icon-only"
+                            title="Paste from clipboard" aria-label="Paste API key from clipboard">
+                        <span class="material-icons">content_paste</span>
+                    </button>
+                    <button type="button" id="toggle-key-visibility" class="btn btn-icon-only"
+                            title="Toggle visibility" aria-label="Toggle API key visibility">
+                        <span class="material-icons">visibility</span>
+                    </button>
+                </div>
+                <small>
+                    Get your API key from
+                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+                    <br>
+                    <em>Tip: Copy your API key, then click the paste button to insert it</em>
+                </small>
+            </div>
+        </section>
+
+        <!-- Ollama Configuration Card -->
+        <section class="card ollama-card ollama-field" aria-label="Ollama Configuration">
+            <h3>
+                <span class="material-icons card-icon">memory</span>
+                Ollama Configuration
+            </h3>
+
+            <div class="setting-group">
+                <label for="ollama-model">
+                    <span class="material-icons label-icon">memory</span>
+                    Ollama Model
+                </label>
+                <div style="position: relative;">
+                    <select id="ollama-model" name="ollama-model" class="ollama-model-select">
+                        <option value="">Loading models...</option>
+                    </select>
+                    <button type="button" id="refresh-ollama-btn" class="btn btn-icon-only"
+                            style="position: absolute; right: 0; top: 0; padding: 8px 12px;"
+                            title="Refresh Ollama models" aria-label="Refresh Ollama models">
+                        <span class="material-icons">refresh</span>
+                    </button>
+                </div>
+                <small id="ollama-status">Checking Ollama status...</small>
+            </div>
+
+            <div class="setting-group">
+                <small style="display: block; margin-top: 8px;">
+                    <strong>Note:</strong> Ollama must be running locally on port 11434.
+                    <br>
+                    For vision mode, use models like <em>granite3.2-vision:2b</em> or <em>llava</em>.
+                </small>
+            </div>
+        </section>
+
+        <!-- Appearance & Features Card -->
+        <section class="card" aria-label="Appearance and Features">
+            <h3>
+                <span class="material-icons card-icon">palette</span>
+                Appearance & Features
+            </h3>
+
+            <div class="grid-2">
+                <!-- Advanced Mode Toggle -->
                 <div class="setting-group">
-                    <label>
-                        <span class="material-icons label-icon">info</span>
-                        App Version
+                    <label for="advanced-mode-toggle">
+                        <span class="material-icons label-icon">auto_awesome</span>
+                        Advanced Hint Mode
                     </label>
-                    <div id="current-version" class="version-display">—</div>
-                    <small id="latest-version-text" class="hidden"></small>
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="advanced-mode-toggle" name="advanced-mode">
+                        <label for="advanced-mode-toggle">Send screenshots directly to the AI (skip OCR)</label>
+                    </div>
+                    <small>
+                        Uses a vision-capable model to read the screenshot and generate hints. Recommended models:
+                        <em>gemini-1.5-flash</em> or Ollama vision models like <em>granite3.2-vision:2b</em>.
+                    </small>
                 </div>
 
-                <div class="setting-group">
-                    <button type="button" id="check-update-btn" class="btn btn-secondary">
-                        <span class="material-icons">cloud_download</span>
-                        <span>Check for Updates</span>
-                    </button>
-                    <div id="update-progress" class="hidden" style="margin-top:8px"><small>Preparing update…</small></div>
-                </div>
-
-                <!-- Update Notification Banner -->
-                <div id="update-notification" class="update-notification hidden">
-                    <div class="update-notification-content">
-                        <span class="material-icons update-icon">system_update</span>
-                        <div class="update-details">
-                            <div class="update-title">Update Available!</div>
-                            <div class="update-version">Version <span id="update-new-version">—</span> is available</div>
-                            <div class="update-notes" id="update-release-notes"></div>
-                        </div>
-                        <div class="update-actions">
-                            <button type="button" id="update-now-btn" class="btn btn-primary btn-sm">
-                                <span class="material-icons">download</span>
-                                <span>Update Now</span>
-                            </button>
-                            <button type="button" id="update-later-btn" class="btn btn-secondary btn-sm">
-                                <span>Later</span>
-                            </button>
-                        </div>
+                <!-- Keyboard Shortcuts Info -->
+                <div class="setting-group span-2">
+                    <div class="shortcuts-label">
+                        <span class="material-icons label-icon">keyboard</span>
+                        <strong>Keyboard Shortcuts</strong>
                     </div>
-                </div>
-            </div>
-
-            <!-- AI Settings Card -->
-            <div class="card">
-                <h3>
-                    <span class="material-icons card-icon">psychology</span>
-                    AI Settings
-                </h3>
-                <div class="grid-2">
-                    <div class="setting-group">
-                        <label for="provider-select">
-                            <span class="material-icons label-icon">cloud</span>
-                            AI Provider
-                        </label>
-                        <select id="provider-select">
-                            <option value="gemini">Gemini (Cloud) - Recommended</option>
-                            <option value="ollama">Ollama (Local)</option>
-                        </select>
-                        <small>Choose between local Ollama or cloud-based Gemini AI</small>
-                    </div>
-
-                    <div class="setting-group">
-                        <label for="ollama-model">
-                            <span class="material-icons label-icon">memory</span>
-                            Ollama Model
-                        </label>
-                        <div style="position: relative;">
-                            <select id="ollama-model" class="ollama-model-select">
-                                <option value="">Loading models...</option>
-                            </select>
-                            <button type="button" id="refresh-ollama-models" class="btn btn-icon-only" style="position: absolute; right: 0; top: 0; padding: 8px 12px;" title="Refresh Ollama models">
-                                <span class="material-icons">refresh</span>
-                            </button>
-                        </div>
-                        <small id="ollama-status-text">Checking Ollama status...</small>
-                    </div>
-
-                    <div class="setting-group">
-                        <label for="gemini-model">
-                            <span class="material-icons label-icon">auto_awesome</span>
-                            Gemini Model
-                        </label>
-                        <select id="gemini-model">
-                            <option value="gemini-2.0-flash">gemini-2.0-flash (Recommended)</option>
-                            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-                            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                        </select>
-                        <small>Gemini model to use for AI responses</small>
-                    </div>
-
-                    <div class="setting-group span-2">
-                        <label for="gemini-api-key">
-                            <span class="material-icons label-icon">key</span>
-                            Gemini API Key
-                        </label>
-                        <div class="api-key-group">
-                            <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key" autocomplete="off" spellcheck="false">
-                            <button type="button" id="paste-key-btn" class="btn btn-icon-only" title="Paste from clipboard">
-                                <span class="material-icons">content_paste</span>
-                            </button>
-                            <button type="button" id="toggle-key-visibility" class="btn btn-icon-only" title="Toggle visibility">
-                                <span class="material-icons">visibility</span>
-                            </button>
-                        </div>
-                        <small>
-                            Get your API key from
-                            <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>
-                            <br>
-                            <em>Tip: Copy your API key, then click the paste button to insert it</em>
-                        </small>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Appearance & Shortcuts Card -->
-            <div class="card">
-                <h3>
-                    <span class="material-icons card-icon">palette</span>
-                    Appearance & Shortcuts
-                </h3>
-                <div class="grid-2">
-                    <div class="setting-group">
-                        <label for="theme-select">
-                            <span class="material-icons label-icon">brightness_6</span>
-                            Theme
-                        </label>
-                        <select id="theme-select">
-                            <option value="dark">Dark</option>
-                            <option value="light">Light</option>
-                            <option value="glass">Glass</option>
-                        </select>
-                        <small>Choose your preferred visual theme</small>
-                    </div>
-
-                    <div class="setting-group">
-                        <label for="advanced-mode-toggle">
-                            <span class="material-icons label-icon">auto_awesome</span>
-                            Advanced Hint Mode
-                        </label>
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" id="advanced-mode-toggle">
-                            <label for="advanced-mode-toggle">Send screenshots directly to the AI (skip OCR)</label>
-                        </div>
-                        <small>
-                            Uses a vision-capable model to read the screenshot and generate hints. Recommended models:
-                            <em>gemini-1.5-flash</em> or Ollama vision models like <em>granite3.2-vision:2b</em>.
-                        </small>
-                    </div>
-
-                    <div class="setting-group span-2">
-                        <label>
-                            <span class="material-icons label-icon">keyboard</span>
-                            Shortcuts
-                        </label>
-                        <div class="shortcuts-info">
-                            <div class="shortcut-item">
-                                <span class="material-icons shortcut-icon">screenshot</span>
-                                <div class="shortcut-content">
-                                    <span class="shortcut-key">Cmd+Shift+H</span>
-                                    <span class="shortcut-desc">Global screenshot capture (macOS)</span>
-                                </div>
+                    <div class="shortcuts-info">
+                        <div class="shortcut-item">
+                            <span class="material-icons shortcut-icon">screenshot</span>
+                            <div class="shortcut-content">
+                                <span class="shortcut-key">Cmd+Shift+H</span>
+                                <span class="shortcut-desc">Global screenshot capture (macOS)</span>
                             </div>
-                            <div class="shortcut-item">
-                                <span class="material-icons shortcut-icon">screenshot</span>
-                                <div class="shortcut-content">
-                                    <span class="shortcut-key">Ctrl+Shift+H</span>
-                                    <span class="shortcut-desc">Global screenshot capture (Windows)</span>
-                                </div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="material-icons shortcut-icon">screenshot</span>
+                            <div class="shortcut-content">
+                                <span class="shortcut-key">Ctrl+Shift+H</span>
+                                <span class="shortcut-desc">Global screenshot capture (Windows)</span>
                             </div>
-                            <div class="shortcut-item">
-                                <span class="material-icons shortcut-icon">content_paste</span>
-                                <div class="shortcut-content">
-                                    <span class="shortcut-key">Cmd/Ctrl+Shift+V</span>
-                                    <span class="shortcut-desc">Process clipboard (Text or Image)</span>
-                                </div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="material-icons shortcut-icon">content_paste</span>
+                            <div class="shortcut-content">
+                                <span class="shortcut-key">Cmd/Ctrl+Shift+V</span>
+                                <span class="shortcut-desc">Process clipboard (Text or Image)</span>
                             </div>
-                            <div class="shortcut-item">
-                                <span class="material-icons shortcut-icon">crop_free</span>
-                                <div class="shortcut-content">
-                                    <span class="shortcut-key">Cmd/Ctrl+Shift+S</span>
-                                    <span class="shortcut-desc">Screenshot selection</span>
-                                </div>
+                        </div>
+                        <div class="shortcut-item">
+                            <span class="material-icons shortcut-icon">crop_free</span>
+                            <div class="shortcut-content">
+                                <span class="shortcut-key">Cmd/Ctrl+Shift+S</span>
+                                <span class="shortcut-desc">Screenshot selection</span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+        </section>
 
+        <!-- Updates Card -->
+        <section class="card updates-card" aria-label="Application Updates">
+            <h3>
+                <span class="material-icons card-icon">system_update</span>
+                Updates
+            </h3>
+
+            <div class="setting-group">
+                <label>
+                    <span class="material-icons label-icon">info</span>
+                    App Version
+                </label>
+                <div id="current-version" class="version-display">—</div>
+                <small id="latest-version-text" class="hidden"></small>
+            </div>
+
+            <div class="setting-group">
+                <button type="button" id="check-update-btn" class="btn btn-secondary">
+                    <span class="material-icons">cloud_download</span>
+                    <span>Check for Updates</span>
+                </button>
+                <div id="update-progress" class="hidden" style="margin-top:8px">
+                    <small>Preparing update…</small>
+                </div>
+            </div>
+
+            <!-- Update Notification Banner -->
+            <div id="update-notification" class="update-notification hidden" role="alert">
+                <div class="update-notification-content">
+                    <span class="material-icons update-icon">system_update</span>
+                    <div class="update-details">
+                        <div class="update-title">Update Available!</div>
+                        <div class="update-version">Version <span id="update-new-version">—</span> is available</div>
+                        <div class="update-notes" id="update-release-notes"></div>
+                    </div>
+                    <div class="update-actions">
+                        <button type="button" id="update-now-btn" class="btn btn-primary btn-sm">
+                            <span class="material-icons">download</span>
+                            <span>Update Now</span>
+                        </button>
+                        <button type="button" id="update-later-btn" class="btn btn-secondary btn-sm">
+                            <span>Later</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer with Action Buttons -->
+    <footer class="settings-footer">
+        <div class="button-group">
+            <button type="button" id="cancel-btn" class="btn btn-secondary">
+                <span class="material-icons">close</span>
+                <span>Cancel</span>
+            </button>
+            <button type="button" id="test-connection-btn" class="btn btn-secondary">
+                <span class="material-icons">wifi_tethering</span>
+                <span>Test Connection</span>
+            </button>
+            <button type="button" id="save-btn" class="btn btn-primary">
+                <span class="material-icons">save</span>
+                <span>Save Settings</span>
+            </button>
         </div>
+    </footer>
 
-        <div class="settings-footer">
-            <div class="button-group">
-                <button type="button" id="cancel-btn" class="btn btn-secondary">
-                    <span class="material-icons">close</span>
-                    <span>Cancel</span>
-                </button>
-                <button type="button" id="test-connection-btn" class="btn btn-secondary">
-                    <span class="material-icons">wifi_tethering</span>
-                    <span>Test Connection</span>
-                </button>
-                <button type="button" id="save-btn" class="btn btn-primary">
-                    <span class="material-icons">save</span>
-                    <span>Save Settings</span>
-                </button>
-            </div>
-        </div>
+</div>
 
-        <!-- Status message -->
-        <div id="status-message" class="status-message hidden"></div>
-    </div>
+<!-- Scripts -->
+<script src="toast.js"></script>
+<script src="settings.js"></script>
 
-    <script src="toast.js" onerror="console.error('Failed to load toast.js')"></script>
-    <script src="settings.js" onerror="console.error('Failed to load settings.js')"></script>
-    
-    <!-- Fallback script in case settings.js fails -->
-    <script>
-        // Fallback initialization if main scripts fail
-        setTimeout(() => {
-            console.log('[Fallback] Checking if settings initialized...');
-            if (typeof window.debugSettingsButtons !== 'function') {
-                console.warn('[Fallback] Main settings script failed, setting up basic functionality');
-                
-                // Basic button functionality
-                const buttons = {
-                    'save-btn': () => {
-                        console.log('Fallback: Save button clicked');
-                        alert('Settings save functionality not available. Please refresh the page.');
-                    },
-                    'cancel-btn': () => {
-                        console.log('Fallback: Cancel button clicked');
-                        if (typeof require !== 'undefined') {
-                            try {
-                                const { ipcRenderer } = require('electron');
-                                ipcRenderer.send('close-settings');
-                            } catch (e) {
-                                console.error('Fallback: IPC failed', e);
-                            }
-                        }
-                    },
-                    'test-connection-btn': () => {
-                        console.log('Fallback: Test connection clicked');
-                        alert('Test connection functionality not available. Please refresh the page.');
-                    }
-                };
-                
-                Object.entries(buttons).forEach(([id, handler]) => {
-                    const element = document.getElementById(id);
-                    if (element) {
-                        element.addEventListener('click', handler);
-                        console.log(`[Fallback] Attached handler to ${id}`);
-                    }
-                });
-            } else {
-                console.log('[Fallback] ✅ Main settings script loaded successfully');
-            }
-        }, 5000); // Increased to 5 seconds to give more time for initialization
-    </script>
 </body>
 </html>
+

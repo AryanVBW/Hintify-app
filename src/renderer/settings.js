@@ -1,41 +1,54 @@
 /**
- * Hintify Settings Page - Production-Ready Implementation
+ * Hintify Settings Page - Rebuilt with Modern Architecture
  *
- * This file handles all settings page functionality including:
- * - User authentication UI
- * - AI provider configuration
- * - Theme and appearance settings
- * - Update management
- * - Settings persistence
+ * This module handles all settings page functionality with a clean, modular design:
+ * - State Management: Centralized state for config, user auth, and UI
+ * - Configuration: Load/save/validate settings with electron-store
+ * - UI Components: User auth, AI providers, updates, advanced features
+ * - Event Handling: Button clicks, IPC communication, form changes
+ * - Error Handling: Comprehensive error recovery and user feedback
  *
- * @version 2.0.0
+ * @version 3.0.0
  * @author Hintify Team
  */
 
 'use strict';
 
+console.log('[Settings] ========================================');
+console.log('[Settings] Script file is loading...');
+console.log('[Settings] ========================================');
+
 // ============================================================================
-// MODULE IMPORTS WITH ERROR HANDLING
+// MODULE IMPORTS
 // ============================================================================
 
-let ipcRenderer, Store, axios;
+// Note: ipcRenderer may already be declared in the HTML inline script
+// We'll use it from the global scope if available, otherwise require it
+let Store, axios;
 
 try {
-    ({ ipcRenderer } = require('electron'));
+    // ipcRenderer should already be available from the inline script in settings.html
+    // If not, we'll require it (but this shouldn't happen in normal usage)
+    if (typeof ipcRenderer === 'undefined') {
+        // This will only work if ipcRenderer wasn't declared as const in the global scope
+        globalThis.ipcRenderer = require('electron').ipcRenderer;
+    }
     Store = require('electron-store');
     axios = require('axios');
-    console.log('[Settings] All modules loaded successfully');
+    console.log('[Settings] ✓ All modules loaded successfully');
 } catch (error) {
-    console.error('[Settings] Failed to load modules:', error);
-    // Create fallback objects to prevent crashes
-    ipcRenderer = {
-        invoke: () => Promise.resolve({}),
-        send: () => {},
-        on: () => {}
-    };
+    console.error('[Settings] ✗ Failed to load modules:', error);
+    // Fallback objects to prevent crashes
+    if (typeof ipcRenderer === 'undefined') {
+        globalThis.ipcRenderer = {
+            invoke: () => Promise.resolve({}),
+            send: () => {},
+            on: () => {}
+        };
+    }
     Store = class FallbackStore {
-        get(key, defaultValue) { return defaultValue; }
-        set() {}
+        get(_key, defaultValue) { return defaultValue; }
+        set(_key, _value) {}
     };
     axios = {
         get: () => Promise.reject(new Error('axios not available')),
@@ -44,918 +57,1103 @@ try {
 }
 
 // ============================================================================
-// INITIALIZATION WITH ERROR HANDLING
+// GLOBAL STATE
 // ============================================================================
 
+/**
+ * Application state container
+ */
+const AppState = {
+    // Initialization
+    isInitialized: false,
+
+    // Configuration
+    config: {
+        provider: 'gemini',
+        ollama_model: 'granite3.2-vision:2b',
+        gemini_model: 'gemini-2.0-flash',
+        theme: 'dark',
+        advanced_mode: true
+    },
+
+    // User authentication
+    user: {
+        authenticated: false,
+        name: 'Guest User',
+        email: 'Using app without account',
+        avatar: null
+    },
+
+    // UI state
+    ui: {
+        currentProvider: 'gemini',
+        ollamaConnected: false,
+        ollamaModels: [],
+        updateAvailable: false
+    },
+
+    // DOM elements cache
+    elements: {}
+};
+
+/**
+ * electron-store instance
+ */
 let store;
 try {
     store = new Store();
-    console.log('[Settings] Store initialized successfully');
+    console.log('[Settings] ✓ Store initialized');
 } catch (error) {
-    console.error('[Settings] Failed to initialize store:', error);
-    // Create fallback store
+    console.error('[Settings] ✗ Store initialization failed:', error);
     store = {
-        get: (key, defaultValue) => defaultValue,
-        set: () => {},
-        delete: () => {}
+        get: (_key, defaultValue) => defaultValue,
+        set: (_key, _value) => {},
+        delete: (_key) => {}
     };
 }
-
-let isInitialized = false;
-let elements = {};
-
-// Default configuration
-const DEFAULT_CONFIG = {
-  provider: 'gemini',
-  ollama_model: 'granite3.2-vision:2b',
-  gemini_model: 'gemini-2.0-flash',
-  theme: 'dark',
-  advanced_mode: true
-};
 
 // ============================================================================
 // CONFIGURATION MANAGEMENT
 // ============================================================================
 
 /**
- * Load configuration from store with defaults
- * @returns {Object} Configuration object
+ * Configuration module - handles loading, saving, and validating settings
  */
-function loadConfig() {
-  const config = { ...DEFAULT_CONFIG };
-  Object.keys(DEFAULT_CONFIG).forEach(key => {
-    const stored = store.get(key);
-    if (stored !== undefined) {
-      config[key] = stored;
+const ConfigManager = {
+
+    /**
+     * Default configuration values
+     */
+    defaults: {
+        provider: 'gemini',
+        ollama_model: 'granite3.2-vision:2b',
+        gemini_model: 'gemini-2.0-flash',
+        theme: 'dark',
+        advanced_mode: true
+    },
+
+    /**
+     * Load configuration from store
+     * @returns {Object} Configuration object
+     */
+    load() {
+        console.log('[Config] Loading configuration...');
+        const config = { ...this.defaults };
+
+        for (const key of Object.keys(this.defaults)) {
+            const stored = store.get(key);
+            if (stored !== undefined) {
+                config[key] = stored;
+            }
+        }
+
+        console.log('[Config] ✓ Configuration loaded:', config);
+        return config;
+    },
+
+    /**
+     * Save configuration to store
+     * @param {Object} config - Configuration object to save
+     */
+    save(config) {
+        console.log('[Config] Saving configuration...');
+
+        try {
+            for (const key of Object.keys(config)) {
+                store.set(key, config[key]);
+            }
+
+            console.log('[Config] ✓ Configuration saved successfully');
+            return true;
+        } catch (error) {
+            console.error('[Config] ✗ Failed to save configuration:', error);
+            return false;
+        }
+    },
+
+    /**
+     * Validate configuration
+     * @param {Object} config - Configuration to validate
+     * @returns {Object} Validation result with {valid: boolean, errors: string[]}
+     */
+    validate(config) {
+        const errors = [];
+
+        // Validate provider
+        if (!['gemini', 'ollama'].includes(config.provider)) {
+            errors.push('Invalid AI provider selected');
+        }
+
+        // Validate Ollama model if Ollama is selected
+        if (config.provider === 'ollama' && !config.ollama_model) {
+            errors.push('Please select an Ollama model');
+        }
+
+        // Validate Gemini model
+        if (config.provider === 'gemini' && !config.gemini_model) {
+            errors.push('Please select a Gemini model');
+        }
+
+        return {
+            valid: errors.length === 0,
+            errors
+        };
     }
-  });
-  return config;
-}
+,
 
-/**
- * Save configuration to store
- * @param {Object} config - Configuration object to save
- */
-function saveConfig(config) {
-  try {
-    Object.keys(config).forEach(key => {
-      store.set(key, config[key]);
-    });
-    console.log('[Settings] Configuration saved successfully');
-  } catch (error) {
-    console.error('[Settings] Failed to save configuration:', error);
-    throw error;
-  }
-}
+    /**
+     * Get current configuration from form
+     * @returns {Object} Configuration object from form values
+     */
+    getFromForm() {
+        const elements = AppState.elements;
 
-/**
- * Validate configuration before saving
- * @param {Object} config - Configuration to validate
- * @returns {Object} { valid: boolean, errors: string[] }
- */
-function validateConfig(config) {
-  const errors = [];
+        return {
+            provider: elements.providerSelect?.value || 'gemini',
+            ollama_model: elements.ollamaModel?.value || '',
+            gemini_model: elements.geminiModel?.value || 'gemini-2.0-flash',
+            theme: store.get('theme', 'dark'), // Theme is not user-configurable in settings
+            advanced_mode: elements.advancedModeToggle?.checked !== false
+        };
+    },
 
-  // Validate provider
-  if (!['gemini', 'ollama'].includes(config.provider)) {
-    errors.push('Invalid AI provider selected');
-  }
+    /**
+     * Load configuration into form
+     * @param {Object} config - Configuration to load into form
+     */
+    loadIntoForm(config) {
+        console.log('[Config] Loading configuration into form...');
+        const elements = AppState.elements;
 
-  // Validate Gemini API key if Gemini is selected
-  if (config.provider === 'gemini') {
-    const apiKey = elements.geminiApiKey?.value?.trim();
-    if (!apiKey) {
-      errors.push('Gemini API key is required when using Gemini provider');
-    } else if (apiKey.length < 10) {
-      errors.push('Gemini API key appears to be invalid (too short)');
+        // Provider
+        if (elements.providerSelect) {
+            elements.providerSelect.value = config.provider || 'gemini';
+        }
+
+        // Ollama model
+        if (elements.ollamaModel) {
+            elements.ollamaModel.value = config.ollama_model || '';
+        }
+
+        // Gemini model
+        if (elements.geminiModel) {
+            elements.geminiModel.value = config.gemini_model || 'gemini-2.0-flash';
+        }
+
+        // Gemini API key
+        if (elements.geminiApiKey) {
+            elements.geminiApiKey.value = store.get('gemini_api_key', '');
+        }
+
+        // Advanced mode
+        if (elements.advancedModeToggle) {
+            elements.advancedModeToggle.checked = config.advanced_mode !== false;
+        }
+
+        console.log('[Config] ✓ Configuration loaded into form');
     }
-  }
-
-  // Validate Ollama model if Ollama is selected
-  if (config.provider === 'ollama' && !config.ollama_model) {
-    errors.push('Please select an Ollama model');
-  }
-
-  // Validate theme
-  if (!['dark', 'light', 'glass'].includes(config.theme)) {
-    errors.push('Invalid theme selected');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  };
-}
+};
 
 // ============================================================================
-// THEME MANAGEMENT
+// DOM ELEMENT MANAGEMENT
 // ============================================================================
 
 /**
- * Apply theme to the document
- * @param {string} theme - Theme name ('dark', 'light', or 'glass')
+ * DOM module - handles element caching and DOM operations
  */
-function applyTheme(theme) {
-  try {
-    // Remove only theme-related classes, preserve other classes
-    const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light', 'glassy-mode'];
-    const glassyClasses = ['theme-glassy'];
+const DOMManager = {
 
-    document.body.classList.remove(...themeClasses);
-    document.documentElement.classList.remove(...glassyClasses);
+    /**
+     * Cache all DOM elements
+     * @returns {Object} Cached elements object
+     */
+    cacheElements() {
+        console.log('[DOM] Caching DOM elements...');
 
-    // Apply the selected theme
-    if (theme === 'glass') {
-      document.body.classList.add('theme-dark', 'glassy-mode');
-      document.documentElement.classList.add('theme-glassy');
-      store.set('glassy_mode', true);
-    } else {
-      document.body.classList.add(`theme-${theme || 'dark'}`);
-      store.set('glassy_mode', false);
+        const elements = {
+            // User authentication
+            userName: document.getElementById('user-name'),
+            userEmail: document.getElementById('user-email'),
+            userAvatar: document.getElementById('user-avatar'),
+            userAvatarIcon: document.getElementById('user-avatar-icon'),
+            signinBtn: document.getElementById('signin-btn'),
+            signoutBtn: document.getElementById('signout-btn'),
+
+            // Updates
+            currentVersion: document.getElementById('current-version'),
+            latestVersionText: document.getElementById('latest-version-text'),
+            checkUpdateBtn: document.getElementById('check-update-btn'),
+            updateProgress: document.getElementById('update-progress'),
+            updateNotification: document.getElementById('update-notification'),
+            updateNewVersion: document.getElementById('update-new-version'),
+            updateReleaseNotes: document.getElementById('update-release-notes'),
+            updateNowBtn: document.getElementById('update-now-btn'),
+            updateLaterBtn: document.getElementById('update-later-btn'),
+
+            // AI Settings
+            providerSelect: document.getElementById('provider-select'),
+            ollamaModel: document.getElementById('ollama-model'),
+            refreshOllamaBtn: document.getElementById('refresh-ollama-btn'),
+            ollamaStatus: document.getElementById('ollama-status'),
+            geminiModel: document.getElementById('gemini-model'),
+            geminiApiKey: document.getElementById('gemini-api-key'),
+            pasteKeyBtn: document.getElementById('paste-key-btn'),
+            toggleKeyVisibility: document.getElementById('toggle-key-visibility'),
+
+            // Features
+            advancedModeToggle: document.getElementById('advanced-mode-toggle'),
+
+            // Footer buttons
+            cancelBtn: document.getElementById('cancel-btn'),
+            testConnectionBtn: document.getElementById('test-connection-btn'),
+            saveBtn: document.getElementById('save-btn')
+        };
+
+        // Count found elements
+        const found = Object.values(elements).filter(el => el !== null).length;
+        const total = Object.keys(elements).length;
+
+        console.log(`[DOM] ✓ Cached ${found}/${total} elements`);
+
+        if (found < total) {
+            const missing = Object.keys(elements).filter(key => elements[key] === null);
+            console.warn('[DOM] ⚠ Missing elements:', missing);
+        }
+
+        return elements;
+    },
+
+    /**
+     * Show or hide element
+     * @param {HTMLElement} element - Element to show/hide
+     * @param {boolean} show - True to show, false to hide
+     */
+    toggleElement(element, show) {
+        if (!element) return;
+
+        if (show) {
+            element.classList.remove('hidden');
+        } else {
+            element.classList.add('hidden');
+        }
+    },
+
+    /**
+     * Update provider field visibility based on selected provider
+     * @param {string} provider - Selected provider ('gemini' or 'ollama')
+     */
+    updateProviderFields(provider) {
+        console.log('[DOM] Updating provider fields for:', provider);
+
+        // Get all Ollama and Gemini fields
+        const ollamaFields = document.querySelectorAll('.ollama-field');
+        const geminiFields = document.querySelectorAll('.gemini-field');
+
+        // Show/hide based on provider
+        for (const field of ollamaFields) {
+            field.style.display = provider === 'ollama' ? 'block' : 'none';
+        }
+
+        for (const field of geminiFields) {
+            field.style.display = provider === 'gemini' ? 'block' : 'none';
+        }
+
+        console.log('[DOM] ✓ Provider fields updated');
     }
+};
 
-    console.log('[Settings] Theme applied:', theme);
-  } catch (error) {
-    console.error('[Settings] Failed to apply theme:', error);
-  }
-}
 
 // ============================================================================
-// USER INTERFACE UPDATES
+// USER AUTHENTICATION
 // ============================================================================
 
 /**
- * Refresh user card with current authentication status
+ * User authentication module
  */
-async function refreshUserCard() {
-  try {
-    const status = await ipcRenderer.invoke('get-auth-status');
-    const isAuthed = !!(status?.success && status?.authenticated && status?.user);
-    const isGuest = store.get('guest_mode_enabled', false);
+const UserAuth = {
 
-    // Update user name
-    if (elements.userName) {
-      elements.userName.textContent = isAuthed
-        ? (status.user.name || status.user.firstName || status.user.email || 'User')
-        : 'Guest User';
+    /**
+     * Update user state from auth status
+     */
+    _updateUserState(authStatus) {
+        AppState.user.authenticated = authStatus.authenticated || false;
+
+        if (authStatus.authenticated && authStatus.user) {
+            AppState.user.name = authStatus.user.name || authStatus.user.email || 'User';
+            AppState.user.email = authStatus.user.email || '';
+            AppState.user.avatar = authStatus.user.avatar || null;
+        } else {
+            AppState.user.name = 'Guest User';
+            AppState.user.email = 'Using app without account';
+            AppState.user.avatar = null;
+        }
+    },
+
+    /**
+     * Update user card UI elements
+     */
+    _updateUserCardUI(elements) {
+        // Update name and email
+        if (elements.userName) {
+            elements.userName.textContent = AppState.user.name;
+        }
+        if (elements.userEmail) {
+            elements.userEmail.textContent = AppState.user.email;
+        }
+    },
+
+    /**
+     * Update avatar display
+     */
+    _updateAvatarDisplay(elements) {
+        if (AppState.user.avatar && elements.userAvatar) {
+            elements.userAvatar.src = AppState.user.avatar;
+            DOMManager.toggleElement(elements.userAvatar, true);
+            DOMManager.toggleElement(elements.userAvatarIcon, false);
+        } else {
+            DOMManager.toggleElement(elements.userAvatar, false);
+            DOMManager.toggleElement(elements.userAvatarIcon, true);
+        }
+    },
+
+    /**
+     * Update auth button visibility
+     */
+    _updateAuthButtons(elements) {
+        const isAuthenticated = AppState.user.authenticated;
+        DOMManager.toggleElement(elements.signinBtn, !isAuthenticated);
+        DOMManager.toggleElement(elements.signoutBtn, isAuthenticated);
+    },
+
+    /**
+     * Refresh user card with current authentication status
+     */
+    async refreshUserCard() {
+        console.log('[UserAuth] Refreshing user card...');
+        const elements = AppState.elements;
+
+        try {
+            // Get authentication status from main process
+            const authStatus = await ipcRenderer.invoke('get-auth-status');
+            console.log('[UserAuth] Auth status:', authStatus);
+
+            // Update state and UI
+            this._updateUserState(authStatus);
+            this._updateUserCardUI(elements);
+            this._updateAvatarDisplay(elements);
+            this._updateAuthButtons(elements);
+
+            console.log('[UserAuth] ✓ User card refreshed');
+
+        } catch (error) {
+            console.error('[UserAuth] ✗ Failed to refresh user card:', error);
+        }
+    },
+
+    /**
+     * Handle sign in button click
+     */
+    async handleSignIn() {
+        console.log('[UserAuth] Sign in requested');
+
+        try {
+            // Trigger Clerk authentication flow
+            await ipcRenderer.invoke('auth:start-clerk-login');
+            console.log('[UserAuth] ✓ Sign in flow started');
+
+            // Refresh user card after a delay to allow auth to complete
+            setTimeout(() => {
+                this.refreshUserCard();
+            }, 2000);
+
+        } catch (error) {
+            console.error('[UserAuth] ✗ Sign in failed:', error);
+            if (globalThis.showToast) {
+                globalThis.showToast.error('Failed to sign in. Please try again.');
+            }
+        }
+    },
+
+    /**
+     * Handle sign out button click
+     */
+    async handleSignOut() {
+        console.log('[UserAuth] Sign out requested');
+
+        try {
+            // Trigger Clerk sign out
+            await ipcRenderer.invoke('auth:clerk-logout');
+            console.log('[UserAuth] ✓ Signed out successfully');
+
+            if (globalThis.showToast) {
+                globalThis.showToast.success('Signed out successfully');
+            }
+
+            // Refresh user card
+            await this.refreshUserCard();
+
+        } catch (error) {
+            console.error('[UserAuth] ✗ Sign out failed:', error);
+            if (globalThis.showToast) {
+                globalThis.showToast.error('Failed to sign out. Please try again.');
+            }
+        }
     }
-
-    // Update user email
-    if (elements.userEmail) {
-      elements.userEmail.textContent = isAuthed
-        ? (status.user.email || '')
-        : (isGuest ? 'Guest Mode' : 'Using app without account');
-    }
-
-    // Handle avatar
-    if (elements.userAvatar && elements.userAvatarIcon) {
-      const avatarUrl = status?.user?.avatar || status?.user?.imageUrl || status?.user?.image_url || '';
-
-      if (isAuthed && avatarUrl) {
-        elements.userAvatar.src = avatarUrl;
-        elements.userAvatar.classList.remove('hidden');
-        elements.userAvatarIcon.classList.add('hidden');
-      } else {
-        elements.userAvatar.classList.add('hidden');
-        elements.userAvatarIcon.classList.remove('hidden');
-      }
-    }
-
-    // Toggle sign in/out buttons
-    if (elements.signInBtn && elements.signOutBtn) {
-      if (isAuthed) {
-        elements.signInBtn.classList.add('hidden');
-        elements.signOutBtn.classList.remove('hidden');
-      } else {
-        elements.signInBtn.classList.remove('hidden');
-        elements.signOutBtn.classList.add('hidden');
-      }
-    }
-
-    console.log('[Settings] User card refreshed');
-  } catch (error) {
-    console.error('[Settings] Failed to refresh user card:', error);
-  }
-}
-
-/**
- * Update provider-specific fields visibility
- */
-function updateProviderFields() {
-  const provider = elements.providerSelect?.value;
-
-  if (!provider) return;
-
-  // Show/hide Ollama fields
-  const ollamaFields = document.querySelectorAll('.ollama-field, #ollama-model, #refresh-ollama-models, #ollama-status-text');
-  ollamaFields.forEach(field => {
-    if (field) {
-      field.closest('.setting-group')?.style.setProperty('display', provider === 'ollama' ? 'block' : 'none');
-    }
-  });
-
-  // Show/hide Gemini fields
-  const geminiFields = document.querySelectorAll('.gemini-field, #gemini-model, #gemini-api-key, #paste-key-btn, #toggle-key-visibility');
-  geminiFields.forEach(field => {
-    if (field) {
-      const group = field.closest('.setting-group');
-      if (group) {
-        group.style.display = provider === 'gemini' ? 'block' : 'none';
-      }
-    }
-  });
-
-  console.log('[Settings] Provider fields updated for:', provider);
-}
-
-/**
- * Load settings into form fields
- */
-function loadSettingsIntoForm() {
-  try {
-    const config = loadConfig();
-
-    // Load provider
-    if (elements.providerSelect) {
-      elements.providerSelect.value = config.provider || 'gemini';
-    }
-
-    // Load models
-    if (elements.ollamaModel) {
-      elements.ollamaModel.value = config.ollama_model || '';
-    }
-    if (elements.geminiModel) {
-      elements.geminiModel.value = config.gemini_model || 'gemini-2.0-flash';
-    }
-
-    // Load API key
-    if (elements.geminiApiKey) {
-      elements.geminiApiKey.value = store.get('gemini_api_key', '');
-    }
-
-    // Load theme
-    if (elements.themeSelect) {
-      elements.themeSelect.value = config.theme || 'dark';
-    }
-
-    // Load advanced mode
-    if (elements.advancedModeToggle) {
-      elements.advancedModeToggle.checked = config.advanced_mode !== false;
-    }
-
-    // Update provider fields visibility
-    updateProviderFields();
-
-    console.log('[Settings] Settings loaded into form');
-  } catch (error) {
-    console.error('[Settings] Failed to load settings into form:', error);
-  }
-}
+};
 
 // ============================================================================
 // OLLAMA INTEGRATION
 // ============================================================================
 
 /**
- * Update Ollama model list from local Ollama instance
+ * Ollama integration module
  */
-async function updateOllamaModelList() {
-  const statusText = document.getElementById('ollama-status-text');
-  const modelSelect = elements.ollamaModel;
+const OllamaManager = {
 
-  if (!modelSelect) return;
+    /**
+     * Ollama API endpoint
+     */
+    endpoint: 'http://localhost:11434/api/tags',
 
-  try {
-    // Show loading state
-    if (statusText) {
-      statusText.textContent = 'Checking Ollama...';
-      statusText.className = '';
+    /**
+     * Fetch available Ollama models
+     * @returns {Promise<Array>} Array of model objects
+     */
+    async fetchModels() {
+        console.log('[Ollama] Fetching models from:', this.endpoint);
+
+        try {
+            const response = await axios.get(this.endpoint, { timeout: 5000 });
+
+            if (response.data && response.data.models) {
+                const models = response.data.models;
+                console.log(`[Ollama] ✓ Found ${models.length} models`);
+                return models;
+            } else {
+                console.warn('[Ollama] ⚠ No models found in response');
+                return [];
+            }
+
+        } catch (error) {
+            console.error('[Ollama] ✗ Failed to fetch models:', error.message);
+            throw error;
+        }
+    },
+
+    /**
+     * Update Ollama model dropdown
+     */
+    async updateModelList() {
+        console.log('[Ollama] Updating model list...');
+        const elements = AppState.elements;
+
+        if (!elements.ollamaModel || !elements.ollamaStatus) {
+            console.warn('[Ollama] ⚠ Required elements not found');
+            return;
+        }
+
+        // Show loading state
+        elements.ollamaModel.innerHTML = '<option value="">Loading models...</option>';
+        elements.ollamaStatus.textContent = 'Connecting to Ollama...';
+        elements.ollamaStatus.style.color = '#fbbf24'; // Yellow
+
+        // Show refreshing toast
+        if (globalThis.showToast && globalThis.showToast.refreshingModels) {
+            globalThis.showToast.refreshingModels();
+        }
+
+        try {
+            const models = await this.fetchModels();
+
+            if (models.length === 0) {
+                // No models found
+                elements.ollamaModel.innerHTML = '<option value="">No models available</option>';
+                elements.ollamaStatus.textContent = 'Ollama connected, but no models found';
+                elements.ollamaStatus.style.color = '#fbbf24'; // Yellow
+
+                AppState.ui.ollamaConnected = true;
+                AppState.ui.ollamaModels = [];
+
+            } else {
+                // Populate dropdown with models
+                elements.ollamaModel.innerHTML = models.map(model =>
+                    `<option value="${model.name}">${model.name}</option>`
+                ).join('');
+
+                // Select saved model if available
+                const savedModel = store.get('ollama_model');
+                if (savedModel && models.some(m => m.name === savedModel)) {
+                    elements.ollamaModel.value = savedModel;
+                }
+
+                elements.ollamaStatus.textContent = `✓ Connected - ${models.length} models available`;
+                elements.ollamaStatus.style.color = '#22c55e'; // Green
+
+                AppState.ui.ollamaConnected = true;
+                AppState.ui.ollamaModels = models;
+
+                console.log('[Ollama] ✓ Model list updated');
+
+                // Show success toast
+                if (globalThis.showToast && globalThis.showToast.modelsRefreshed) {
+                    globalThis.showToast.modelsRefreshed(models.length);
+                }
+            }
+
+        } catch (error) {
+            // Connection failed
+            elements.ollamaModel.innerHTML = '<option value="">Ollama not available</option>';
+            elements.ollamaStatus.textContent = '✗ Cannot connect to Ollama (is it running?)';
+            elements.ollamaStatus.style.color = '#ef4444'; // Red
+
+            AppState.ui.ollamaConnected = false;
+            AppState.ui.ollamaModels = [];
+
+            console.error('[Ollama] ✗ Model list update failed');
+        }
     }
+};
 
-    // Fetch models from Ollama
-    const response = await axios.get('http://localhost:11434/api/tags', {
-      timeout: 5000
-    });
-
-    const models = response.data?.models || [];
-
-    // Clear and populate dropdown
-    modelSelect.innerHTML = '';
-
-    if (models.length === 0) {
-      modelSelect.innerHTML = '<option value="">No models found</option>';
-      if (statusText) {
-        statusText.textContent = 'No models installed in Ollama';
-        statusText.className = 'text-warning';
-      }
-      if (typeof toast !== 'undefined') {
-        toast.warning('No Ollama models found. Please install models first.');
-      }
-      return;
-    }
-
-    // Add models to dropdown
-    models.forEach(model => {
-      const option = document.createElement('option');
-      option.value = model.name;
-      option.textContent = model.name;
-      modelSelect.appendChild(option);
-    });
-
-    // Restore saved selection
-    const savedModel = store.get('ollama_model');
-    if (savedModel && models.some(m => m.name === savedModel)) {
-      modelSelect.value = savedModel;
-    }
-
-    if (statusText) {
-      statusText.textContent = `✓ ${models.length} model(s) available`;
-      statusText.className = 'text-success';
-    }
-
-    if (typeof toast !== 'undefined') {
-      toast.success(`Found ${models.length} Ollama model(s)`);
-    }
-
-    console.log('[Settings] Ollama models updated:', models.length);
-  } catch (error) {
-    console.error('[Settings] Failed to fetch Ollama models:', error);
-
-    modelSelect.innerHTML = '<option value="">Ollama not available</option>';
-
-    if (statusText) {
-      statusText.textContent = '✗ Ollama not running or not installed';
-      statusText.className = 'text-error';
-    }
-
-    if (typeof toast !== 'undefined') {
-      toast.error('Could not connect to Ollama. Make sure it\'s running.');
-    }
-  }
-}
 
 // ============================================================================
-// BUTTON ACTION HANDLERS
+// GEMINI API KEY MANAGEMENT
 // ============================================================================
 
 /**
- * Handle Save Settings button click
+ * Gemini API key management module
  */
-async function handleSaveSettings() {
-  try {
-    console.log('[Settings] Save button clicked');
+const GeminiManager = {
 
-    // Gather configuration from form
-    const config = {
-      provider: elements.providerSelect?.value || 'gemini',
-      ollama_model: elements.ollamaModel?.value || '',
-      gemini_model: elements.geminiModel?.value || 'gemini-2.0-flash',
-      theme: elements.themeSelect?.value || 'dark',
-      advanced_mode: elements.advancedModeToggle?.checked !== false
-    };
+    /**
+     * Handle paste API key button click
+     */
+    async handlePasteApiKey() {
+        console.log('[Gemini] Paste API key requested');
+        const elements = AppState.elements;
 
-    // Save API key separately (sensitive data)
-    const apiKey = elements.geminiApiKey?.value?.trim();
-    if (apiKey) {
-      store.set('gemini_api_key', apiKey);
-    }
-
-    // Validate configuration
-    const validation = validateConfig(config);
-    if (!validation.valid) {
-      console.error('[Settings] Validation failed:', validation.errors);
-      if (typeof toast !== 'undefined') {
-        validation.errors.forEach(error => {
-          toast.error(error, 4000);
-        });
-      }
-      return;
-    }
-
-    // Save configuration
-    saveConfig(config);
-
-    // Apply theme immediately
-    applyTheme(config.theme);
-
-    // Notify main process
-    ipcRenderer.send('config-updated', config);
-
-    // Show success message
-    if (typeof toast !== 'undefined') {
-      toast.success('Settings saved successfully!', 3000);
-    }
-
-    console.log('[Settings] Settings saved successfully');
-
-    // Close settings window after short delay
-    setTimeout(() => {
-      ipcRenderer.send('close-settings');
-    }, 1000);
-
-  } catch (error) {
-    console.error('[Settings] Failed to save settings:', error);
-    if (typeof toast !== 'undefined') {
-      toast.error('Failed to save settings. Please try again.', 4000);
-    }
-  }
-}
-
-/**
- * Handle Cancel button click
- */
-function handleCancel() {
-  console.log('[Settings] Cancel button clicked');
-
-  // Close settings window by sending IPC message
-  ipcRenderer.send('close-settings');
-
-  if (typeof toast !== 'undefined') {
-    toast.info('Settings not saved', 2000);
-  }
-}
-
-/**
- * Handle Test Connection button click
- */
-async function handleTestConnection() {
-  try {
-    console.log('[Settings] Test connection button clicked');
-
-    const provider = elements.providerSelect?.value;
-
-    if (!provider) {
-      if (typeof toast !== 'undefined') {
-        toast.warning('Please select an AI provider first');
-      }
-      return;
-    }
-
-    // Show loading state
-    if (typeof toast !== 'undefined') {
-      toast.info('Testing connection...', 2000);
-    }
-
-    if (provider === 'gemini') {
-      // Test Gemini connection
-      const apiKey = elements.geminiApiKey?.value?.trim();
-
-      if (!apiKey) {
-        if (typeof toast !== 'undefined') {
-          toast.error('Please enter your Gemini API key first');
+        if (!elements.geminiApiKey) {
+            console.warn('[Gemini] ⚠ API key input not found');
+            return;
         }
-        return;
-      }
 
-      // Make a simple test request to Gemini
-      const model = elements.geminiModel?.value || 'gemini-2.0-flash';
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        try {
+            // Try IPC handler first (most reliable in Electron)
+            let clipboardText = await ipcRenderer.invoke('get-clipboard-text');
 
-      const response = await axios.post(url, {
-        contents: [{
-          parts: [{ text: 'Hello' }]
-        }]
-      }, {
-        timeout: 10000
-      });
+            if (clipboardText) {
+                elements.geminiApiKey.value = clipboardText.trim();
+                console.log('[Gemini] ✓ API key pasted from clipboard (IPC)');
 
-      if (response.status === 200) {
-        if (typeof toast !== 'undefined') {
-          toast.success('✓ Gemini connection successful!', 3000);
+                if (globalThis.showToast) {
+                    globalThis.showToast.success('API key pasted successfully');
+                }
+                return;
+            }
+
+            // Fallback to navigator.clipboard
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                clipboardText = await navigator.clipboard.readText();
+                elements.geminiApiKey.value = clipboardText.trim();
+                console.log('[Gemini] ✓ API key pasted from clipboard (navigator)');
+
+                if (globalThis.showToast) {
+                    globalThis.showToast.success('API key pasted successfully');
+                }
+                return;
+            }
+
+            // No clipboard access available
+            console.warn('[Gemini] ⚠ No clipboard access available');
+            if (globalThis.showToast) {
+                globalThis.showToast.warning('Please paste manually (Cmd/Ctrl+V)');
+            }
+
+        } catch (error) {
+            console.error('[Gemini] ✗ Failed to paste API key:', error);
+            if (globalThis.showToast) {
+                globalThis.showToast.error('Failed to paste. Please paste manually.');
+            }
         }
-        console.log('[Settings] Gemini connection test passed');
-      }
+    },
 
-    } else if (provider === 'ollama') {
-      // Test Ollama connection
-      const response = await axios.get('http://localhost:11434/api/tags', {
-        timeout: 5000
-      });
+    /**
+     * Toggle API key visibility
+     */
+    handleToggleKeyVisibility() {
+        console.log('[Gemini] Toggle key visibility requested');
+        const elements = AppState.elements;
 
-      if (response.status === 200) {
-        const models = response.data?.models || [];
-        if (typeof toast !== 'undefined') {
-          toast.success(`✓ Ollama connected! Found ${models.length} model(s)`, 3000);
+        if (!elements.geminiApiKey || !elements.toggleKeyVisibility) {
+            return;
         }
-        console.log('[Settings] Ollama connection test passed');
-      }
+
+        const input = elements.geminiApiKey;
+        const icon = elements.toggleKeyVisibility.querySelector('.material-icons');
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            if (icon) icon.textContent = 'visibility_off';
+            console.log('[Gemini] ✓ API key visible');
+        } else {
+            input.type = 'password';
+            if (icon) icon.textContent = 'visibility';
+            console.log('[Gemini] ✓ API key hidden');
+        }
     }
-
-  } catch (error) {
-    console.error('[Settings] Connection test failed:', error);
-
-    let errorMessage = 'Connection test failed';
-
-    if (error.response?.status === 400) {
-      errorMessage = 'Invalid API key or request format';
-    } else if (error.response?.status === 401 || error.response?.status === 403) {
-      errorMessage = 'Invalid API key or unauthorized';
-    } else if (error.code === 'ECONNREFUSED') {
-      errorMessage = 'Could not connect. Make sure Ollama is running.';
-    } else if (error.code === 'ETIMEDOUT') {
-      errorMessage = 'Connection timed out';
-    }
-
-    if (typeof toast !== 'undefined') {
-      toast.error(errorMessage, 4000);
-    }
-  }
-}
-
-/**
- * Handle Sign In button click
- */
-async function handleSignIn() {
-  try {
-    console.log('[Settings] Sign in button clicked');
-
-    await ipcRenderer.invoke('open-browser-auth');
-
-    if (typeof toast !== 'undefined') {
-      toast.info('Opening browser for sign in...', 3000);
-    }
-
-  } catch (error) {
-    console.error('[Settings] Sign in failed:', error);
-    if (typeof toast !== 'undefined') {
-      toast.error('Failed to open sign in page', 3000);
-    }
-  }
-}
-
-/**
- * Handle Sign Out button click
- */
-async function handleSignOut() {
-  try {
-    console.log('[Settings] Sign out button clicked');
-
-    ipcRenderer.send('user-logged-out');
-
-    if (typeof toast !== 'undefined') {
-      toast.success('Signed out successfully', 2000);
-    }
-
-    // Refresh user card after short delay
-    setTimeout(refreshUserCard, 800);
-
-  } catch (error) {
-    console.error('[Settings] Sign out failed:', error);
-    if (typeof toast !== 'undefined') {
-      toast.error('Failed to sign out', 3000);
-    }
-  }
-}
-
-/**
- * Handle Refresh Ollama Models button click
- */
-async function handleRefreshOllamaModels() {
-  console.log('[Settings] Refresh Ollama models button clicked');
-
-  if (typeof toast !== 'undefined') {
-    toast.info('Refreshing Ollama models...', 2000);
-  }
-
-  await updateOllamaModelList();
-}
-
-/**
- * Handle Paste API Key button click
- */
-async function handlePasteApiKey() {
-  try {
-    console.log('[Settings] Paste API key button clicked');
-
-    let text = '';
-    // Try navigator.clipboard first
-    try {
-      if (navigator.clipboard?.readText) {
-        text = await navigator.clipboard.readText();
-      }
-    } catch (e) {
-      console.warn('[Settings] navigator.clipboard.readText() failed:', e?.message);
-    }
-
-    // Fallback to Electron clipboard
-    if (!text) {
-      try {
-        const { clipboard } = require('electron');
-        text = clipboard.readText();
-      } catch (e) {
-        console.warn('[Settings] Electron clipboard fallback failed:', e?.message);
-      }
-    }
-
-    if (text && elements.geminiApiKey) {
-      elements.geminiApiKey.value = text.trim();
-
-      if (typeof toast !== 'undefined') {
-        toast.success('API key pasted from clipboard', 2000);
-      }
-    } else {
-      if (typeof toast !== 'undefined') {
-        toast.warning('Clipboard is empty', 2000);
-      }
-    }
-
-  } catch (error) {
-    console.error('[Settings] Failed to paste from clipboard:', error);
-    if (typeof toast !== 'undefined') {
-      toast.error('Failed to read clipboard', 3000);
-    }
-  }
-}
-
-/**
- * Handle Toggle API Key Visibility button click
- */
-function handleToggleKeyVisibility() {
-  console.log('[Settings] Toggle key visibility button clicked');
-
-  if (!elements.geminiApiKey || !elements.toggleKeyVisibility) return;
-
-  const isPassword = elements.geminiApiKey.type === 'password';
-  elements.geminiApiKey.type = isPassword ? 'text' : 'password';
-
-  // Update icon
-  const icon = elements.toggleKeyVisibility.querySelector('.material-icons');
-  if (icon) {
-    icon.textContent = isPassword ? 'visibility_off' : 'visibility';
-  }
-
-  if (typeof toast !== 'undefined') {
-    toast.info(isPassword ? 'API key visible' : 'API key hidden', 1500);
-  }
-}
+};
 
 // ============================================================================
 // UPDATE MANAGEMENT
 // ============================================================================
 
 /**
- * Handle Check for Updates button click
+ * Update management module
  */
-async function handleCheckForUpdates() {
-  try {
-    console.log('[Settings] Check for updates button clicked');
+const UpdateManager = {
 
-    if (typeof toast !== 'undefined') {
-      toast.info('Checking for updates...', 2000);
-    }
+    /**
+     * Display current app version
+     */
+    async displayVersion() {
+        console.log('[Update] Displaying version...');
+        const elements = AppState.elements;
 
-    // Trigger update check via IPC
-    ipcRenderer.send('check-for-updates');
-
-  } catch (error) {
-    console.error('[Settings] Failed to check for updates:', error);
-    if (typeof toast !== 'undefined') {
-      toast.error('Failed to check for updates', 3000);
-    }
-  }
-}
-
-/**
- * Handle Update Now button click
- */
-function handleUpdateNow() {
-  console.log('[Settings] Update now button clicked');
-
-  // Hide notification banner
-  const updateNotification = document.getElementById('update-notification');
-  if (updateNotification) {
-    updateNotification.classList.add('hidden');
-  }
-
-  // Trigger update download
-  ipcRenderer.send('download-update');
-
-  if (typeof toast !== 'undefined') {
-    toast.info('Downloading update...', 3000);
-  }
-}
-
-/**
- * Handle Update Later button click
- */
-function handleUpdateLater() {
-  console.log('[Settings] Update later button clicked');
-
-  // Hide notification banner
-  const updateNotification = document.getElementById('update-notification');
-  if (updateNotification) {
-    updateNotification.classList.add('hidden');
-  }
-
-  // Dismiss update for 24 hours
-  ipcRenderer.send('dismiss-update', 24 * 60 * 60 * 1000);
-
-  if (typeof toast !== 'undefined') {
-    toast.info('Update reminder dismissed for 24 hours', 3000);
-  }
-}
-
-/**
- * Initialize updates section
- */
-function initializeUpdatesSection() {
-  try {
-    // Load and display current version
-    let version = '';
-    try {
-      const pkg = require('../../package.json');
-      version = pkg?.version || '';
-    } catch (error) {
-      console.warn('[Settings] Could not load package.json:', error);
-    }
-
-    const currentVersionEl = document.getElementById('current-version');
-    if (currentVersionEl) {
-      currentVersionEl.textContent = version || 'Unknown';
-    }
-
-    console.log('[Settings] Updates section initialized, version:', version);
-  } catch (error) {
-    console.error('[Settings] Failed to initialize updates section:', error);
-  }
-}
-
-// ============================================================================
-// EVENT LISTENER SETUP
-// ============================================================================
-
-/**
- * Attach event listeners to all interactive elements
- */
-function attachEventListeners() {
-  console.log('[Settings] Attaching event listeners...');
-
-  // Track successful and failed listener attachments
-  const attached = [];
-  const failed = [];
-
-  // Helper function to safely attach event listeners
-  function safeAttach(element, elementName, event, handler) {
-    try {
-      if (element && typeof element.addEventListener === 'function') {
-        element.addEventListener(event, (e) => {
-          try {
-            console.log(`[Settings] Button clicked: ${elementName}`);
-            // Prevent default behavior for buttons
-            if (e.preventDefault) e.preventDefault();
-            // Stop bubbling in case any parent overlay captures clicks
-            if (e.stopPropagation) e.stopPropagation();
-            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-
-            // Call the handler
-            handler(e);
-          } catch (error) {
-            console.error(`[Settings] Error in ${elementName} handler:`, error);
-          }
-        });
-        attached.push(elementName);
-        console.log(`[Settings] ✓ ${elementName} listener attached`);
-        return true;
-      } else {
-        failed.push(`${elementName} (element not found or invalid)`);
-        console.error(`[Settings] ❌ ${elementName} element not found or invalid:`, element);
-        return false;
-      }
-    } catch (error) {
-      failed.push(`${elementName} (error: ${error.message})`);
-      console.error(`[Settings] ❌ Failed to attach ${elementName} listener:`, error);
-      return false;
-    }
-  }
-
-  // Attach all event listeners
-  safeAttach(elements.saveBtn, 'Save button', 'click', handleSaveSettings);
-  safeAttach(elements.cancelBtn, 'Cancel button', 'click', handleCancel);
-  safeAttach(elements.testConnectionBtn, 'Test connection button', 'click', handleTestConnection);
-  safeAttach(elements.signInBtn, 'Sign in button', 'click', handleSignIn);
-  safeAttach(elements.signOutBtn, 'Sign out button', 'click', handleSignOut);
-  safeAttach(elements.refreshOllamaBtn, 'Refresh Ollama models button', 'click', handleRefreshOllamaModels);
-  safeAttach(elements.pasteKeyBtn, 'Paste API key button', 'click', handlePasteApiKey);
-  safeAttach(elements.toggleKeyVisibility, 'Toggle key visibility button', 'click', handleToggleKeyVisibility);
-  safeAttach(elements.checkUpdateBtn, 'Check for updates button', 'click', handleCheckForUpdates);
-
-  // Update-related buttons (may not be cached in elements object)
-  const updateNowBtn = document.getElementById('update-now-btn');
-  const updateLaterBtn = document.getElementById('update-later-btn');
-  safeAttach(updateNowBtn, 'Update now button', 'click', handleUpdateNow);
-  safeAttach(updateLaterBtn, 'Update later button', 'click', handleUpdateLater);
-
-  // Provider and theme change listeners
-  safeAttach(elements.providerSelect, 'Provider select', 'change', updateProviderFields);
-  safeAttach(elements.themeSelect, 'Theme select', 'change', (e) => {
-    applyTheme(e.target.value);
-  });
-
-  // Summary
-  console.log(`[Settings] Event listeners summary:`);
-  console.log(`[Settings] ✓ Successfully attached: ${attached.length} listeners`);
-  if (attached.length > 0) {
-    console.log(`[Settings]   - ${attached.join(', ')}`);
-  }
-
-  if (failed.length > 0) {
-    console.error(`[Settings] ❌ Failed to attach: ${failed.length} listeners`);
-    console.error(`[Settings]   - ${failed.join(', ')}`);
-  }
-
-  // If critical buttons failed, try alternative approach
-  if (failed.some(f => f.includes('Save button') || f.includes('Cancel button'))) {
-    console.log('[Settings] Attempting alternative button selection...');
-
-    // Try to find buttons by different methods
-    const saveBtn = document.querySelector('#save-btn, button[id="save-btn"], .btn-primary[type="button"]');
-    const cancelBtn = document.querySelector('#cancel-btn, button[id="cancel-btn"], .btn-secondary[type="button"]');
-
-    if (saveBtn) {
-      console.log('[Settings] Found Save button via alternative selector');
-      safeAttach(saveBtn, 'Save button (alternative)', 'click', handleSaveSettings);
-    }
-
-    if (cancelBtn) {
-      console.log('[Settings] Found Cancel button via alternative selector');
-      safeAttach(cancelBtn, 'Cancel button (alternative)', 'click', handleCancel);
-    }
-  }
-
-  return { attached: attached.length, failed: failed.length };
-}
-
-// ============================================================================
-// DOM ELEMENT CACHING
-// ============================================================================
-
-/**
- * Cache references to all DOM elements
- */
-function cacheElements() {
-  console.log('[Settings] Caching DOM elements...');
-
-  elements = {
-    // User card
-    userName: document.getElementById('settings-user-name'),
-    userEmail: document.getElementById('settings-user-email'),
-    userAvatar: document.getElementById('settings-user-avatar'),
-    userAvatarIcon: document.getElementById('settings-user-avatar-icon'),
-    signInBtn: document.getElementById('settings-signin-btn'),
-    signOutBtn: document.getElementById('settings-signout-btn'),
-
-    // AI Settings
-    providerSelect: document.getElementById('provider-select'),
-    ollamaModel: document.getElementById('ollama-model'),
-    geminiModel: document.getElementById('gemini-model'),
-    geminiApiKey: document.getElementById('gemini-api-key'),
-    pasteKeyBtn: document.getElementById('paste-key-btn'),
-    toggleKeyVisibility: document.getElementById('toggle-key-visibility'),
-    refreshOllamaBtn: document.getElementById('refresh-ollama-models'),
-
-    // Appearance
-    themeSelect: document.getElementById('theme-select'),
-    advancedModeToggle: document.getElementById('advanced-mode-toggle'),
-
-    // Updates
-    checkUpdateBtn: document.getElementById('check-update-btn'),
-
-    // Footer buttons
-    cancelBtn: document.getElementById('cancel-btn'),
-    testConnectionBtn: document.getElementById('test-connection-btn'),
-    saveBtn: document.getElementById('save-btn'),
-
-    // Status message
-    statusMessage: document.getElementById('status-message')
-  };
-
-  // Log which elements were found and ensure they exist
-  const foundElements = Object.entries(elements).filter(([_, el]) => el !== null);
-  const missingElements = Object.entries(elements).filter(([_, el]) => el === null);
-
-  console.log(`[Settings] Found ${foundElements.length}/${Object.keys(elements).length} elements`);
-
-  if (missingElements.length > 0) {
-    console.error('[Settings] Missing critical elements:', missingElements.map(([name]) => name));
-
-    // For critical buttons, try alternative selection methods
-    const criticalButtons = ['saveBtn', 'cancelBtn', 'testConnectionBtn'];
-    criticalButtons.forEach(btnName => {
-      if (!elements[btnName]) {
-        const btnId = btnName.replace('Btn', '-btn');
-        const element = document.querySelector(`#${btnId}`) || document.querySelector(`button[id="${btnId}"]`);
-        if (element) {
-          elements[btnName] = element;
-          console.log(`[Settings] ✓ Found ${btnName} using fallback selector`);
-        } else {
-          console.error(`[Settings] ❌ Critical button ${btnName} (id: ${btnId}) not found`);
+        if (!elements.currentVersion) {
+            return;
         }
-      }
-    });
-  }
 
-  return elements;
-}
+        try {
+            const version = await ipcRenderer.invoke('get-app-version');
+            elements.currentVersion.textContent = `v${version || '1.0.0'}`;
+            console.log('[Update] ✓ Version displayed:', version);
+        } catch (error) {
+            console.error('[Update] ✗ Failed to get version:', error);
+            elements.currentVersion.textContent = 'v1.0.0';
+        }
+    },
+
+    /**
+     * Check for updates
+     */
+    async checkForUpdates() {
+        console.log('[Update] Checking for updates...');
+        const elements = AppState.elements;
+
+        if (elements.checkUpdateBtn) {
+            elements.checkUpdateBtn.disabled = true;
+            elements.checkUpdateBtn.textContent = 'Checking...';
+        }
+
+        try {
+            await ipcRenderer.invoke('check-for-updates');
+            console.log('[Update] ✓ Update check initiated');
+
+            if (globalThis.showToast) {
+                globalThis.showToast.info('Checking for updates...');
+            }
+
+        } catch (error) {
+            console.error('[Update] ✗ Update check failed:', error);
+            if (globalThis.showToast) {
+                globalThis.showToast.error('Failed to check for updates');
+            }
+        } finally {
+            if (elements.checkUpdateBtn) {
+                elements.checkUpdateBtn.disabled = false;
+                elements.checkUpdateBtn.innerHTML = '<span class="material-icons">cloud_download</span><span>Check for Updates</span>';
+            }
+        }
+    },
+
+    /**
+     * Show update notification
+     * @param {Object} updateInfo - Update information
+     */
+    showUpdateNotification(updateInfo) {
+        console.log('[Update] Showing update notification:', updateInfo);
+        const elements = AppState.elements;
+
+        if (!elements.updateNotification) {
+            return;
+        }
+
+        // Update notification content
+        if (elements.updateNewVersion) {
+            elements.updateNewVersion.textContent = updateInfo.version || 'Unknown';
+        }
+
+        if (elements.updateReleaseNotes && updateInfo.releaseNotes) {
+            elements.updateReleaseNotes.textContent = updateInfo.releaseNotes;
+        }
+
+        // Show notification
+        DOMManager.toggleElement(elements.updateNotification, true);
+        AppState.ui.updateAvailable = true;
+
+        console.log('[Update] ✓ Update notification shown');
+    },
+
+    /**
+     * Hide update notification
+     */
+    hideUpdateNotification() {
+        console.log('[Update] Hiding update notification');
+        const elements = AppState.elements;
+
+        if (elements.updateNotification) {
+            DOMManager.toggleElement(elements.updateNotification, false);
+            AppState.ui.updateAvailable = false;
+        }
+    }
+};
+
+
+// ============================================================================
+// SETTINGS PERSISTENCE
+// ============================================================================
+
+/**
+ * Settings persistence module
+ */
+const SettingsManager = {
+
+    /**
+     * Handle save settings button click
+     */
+    async handleSave() {
+        console.log('[Settings] Save requested');
+        const elements = AppState.elements;
+
+        try {
+            // Get configuration from form
+            const config = ConfigManager.getFromForm();
+
+            // Validate configuration
+            const validation = ConfigManager.validate(config);
+
+            if (!validation.valid) {
+                console.error('[Settings] ✗ Validation failed:', validation.errors);
+
+                if (globalThis.showToast) {
+                    globalThis.showToast.error(validation.errors[0] || 'Invalid settings');
+                }
+                return;
+            }
+
+            // Save configuration
+            const saved = ConfigManager.save(config);
+
+            if (!saved) {
+                throw new Error('Failed to save configuration');
+            }
+
+            // Save Gemini API key separately
+            if (elements.geminiApiKey) {
+                const apiKey = elements.geminiApiKey.value.trim();
+                if (apiKey) {
+                    store.set('gemini_api_key', apiKey);
+                    console.log('[Settings] ✓ Gemini API key saved');
+                }
+            }
+
+            // Update app state
+            AppState.config = config;
+
+            // Notify main process of config update
+            ipcRenderer.send('config-updated', config);
+
+            console.log('[Settings] ✓ Settings saved successfully');
+
+            if (globalThis.showToast) {
+                globalThis.showToast.success('Settings saved successfully!');
+            }
+
+        } catch (error) {
+            console.error('[Settings] ✗ Failed to save settings:', error);
+
+            if (globalThis.showToast) {
+                globalThis.showToast.error('Failed to save settings. Please try again.');
+            }
+        }
+    },
+
+    /**
+     * Handle cancel button click
+     */
+    handleCancel() {
+        console.log('[Settings] Cancel requested');
+
+        // Reload configuration from store
+        const config = ConfigManager.load();
+        ConfigManager.loadIntoForm(config);
+
+        console.log('[Settings] ✓ Settings reset to saved values');
+
+        if (globalThis.showToast) {
+            globalThis.showToast.info('Changes discarded');
+        }
+
+        // Close settings window
+        ipcRenderer.send('close-settings');
+    },
+
+    /**
+     * Handle test connection button click
+     */
+    async handleTestConnection() {
+        console.log('[Settings] Test connection requested');
+        const elements = AppState.elements;
+
+        // Get current provider
+        const provider = elements.providerSelect?.value || 'gemini';
+
+        if (provider === 'ollama') {
+            // Test Ollama connection
+            await this.testOllamaConnection();
+        } else if (provider === 'gemini') {
+            // Test Gemini connection
+            await this.testGeminiConnection();
+        }
+    },
+
+    /**
+     * Test Ollama connection
+     */
+    async testOllamaConnection() {
+        console.log('[Settings] Testing Ollama connection...');
+
+        if (globalThis.showToast) {
+            globalThis.showToast.info('Testing Ollama connection...');
+        }
+
+        try {
+            const models = await OllamaManager.fetchModels();
+
+            if (models.length > 0) {
+                console.log('[Settings] ✓ Ollama connection successful');
+
+                if (globalThis.showToast) {
+                    globalThis.showToast.success(`Ollama connected! Found ${models.length} models.`);
+                }
+            } else {
+                console.warn('[Settings] ⚠ Ollama connected but no models found');
+
+                if (globalThis.showToast) {
+                    globalThis.showToast.warning('Ollama connected, but no models available.');
+                }
+            }
+
+        } catch (error) {
+            console.error('[Settings] ✗ Ollama connection failed:', error);
+
+            if (globalThis.showToast) {
+                globalThis.showToast.error('Cannot connect to Ollama. Is it running?');
+            }
+        }
+    },
+
+    /**
+     * Validate Gemini API key input
+     */
+    _validateGeminiApiKey(apiKey) {
+        if (!apiKey) {
+            console.warn('[Settings] ⚠ No API key provided');
+            if (globalThis.showToast) {
+                globalThis.showToast.warning('Please enter a Gemini API key first.');
+            }
+            return false;
+        }
+        return true;
+    },
+
+    /**
+     * Make Gemini API test request
+     */
+    async _makeGeminiTestRequest(apiKey, model) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}?key=${apiKey}`;
+        return await axios.get(url, { timeout: 10000 });
+    },
+
+    /**
+     * Handle Gemini test success
+     */
+    _handleGeminiTestSuccess() {
+        console.log('[Settings] ✓ Gemini API key valid');
+        if (globalThis.showToast) {
+            globalThis.showToast.success('Gemini API key is valid!');
+        }
+    },
+
+    /**
+     * Handle Gemini test error
+     */
+    _handleGeminiTestError(error) {
+        console.error('[Settings] ✗ Gemini connection failed:', error);
+
+        if (globalThis.showToast) {
+            if (error.response && error.response.status === 400) {
+                globalThis.showToast.error('Invalid API key. Please check and try again.');
+            } else {
+                globalThis.showToast.error('Failed to connect to Gemini API.');
+            }
+        }
+    },
+
+    /**
+     * Test Gemini connection
+     */
+    async testGeminiConnection() {
+        console.log('[Settings] Testing Gemini connection...');
+        const elements = AppState.elements;
+
+        // Get and validate API key
+        const apiKey = elements.geminiApiKey?.value.trim();
+        if (!this._validateGeminiApiKey(apiKey)) {
+            return;
+        }
+
+        if (globalThis.showToast) {
+            globalThis.showToast.info('Testing Gemini API key...');
+        }
+
+        try {
+            // Test API key by making a simple request
+            const model = elements.geminiModel?.value || 'gemini-2.0-flash';
+            const response = await this._makeGeminiTestRequest(apiKey, model);
+
+            if (response.status === 200) {
+                this._handleGeminiTestSuccess();
+            } else {
+                throw new Error('Invalid response from Gemini API');
+            }
+
+        } catch (error) {
+            this._handleGeminiTestError(error);
+        }
+    }
+};
+
+
+// ============================================================================
+// EVENT HANDLERS
+// ============================================================================
+
+/**
+ * Event handler module - attaches all event listeners
+ */
+const EventHandlers = {
+
+    /**
+     * Attach all event listeners
+     */
+    attachAll() {
+        console.log('[Events] Attaching event listeners...');
+        const elements = AppState.elements;
+
+        // User authentication
+        if (elements.signinBtn) {
+            elements.signinBtn.addEventListener('click', () => UserAuth.handleSignIn());
+        }
+        if (elements.signoutBtn) {
+            elements.signoutBtn.addEventListener('click', () => UserAuth.handleSignOut());
+        }
+
+        // Updates
+        if (elements.checkUpdateBtn) {
+            elements.checkUpdateBtn.addEventListener('click', () => UpdateManager.checkForUpdates());
+        }
+        if (elements.updateNowBtn) {
+            elements.updateNowBtn.addEventListener('click', () => {
+                console.log('[Events] Update now clicked');
+                ipcRenderer.send('install-update');
+            });
+        }
+        if (elements.updateLaterBtn) {
+            elements.updateLaterBtn.addEventListener('click', () => {
+                UpdateManager.hideUpdateNotification();
+            });
+        }
+
+        // AI Provider selection
+        if (elements.providerSelect) {
+            elements.providerSelect.addEventListener('change', (e) => {
+                const provider = e.target.value;
+                console.log('[Events] Provider changed to:', provider);
+                DOMManager.updateProviderFields(provider);
+                AppState.ui.currentProvider = provider;
+            });
+        }
+
+        // Ollama
+        if (elements.refreshOllamaBtn) {
+            elements.refreshOllamaBtn.addEventListener('click', () => OllamaManager.updateModelList());
+        }
+
+        // Gemini
+        if (elements.pasteKeyBtn) {
+            elements.pasteKeyBtn.addEventListener('click', () => GeminiManager.handlePasteApiKey());
+        }
+        if (elements.toggleKeyVisibility) {
+            elements.toggleKeyVisibility.addEventListener('click', () => GeminiManager.handleToggleKeyVisibility());
+        }
+
+        // Footer buttons
+        if (elements.saveBtn) {
+            elements.saveBtn.addEventListener('click', () => SettingsManager.handleSave());
+        }
+        if (elements.cancelBtn) {
+            elements.cancelBtn.addEventListener('click', () => SettingsManager.handleCancel());
+        }
+        if (elements.testConnectionBtn) {
+            elements.testConnectionBtn.addEventListener('click', () => SettingsManager.handleTestConnection());
+        }
+
+        console.log('[Events] ✓ Event listeners attached');
+    },
+
+    /**
+     * Attach IPC listeners
+     */
+    attachIPCListeners() {
+        console.log('[Events] Attaching IPC listeners...');
+
+        // Update available
+        ipcRenderer.on('update-available', (_event, info) => {
+            console.log('[Events] Update available:', info);
+            UpdateManager.showUpdateNotification(info);
+
+            if (globalThis.showToast && globalThis.showToast.updateAvailable) {
+                globalThis.showToast.updateAvailable(info.version);
+            }
+        });
+
+        // Update downloaded
+        ipcRenderer.on('update-downloaded', (_event, info) => {
+            console.log('[Events] Update downloaded:', info);
+
+            if (globalThis.showToast && globalThis.showToast.updateDownloaded) {
+                globalThis.showToast.updateDownloaded();
+            }
+        });
+
+        // Update downloading
+        ipcRenderer.on('update-downloading', (_event, progressObj) => {
+            console.log('[Events] Update downloading:', progressObj);
+
+            if (globalThis.showToast && globalThis.showToast.updateDownloading) {
+                globalThis.showToast.updateDownloading(progressObj.percent);
+            }
+        });
+
+        // Authentication status changed
+        ipcRenderer.on('auth-status-changed', () => {
+            console.log('[Events] Auth status changed');
+            UserAuth.refreshUserCard();
+        });
+
+        console.log('[Events] ✓ IPC listeners attached');
+    }
+};
 
 // ============================================================================
 // INITIALIZATION
@@ -964,520 +1162,64 @@ function cacheElements() {
 /**
  * Initialize the settings page
  */
-async function initializeSettings() {
-  // Prevent double initialization
-  if (isInitialized) {
-    console.warn('[Settings] Already initialized, skipping...');
-    return;
-  }
+async function initialize() {
+    console.log('[Settings] ========================================');
+    console.log('[Settings] Initializing Settings Page v3.0.0');
+    console.log('[Settings] ========================================');
 
-  console.log('[Settings] 🚀 Initializing settings page...');
+    try {
+        // Cache DOM elements
+        AppState.elements = DOMManager.cacheElements();
 
-  try {
-    // Step 1: Wait for DOM to be fully ready
-    if (document.readyState !== 'complete') {
-      console.log('[Settings] Waiting for document ready state...');
-      await new Promise(resolve => {
-        if (document.readyState === 'complete') {
-          resolve();
-        } else {
-          window.addEventListener('load', resolve, { once: true });
-          // Fallback timeout
-          setTimeout(resolve, 2000);
+        // Load configuration
+        AppState.config = ConfigManager.load();
+        ConfigManager.loadIntoForm(AppState.config);
+
+        // Update provider fields visibility
+        DOMManager.updateProviderFields(AppState.config.provider);
+        AppState.ui.currentProvider = AppState.config.provider;
+
+        // Attach event listeners
+        EventHandlers.attachAll();
+        EventHandlers.attachIPCListeners();
+
+        // Initialize components
+        await UserAuth.refreshUserCard();
+        await UpdateManager.displayVersion();
+
+        // If Ollama is selected, fetch models
+        if (AppState.config.provider === 'ollama') {
+            await OllamaManager.updateModelList();
         }
-      });
-    }
 
-    // Step 2: Cache DOM elements with retry logic
-    console.log('[Settings] Step 1/7: Caching DOM elements...');
-    const elementsFound = cacheElements();
+        // Mark as initialized
+        AppState.isInitialized = true;
 
-    // Retry element caching if critical elements are missing
-    const criticalElements = ['saveBtn', 'cancelBtn'];
-    const missingCritical = criticalElements.filter(name => !elements[name]);
+        console.log('[Settings] ========================================');
+        console.log('[Settings] ✓ Initialization complete');
+        console.log('[Settings] ========================================');
 
-    if (missingCritical.length > 0) {
-      console.warn('[Settings] Missing critical elements, retrying after delay...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      cacheElements();
-    }
-
-    // Step 3: Attach event listeners
-    console.log('[Settings] Step 2/7: Attaching event listeners...');
-    const listenerResults = attachEventListeners();
-
-    if (listenerResults.failed > 0) {
-      console.warn(`[Settings] Some event listeners failed to attach (${listenerResults.failed} failed, ${listenerResults.attached} succeeded)`);
-    }
-    // Step 2.5: Install global click logger and delegated handlers for robustness
-    try {
-      installGlobalClickLogger();
-      installDelegatedHandlers();
-      logElementDiagnostics();
-    } catch (e) {
-      console.warn('[Settings] Failed to install global click handlers/diagnostics:', e?.message);
-    }
-
-
-    // Step 4: Load settings into form
-    console.log('[Settings] Step 3/7: Loading settings into form...');
-    loadSettingsIntoForm();
-
-    // Step 5: Refresh user card
-    console.log('[Settings] Step 4/7: Refreshing user card...');
-    await refreshUserCard();
-
-    // Step 6: Initialize updates section
-    console.log('[Settings] Step 5/7: Initializing updates section...');
-    initializeUpdatesSection();
-
-    // Step 7: Update Ollama models if Ollama is selected
-    console.log('[Settings] Step 6/7: Checking Ollama configuration...');
-    const config = loadConfig();
-    if (config.provider === 'ollama') {
-      await updateOllamaModelList();
-    }
-
-    // Step 8: Apply current theme
-    console.log('[Settings] Step 7/7: Applying theme...');
-    applyTheme(config.theme);
-
-    // Mark as initialized
-    isInitialized = true;
-
-    console.log('[Settings] ✅ Settings page initialized successfully');
-
-    // Add a small delay and then test button functionality
-    setTimeout(() => {
-      console.log('[Settings] Running post-initialization button test...');
-      testButtonFunctionality();
-    }, 1000);
-
-  } catch (error) {
-    console.error('[Settings] ❌ Failed to initialize settings page:', error);
-
-    // Show error to user if toast is available
-    if (typeof toast !== 'undefined') {
-      toast.error('Failed to load settings. Please refresh the page.', 5000);
-    } else {
-      // Fallback: show alert
-      alert('Failed to load settings. Please refresh the page.\n\nError: ' + error.message);
-    }
-
-    // Try to recover by retrying initialization after a delay
-    console.log('[Settings] Attempting recovery in 3 seconds...');
-    setTimeout(async () => {
-      isInitialized = false;
-      await initializeSettings();
-    }, 3000);
-  }
-}
-
-/**
- * Test button functionality after initialization
- */
-function testButtonFunctionality() {
-  console.log('[Settings] 🧪 Testing button functionality...');
-
-  const buttonsToTest = [
-    { name: 'Save', element: elements.saveBtn, id: 'save-btn' },
-    { name: 'Cancel', element: elements.cancelBtn, id: 'cancel-btn' },
-    { name: 'Test Connection', element: elements.testConnectionBtn, id: 'test-connection-btn' }
-  ];
-
-  const workingButtons = [];
-  const brokenButtons = [];
-
-  buttonsToTest.forEach(({ name, element, id }) => {
-    if (element && element.onclick !== undefined) {
-      // Check if element is visible and not disabled
-      const isVisible = !element.classList.contains('hidden') &&
-                       element.style.display !== 'none' &&
-                       element.offsetParent !== null;
-      const isEnabled = !element.disabled;
-
-      if (isVisible && isEnabled) {
-        workingButtons.push(name);
-        console.log(`[Settings] ✓ ${name} button: Working (visible: ${isVisible}, enabled: ${isEnabled})`);
-      } else {
-        brokenButtons.push(`${name} (visible: ${isVisible}, enabled: ${isEnabled})`);
-        console.warn(`[Settings] ⚠️ ${name} button: Issue detected (visible: ${isVisible}, enabled: ${isEnabled})`);
-      }
-    } else {
-      brokenButtons.push(`${name} (element not found)`);
-      console.error(`[Settings] ❌ ${name} button: Not found or invalid`);
-
-      // Try to find the element again
-      const fallbackElement = document.getElementById(id);
-      if (fallbackElement) {
-        console.log(`[Settings] Found ${name} button using fallback selector`);
-      }
-    }
-  });
-
-  if (workingButtons.length === buttonsToTest.length) {
-    console.log('[Settings] ✅ All critical buttons are working!');
-  } else {
-    console.error(`[Settings] ❌ ${brokenButtons.length} buttons have issues:`, brokenButtons);
-  }
-
-  return {
-    working: workingButtons,
-    broken: brokenButtons,
-    total: buttonsToTest.length
-  };
-}
-
-// ============================================================================
-// IPC EVENT LISTENERS
-// ============================================================================
-
-/**
- * Set up IPC event listeners for communication with main process
- */
-function setupIpcListeners() {
-  console.log('[Settings] Setting up IPC listeners...');
-
-  // Listen for authentication updates
-  ipcRenderer.on('auth-status-changed', async () => {
-    console.log('[Settings] Auth status changed, refreshing user card...');
-    await refreshUserCard();
-  });
-
-  // Listen for update status changes
-  ipcRenderer.on('update-status', (event, payload) => {
-    console.log('[Settings] Update status:', payload);
-
-    if (payload.status === 'available') {
-      // Show update notification
-      const updateNotification = document.getElementById('update-notification');
-      const updateNewVersion = document.getElementById('update-new-version');
-      const updateReleaseNotes = document.getElementById('update-release-notes');
-
-      if (updateNotification) {
-        updateNotification.classList.remove('hidden');
-      }
-      if (updateNewVersion) {
-        updateNewVersion.textContent = payload.version || '';
-      }
-      if (updateReleaseNotes && payload.releaseNotes) {
-        updateReleaseNotes.textContent = payload.releaseNotes;
-      }
-
-      if (typeof toast !== 'undefined') {
-        toast.info(`Update available: ${payload.version}`, 4000);
-      }
-    } else if (payload.status === 'not-available') {
-      if (typeof toast !== 'undefined') {
-        toast.success('You are using the latest version!', 3000);
-      }
-    } else if (payload.status === 'downloading') {
-      if (typeof toast !== 'undefined') {
-        toast.info('Downloading update...', 3000);
-      }
-    } else if (payload.status === 'downloaded') {
-      if (typeof toast !== 'undefined') {
-        toast.success('Update downloaded! Restart to install.', 5000);
-      }
-    } else if (payload.status === 'error') {
-      if (typeof toast !== 'undefined') {
-        toast.error('Update check failed', 3000);
-      }
-    }
-  });
-
-  console.log('[Settings] IPC listeners set up successfully');
-}
-
-// ============================================================================
-// DOCUMENT READY
-// ============================================================================
-
-// ============================================================================
-// DOCUMENT READY HANDLING
-// ============================================================================
-
-/**
- * Robust initialization that handles various document ready states
- */
-function initializeWhenReady() {
-  console.log('[Settings] Document ready state:', document.readyState);
-
-  // Set up IPC listeners immediately
-  setupIpcListeners();
-
-  // Initialize based on current document state
-  if (document.readyState === 'loading') {
-    console.log('[Settings] Document still loading, waiting for DOMContentLoaded...');
-    document.addEventListener('DOMContentLoaded', async () => {
-      console.log('[Settings] DOMContentLoaded fired, initializing...');
-      // Add small delay to ensure all scripts are loaded
-      setTimeout(async () => {
-        await initializeSettings();
-      }, 100);
-    });
-  } else if (document.readyState === 'interactive') {
-    console.log('[Settings] Document interactive, initializing with delay...');
-    // Document has finished loading but sub-resources might still be loading
-    setTimeout(async () => {
-      await initializeSettings();
-    }, 200);
-  } else {
-    console.log('[Settings] Document complete, initializing immediately...');
-    // Document and all sub-resources have finished loading
-    setTimeout(async () => {
-      await initializeSettings();
-    }, 50);
-  }
-}
-/**
- * Install a capture-phase click logger to trace where clicks go
- */
-function installGlobalClickLogger() {
-  if (installGlobalClickLogger._installed) return;
-  installGlobalClickLogger._installed = true;
-  document.addEventListener('click', (e) => {
-    try {
-      const path = (e.composedPath ? e.composedPath() : []).map(el => el?.id || el?.className || el?.tagName).slice(0, 6);
-      const tgt = describeEl(e.target);
-      console.log('[Settings][Capture] click:', { target: tgt, path, x: e.clientX, y: e.clientY });
-    } catch {}
-  }, true);
-}
-
-/**
- * Delegated handlers to ensure buttons work even if direct listeners fail
- */
-function installDelegatedHandlers() {
-  if (installDelegatedHandlers._installed) return;
-  installDelegatedHandlers._installed = true;
-  const map = [
-    { id: 'save-btn', name: 'Save', handler: handleSaveSettings },
-    { id: 'test-connection-btn', name: 'Test Connection', handler: handleTestConnection },
-    { id: 'paste-key-btn', name: 'Paste API key', handler: handlePasteApiKey },
-    { id: 'toggle-key-visibility', name: 'Toggle key visibility', handler: handleToggleKeyVisibility },
-    { id: 'settings-signin-btn', name: 'Sign In', handler: handleSignIn }
-  ];
-  document.addEventListener('click', (e) => {
-    try {
-      for (const { id, name, handler } of map) {
-        const el = e.target?.closest ? e.target.closest(`#${id}`) : null;
-        if (el) {
-          console.log(`[Settings][Delegation] Handling ${name} via capture`);
-          if (e.preventDefault) e.preventDefault();
-          if (e.stopPropagation) e.stopPropagation();
-          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-          try { handler.call(el, e); } catch (err) {
-            console.error(`[Settings] Delegated handler error for ${name}:`, err);
-          }
-          break;
-        }
-      }
-    } catch (err) {
-      console.warn('[Settings] Delegation handler error:', err?.message);
-    }
-  }, true);
-}
-
-/**
- * Log interactive diagnostics for key buttons
- */
-function logElementDiagnostics() {
-  const list = [
-    { name: 'Save', el: elements.saveBtn },
-    { name: 'Test Connection', el: elements.testConnectionBtn },
-    { name: 'Paste', el: elements.pasteKeyBtn },
-    { name: 'Toggle', el: elements.toggleKeyVisibility },
-    { name: 'Sign In', el: elements.signInBtn }
-  ];
-  list.forEach(({ name, el }) => {
-    try {
-      if (!el) { console.warn(`[Settings][Diag] ${name}: element not found`); return; }
-      const cs = window.getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      console.log(`[Settings][Diag] ${name}:`, {
-        exists: !!el,
-        display: cs.display,
-        visibility: cs.visibility,
-        opacity: cs.opacity,
-        pointerEvents: cs.pointerEvents,
-        disabled: !!el.disabled,
-        rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-        zIndex: cs.zIndex
-      });
-    } catch (err) {
-      console.warn(`[Settings][Diag] ${name}: failed to inspect`, err?.message);
-    }
-  });
-}
-
-function describeEl(el) {
-  if (!el) return 'null';
-  const id = el.id ? `#${el.id}` : '';
-  const cls = el.className ? `.${String(el.className).split(' ').join('.')}` : '';
-  return `${el.tagName}${id}${cls}`;
-}
-
-
-// Start initialization
-initializeWhenReady();
-
-// ============================================================================
-// DEBUG UTILITIES
-// ============================================================================
-
-/**
- * Debug function to test all buttons (callable from console)
- */
-window.debugSettingsButtons = function() {
-  console.log('🧪 === SETTINGS BUTTONS DEBUG ===');
-
-  const buttons = {
-    'Save': elements.saveBtn,
-    'Cancel': elements.cancelBtn,
-    'Test Connection': elements.testConnectionBtn,
-    'Sign In': elements.signInBtn,
-    'Sign Out': elements.signOutBtn,
-    'Refresh Ollama': elements.refreshOllamaBtn,
-    'Paste Key': elements.pasteKeyBtn,
-    'Toggle Visibility': elements.toggleKeyVisibility,
-    'Check Updates': elements.checkUpdateBtn
-  };
-
-  Object.entries(buttons).forEach(([name, btn]) => {
-    if (btn) {
-      const isVisible = !btn.classList.contains('hidden') &&
-                       btn.style.display !== 'none' &&
-                       btn.offsetParent !== null;
-      const isEnabled = !btn.disabled;
-
-      console.log(`✅ ${name} button:`, {
-        id: btn.id,
-        disabled: btn.disabled,
-        visible: isVisible,
-        enabled: isEnabled,
-        hasEventListeners: btn.onclick !== null || btn._listeners !== undefined,
-        classList: Array.from(btn.classList),
-        style: btn.style.cssText
-      });
-    } else {
-      console.error(`❌ ${name} button: NOT FOUND`);
-    }
-  });
-
-  console.log('🧪 === DEBUG COMPLETE ===');
-};
-
-/**
- * Test button click functionality
- */
-window.testButtonClicks = function() {
-  console.log('🧪 === TESTING BUTTON CLICKS ===');
-
-  const testButtons = [
-    { name: 'Save', element: elements.saveBtn, handler: handleSaveSettings },
-    { name: 'Cancel', element: elements.cancelBtn, handler: handleCancel },
-    { name: 'Test Connection', element: elements.testConnectionBtn, handler: handleTestConnection }
-  ];
-
-  testButtons.forEach(({ name, element, handler }) => {
-    if (element) {
-      console.log(`Testing ${name} button...`);
-      try {
-        // Test if we can call the handler directly
-        console.log(`  - Handler function exists: ${typeof handler === 'function'}`);
-
-        // Test if click event can be dispatched
-        const clickEvent = new MouseEvent('click', { bubbles: true });
-        element.dispatchEvent(clickEvent);
-        console.log(`  ✅ ${name} click event dispatched successfully`);
-
-      } catch (error) {
-        console.error(`  ❌ ${name} click test failed:`, error);
-      }
-    } else {
-      console.error(`  ❌ ${name} button element not found`);
-    }
-  });
-
-  console.log('🧪 === CLICK TESTING COMPLETE ===');
-};
-
-/**
- * Manual button test - actually trigger functionality
- */
-window.manualButtonTest = function(buttonName) {
-  console.log(`🧪 === MANUAL TEST: ${buttonName.toUpperCase()} ===`);
-
-  const handlers = {
-    'save': handleSaveSettings,
-    'cancel': handleCancel,
-    'test': handleTestConnection,
-    'signin': handleSignIn,
-    'signout': handleSignOut,
-    'refresh': handleRefreshOllamaModels,
-    'paste': handlePasteApiKey,
-    'toggle': handleToggleKeyVisibility,
-    'update': handleCheckForUpdates
-  };
-
-  const handler = handlers[buttonName.toLowerCase()];
-  if (handler && typeof handler === 'function') {
-    try {
-      console.log(`Manually calling ${buttonName} handler...`);
-      handler();
-      console.log(`✅ ${buttonName} handler executed successfully`);
     } catch (error) {
-      console.error(`❌ ${buttonName} handler failed:`, error);
+        console.error('[Settings] ========================================');
+        console.error('[Settings] ✗ Initialization failed:', error);
+        console.error('[Settings] ========================================');
+
+        if (globalThis.showToast) {
+            globalThis.showToast.error('Failed to initialize settings page');
+        }
     }
-  } else {
-    console.error(`❌ Handler for ${buttonName} not found or not a function`);
-    console.log('Available handlers:', Object.keys(handlers));
-  }
-};
-
-/**
- * Debug function to check current configuration
- */
-window.debugSettingsConfig = function() {
-  console.log('🔧 === CURRENT CONFIGURATION ===');
-  const config = loadConfig();
-  console.log(config);
-  console.log('🔧 === CONFIG COMPLETE ===');
-};
-
-/**
- * Force reinitialize settings (useful for debugging)
- */
-window.forceReinitialize = function() {
-  console.log('🔄 === FORCING REINITIALIZATION ===');
-  isInitialized = false;
-  setTimeout(async () => {
-    await initializeSettings();
-    console.log('✅ Reinitialization complete');
-  }, 100);
-};
-
-console.log('[Settings] 💡 Debug utilities available:');
-console.log('[Settings] - window.debugSettingsButtons() - Check all buttons');
-console.log('[Settings] - window.testButtonClicks() - Test button click events');
-console.log('[Settings] - window.manualButtonTest("save") - Manually test specific button');
-console.log('[Settings] - window.debugSettingsConfig() - View current config');
-console.log('[Settings] - window.forceReinitialize() - Force settings reinit');
-console.log('[Settings] - Available manual tests: save, cancel, test, signin, signout, refresh, paste, toggle, update');
-
-// ============================================================================
-// EXPORTS (for potential use by other modules)
-// ============================================================================
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    loadConfig,
-    saveConfig,
-    applyTheme,
-    refreshUserCard,
-    updateOllamaModelList
-  };
 }
 
+// ============================================================================
+// START APPLICATION
+// ============================================================================
 
+// Wait for DOM to be ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initialize);
+} else {
+    // DOM is already ready
+    initialize();
+}
+
+console.log('[Settings] Module loaded successfully');

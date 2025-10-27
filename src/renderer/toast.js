@@ -253,8 +253,14 @@ class ToastNotification {
 // Create global instance
 const toast = new ToastNotification();
 
+// Make it globally accessible
+globalThis.showToast = toast;
+window.showToast = toast;
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = toast;
 }
+
+console.log('[Toast] Toast notification system initialized');
 
