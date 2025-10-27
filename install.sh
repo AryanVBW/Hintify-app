@@ -112,7 +112,10 @@ print_header() {
         # Display version if available
         if [ -n "$LATEST_VERSION" ]; then
             echo -e "\033[96m║                                                                           ║\033[0m"
-            echo -e "\033[92m║                           Version: ${LATEST_VERSION}                                  ║\033[0m"
+            # Center the version text dynamically
+            local version_text="Version: ${LATEST_VERSION}"
+            local padding=$(( (75 - ${#version_text}) / 2 ))
+            printf "\033[92m║%*s%s%*s║\033[0m\n" $padding "" "$version_text" $((75 - padding - ${#version_text})) ""
         fi
 
         echo -e "\033[96m║                                                                           ║\033[0m"
@@ -297,18 +300,44 @@ install_homebrew() {
 fetch_latest_release() {
     step_indicator 2 8 "Fetching Latest Release Information"
 
-    print_message "$CYAN" "Checking GitHub for latest version..." "$INFO"
+    print_message "$CYAN" "Connecting to GitHub API..." "$INFO"
 
     # Fetch latest release info from GitHub API
     local api_url="https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest"
     local release_info=""
+    local http_code=""
 
     if command_exists curl; then
-        release_info=$(curl -sL "$api_url" 2>/dev/null)
+        # Fetch with HTTP status code
+        local temp_file=$(mktemp)
+        http_code=$(curl -sL -w "%{http_code}" -o "$temp_file" "$api_url" 2>/dev/null)
+        release_info=$(cat "$temp_file")
+        rm -f "$temp_file"
+
+        if [ "$http_code" != "200" ]; then
+            print_message "$RED" "GitHub API returned HTTP $http_code" "$ERROR"
+            if [ "$http_code" = "404" ]; then
+                print_message "$YELLOW" "No releases found for this repository" "$INFO"
+            elif [ "$http_code" = "403" ]; then
+                print_message "$YELLOW" "API rate limit exceeded. Please try again later" "$INFO"
+            fi
+            exit 1
+        fi
     elif command_exists wget; then
         release_info=$(wget -qO- "$api_url" 2>/dev/null)
+        if [ $? -ne 0 ]; then
+            print_message "$RED" "Failed to fetch release information" "$ERROR"
+            exit 1
+        fi
     else
         print_message "$RED" "Neither curl nor wget found. Cannot fetch release info." "$ERROR"
+        exit 1
+    fi
+
+    # Validate JSON response
+    if [ -z "$release_info" ] || ! echo "$release_info" | grep -q '"tag_name"'; then
+        print_message "$RED" "Invalid response from GitHub API" "$ERROR"
+        print_message "$YELLOW" "Please check your internet connection or try again later" "$INFO"
         exit 1
     fi
 
@@ -318,23 +347,51 @@ fetch_latest_release() {
     # Extract download URL for macOS ARM64 ZIP
     GITHUB_REPO_URL=$(echo "$release_info" | grep -o '"browser_download_url": *"[^"]*arm64[^"]*\.zip"' | head -1 | sed 's/"browser_download_url": *"\(.*\)"/\1/')
 
-    # Extract release notes
-    RELEASE_NOTES=$(echo "$release_info" | grep -o '"body": *"[^"]*"' | head -1 | sed 's/"body": *"\(.*\)"/\1/' | sed 's/\\n/\n/g' | head -5)
+    # If ARM64 not found, try to find any macOS ZIP
+    if [ -z "$GITHUB_REPO_URL" ]; then
+        GITHUB_REPO_URL=$(echo "$release_info" | grep -o '"browser_download_url": *"[^"]*mac[^"]*\.zip"' | head -1 | sed 's/"browser_download_url": *"\(.*\)"/\1/')
+    fi
+
+    # Extract release date
+    local release_date=$(echo "$release_info" | grep -o '"published_at": *"[^"]*"' | head -1 | sed 's/"published_at": *"\(.*\)"/\1/' | cut -d'T' -f1)
+
+    # Extract release notes (improved parsing)
+    RELEASE_NOTES=$(echo "$release_info" | sed -n 's/.*"body": *"\([^"]*\)".*/\1/p' | sed 's/\\n/\n/g' | sed 's/\\r//g' | head -10)
 
     if [ -z "$LATEST_VERSION" ] || [ -z "$GITHUB_REPO_URL" ]; then
         print_message "$RED" "Failed to fetch latest release information" "$ERROR"
-        print_message "$YELLOW" "Please check your internet connection or try again later" "$INFO"
+        print_message "$YELLOW" "No compatible macOS release found" "$INFO"
+        print_message "$CYAN" "Visit: https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases" "$INFO"
         exit 1
     fi
 
-    print_message "$GREEN" "Latest version: $LATEST_VERSION" "$SUCCESS"
-    print_message "$CYAN" "Download URL: $GITHUB_REPO_URL" "$INFO"
+    # Display release information
+    if [ "$IS_INTERACTIVE" = true ]; then
+        echo -e "\n${CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${RESET}"
+        echo -e "${CYAN}║${RESET} ${BOLD}${GREEN}Latest Release Information${RESET}"
+        echo -e "${CYAN}╠═══════════════════════════════════════════════════════════════════════════╣${RESET}"
+        echo -e "${CYAN}║${RESET} ${BOLD}Version:${RESET}      ${GREEN}${LATEST_VERSION}${RESET}"
+        if [ -n "$release_date" ]; then
+            echo -e "${CYAN}║${RESET} ${BOLD}Released:${RESET}     ${YELLOW}${release_date}${RESET}"
+        fi
+        echo -e "${CYAN}║${RESET} ${BOLD}Platform:${RESET}     ${MAGENTA}macOS ARM64${RESET}"
+        local file_name=$(basename "$GITHUB_REPO_URL")
+        echo -e "${CYAN}║${RESET} ${BOLD}Package:${RESET}      ${BLUE}${file_name}${RESET}"
+        echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${RESET}\n"
+    else
+        echo "Latest version: $LATEST_VERSION"
+        echo "Release date: $release_date"
+        echo "Download URL: $GITHUB_REPO_URL"
+    fi
 
     # Display release notes if available
     if [ -n "$RELEASE_NOTES" ]; then
         print_message "$YELLOW" "Release Notes:" "$INFO"
-        echo "$RELEASE_NOTES" | head -3
+        echo "$RELEASE_NOTES" | head -5 | sed 's/^/  /'
+        echo ""
     fi
+
+    print_message "$GREEN" "Successfully fetched release information" "$SUCCESS"
 }
 
 # Install wget
@@ -359,18 +416,45 @@ install_wget() {
     fi
 }
 
+# Show installation plan
+show_installation_plan() {
+    if [ "$IS_INTERACTIVE" = true ] && [ -n "$LATEST_VERSION" ]; then
+        echo ""
+        echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${RESET}"
+        echo -e "${CYAN}║${RESET} ${BOLD}${YELLOW}Installation Plan${RESET}"
+        echo -e "${CYAN}╠═══════════════════════════════════════════════════════════════════════════╣${RESET}"
+        echo -e "${CYAN}║${RESET} ${BOLD}What will be installed:${RESET}"
+        echo -e "${CYAN}║${RESET}   • Application: ${GREEN}${APP_DISPLAY_NAME}${RESET}"
+        echo -e "${CYAN}║${RESET}   • Version: ${YELLOW}${LATEST_VERSION}${RESET}"
+        echo -e "${CYAN}║${RESET}   • Platform: ${MAGENTA}macOS ARM64${RESET}"
+        echo -e "${CYAN}║${RESET}"
+        echo -e "${CYAN}║${RESET} ${BOLD}Installation steps:${RESET}"
+        echo -e "${CYAN}║${RESET}   1. Download from GitHub Releases"
+        echo -e "${CYAN}║${RESET}   2. Extract application bundle"
+        echo -e "${CYAN}║${RESET}   3. Install to Applications folder"
+        echo -e "${CYAN}║${RESET}   4. Apply code signature"
+        echo -e "${CYAN}║${RESET}   5. Launch application"
+        echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${RESET}"
+        echo ""
+        sleep 1
+    fi
+}
+
 # Download app with progress and retry logic
 download_app() {
     step_indicator 4 8 "Downloading ${APP_DISPLAY_NAME} ${LATEST_VERSION}"
-    
-    print_message "$CYAN" "Downloading from GitHub..." "$DOWNLOAD"
-    
+
+    local file_name=$(basename "$GITHUB_REPO_URL")
+    print_message "$CYAN" "Downloading: ${file_name}" "$DOWNLOAD"
+    print_message "$BLUE" "Source: GitHub Releases" "$INFO"
+
     # Ensure we start on a clean line
     printf "\r\033[2K" 2>/dev/null
 
     local max_attempts=3
     local attempt=1
     local download_success=false
+    local start_time=$(date +%s)
     
     while [ $attempt -le $max_attempts ] && [ "$download_success" = false ]; do
         if [ $attempt -gt 1 ]; then
@@ -421,7 +505,21 @@ download_app() {
         if [ "$download_success" = true ] && [ -f "$ZIP_FILE" ]; then
             local file_size=$(stat -f%z "$ZIP_FILE" 2>/dev/null || wc -c < "$ZIP_FILE")
             if [ "$file_size" -gt 1000 ]; then  # At least 1KB
-                print_message "$GREEN" "Download completed successfully ($file_size bytes)" "$SUCCESS"
+                local end_time=$(date +%s)
+                local duration=$((end_time - start_time))
+                local size_mb=$(echo "scale=2; $file_size / 1048576" | bc 2>/dev/null || echo "N/A")
+
+                if [ "$IS_INTERACTIVE" = true ]; then
+                    echo -e "\n${GREEN}╔═══════════════════════════════════════════════════════════════════════════╗${RESET}"
+                    echo -e "${GREEN}║${RESET} ${BOLD}Download Complete!${RESET}"
+                    echo -e "${GREEN}╠═══════════════════════════════════════════════════════════════════════════╣${RESET}"
+                    echo -e "${GREEN}║${RESET} ${BOLD}File:${RESET}         ${file_name}"
+                    echo -e "${GREEN}║${RESET} ${BOLD}Size:${RESET}         ${size_mb} MB (${file_size} bytes)"
+                    echo -e "${GREEN}║${RESET} ${BOLD}Time:${RESET}         ${duration} seconds"
+                    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════╝${RESET}\n"
+                else
+                    echo "Download completed: $file_size bytes in $duration seconds"
+                fi
                 return 0
             else
                 print_message "$YELLOW" "Downloaded file seems too small, retrying..." "$INFO"
@@ -429,7 +527,7 @@ download_app() {
                 download_success=false
             fi
         fi
-        
+
         attempt=$((attempt + 1))
     done
     
@@ -452,7 +550,21 @@ download_app() {
     # Final check
     if [ "$download_success" = true ] && [ -f "$ZIP_FILE" ]; then
         local file_size=$(stat -f%z "$ZIP_FILE" 2>/dev/null || wc -c < "$ZIP_FILE")
-        print_message "$GREEN" "Download completed successfully ($file_size bytes)" "$SUCCESS"
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        local size_mb=$(echo "scale=2; $file_size / 1048576" | bc 2>/dev/null || echo "N/A")
+
+        if [ "$IS_INTERACTIVE" = true ]; then
+            echo -e "\n${GREEN}╔═══════════════════════════════════════════════════════════════════════════╗${RESET}"
+            echo -e "${GREEN}║${RESET} ${BOLD}Download Complete!${RESET}"
+            echo -e "${GREEN}╠═══════════════════════════════════════════════════════════════════════════╣${RESET}"
+            echo -e "${GREEN}║${RESET} ${BOLD}File:${RESET}         ${file_name}"
+            echo -e "${GREEN}║${RESET} ${BOLD}Size:${RESET}         ${size_mb} MB (${file_size} bytes)"
+            echo -e "${GREEN}║${RESET} ${BOLD}Time:${RESET}         ${duration} seconds"
+            echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════╝${RESET}\n"
+        else
+            echo "Download completed: $file_size bytes in $duration seconds"
+        fi
     else
         print_message "$RED" "Failed to download the app after $max_attempts attempts" "$ERROR"
         print_message "$YELLOW" "Please check your internet connection or try again later" "$INFO"
@@ -464,19 +576,28 @@ download_app() {
 # Extract ZIP
 extract_app() {
     step_indicator 5 8 "Extracting Application"
-    
-    print_message "$CYAN" "Extracting ${APP_NAME}.zip..." "$INSTALL"
-    
+
+    print_message "$CYAN" "Extracting ${APP_NAME} ${LATEST_VERSION}..." "$INSTALL"
+
     mkdir -p "$EXTRACT_DIR"
     unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR" &
     spinner $! "Extracting archive"
-    
+
     # Find the .app bundle
     APP_PATH=$(find "$EXTRACT_DIR" -name "*.app" -type d | head -n 1)
-    
+
     if [ -n "$APP_PATH" ]; then
         APP_BASENAME=$(basename "$APP_PATH")
         print_message "$GREEN" "Found application: $APP_BASENAME" "$SUCCESS"
+
+        # Try to extract app version from Info.plist if available
+        local info_plist="$APP_PATH/Contents/Info.plist"
+        if [ -f "$info_plist" ]; then
+            local app_version=$(defaults read "$info_plist" CFBundleShortVersionString 2>/dev/null || echo "")
+            if [ -n "$app_version" ]; then
+                print_message "$BLUE" "App bundle version: $app_version" "$INFO"
+            fi
+        fi
     else
         print_message "$RED" "No .app bundle found in the ZIP" "$ERROR"
         exit 1
@@ -486,10 +607,10 @@ extract_app() {
 # Move to Applications
 move_to_applications() {
     step_indicator 6 8 "Installing to Applications Folder"
-    
+
     local target_dir="$HOME/Applications"
     local needs_sudo=false
-    
+
     # Create ~/Applications if it doesn't exist
     if [ ! -d "$target_dir" ]; then
         mkdir -p "$target_dir" 2>/dev/null
@@ -498,18 +619,30 @@ move_to_applications() {
             needs_sudo=true
         fi
     fi
-    
-    print_message "$CYAN" "Moving to $target_dir..." "$INFO"
-    
-    # Remove existing app if present
+
+    print_message "$CYAN" "Installing ${APP_NAME} ${LATEST_VERSION} to $target_dir..." "$INFO"
+
+    # Check if existing app is present and show version
     if [ -d "$target_dir/$APP_BASENAME" ]; then
+        local old_version=""
+        local old_info_plist="$target_dir/$APP_BASENAME/Contents/Info.plist"
+        if [ -f "$old_info_plist" ]; then
+            old_version=$(defaults read "$old_info_plist" CFBundleShortVersionString 2>/dev/null || echo "unknown")
+        fi
+
+        if [ -n "$old_version" ]; then
+            print_message "$YELLOW" "Replacing existing version: $old_version" "$INFO"
+        else
+            print_message "$YELLOW" "Replacing existing installation" "$INFO"
+        fi
+
         if [ "$needs_sudo" = true ]; then
             sudo rm -rf "$target_dir/$APP_BASENAME" 2>/dev/null
         else
             rm -rf "$target_dir/$APP_BASENAME" 2>/dev/null
         fi
     fi
-    
+
     # Move the app
     if [ "$needs_sudo" = true ]; then
         sudo mv "$APP_PATH" "$target_dir/" &
@@ -518,11 +651,12 @@ move_to_applications() {
         mv "$APP_PATH" "$target_dir/" &
         spinner $! "Moving application"
     fi
-    
+
     FINAL_APP_PATH="$target_dir/$APP_BASENAME"
-    
+
     if [ -d "$FINAL_APP_PATH" ]; then
-        print_message "$GREEN" "Application installed successfully" "$SUCCESS"
+        print_message "$GREEN" "Application installed successfully to $target_dir" "$SUCCESS"
+        print_message "$BLUE" "Installation path: $FINAL_APP_PATH" "$INFO"
     else
         print_message "$RED" "Failed to move application" "$ERROR"
         exit 1
@@ -532,22 +666,37 @@ move_to_applications() {
 # Codesign the app
 codesign_app() {
     step_indicator 7 8 "Code Signing Application"
-    
+
     print_message "$CYAN" "Applying ad-hoc signature..." "$INFO"
     wave_animation 1
-    
+
     # Remove extended attributes
     xattr -cr "$FINAL_APP_PATH" 2>/dev/null
-    
+
     # Ad-hoc sign
     codesign --force --deep --sign - "$FINAL_APP_PATH" 2>/dev/null &
     spinner $! "Code signing"
-    
+
     # Verify signature
     if codesign --verify --verbose "$FINAL_APP_PATH" 2>/dev/null; then
         print_message "$GREEN" "Code signing successful" "$SUCCESS"
     else
         print_message "$YELLOW" "Code signing may have issues, but continuing..." "$INFO"
+    fi
+
+    # Verify installation and display final version info
+    local installed_version=""
+    local info_plist="$FINAL_APP_PATH/Contents/Info.plist"
+    if [ -f "$info_plist" ]; then
+        installed_version=$(defaults read "$info_plist" CFBundleShortVersionString 2>/dev/null || echo "")
+        local bundle_id=$(defaults read "$info_plist" CFBundleIdentifier 2>/dev/null || echo "")
+
+        if [ -n "$installed_version" ]; then
+            print_message "$GREEN" "Verified installation: v$installed_version" "$CHECK"
+            if [ -n "$bundle_id" ]; then
+                print_message "$BLUE" "Bundle ID: $bundle_id" "$INFO"
+            fi
+        fi
     fi
 }
 
@@ -650,6 +799,9 @@ main() {
     # Re-print header with version info
     print_header
 
+    # Show installation plan
+    show_installation_plan
+
     download_app
     extract_app
     move_to_applications
@@ -662,17 +814,38 @@ main() {
     
     # Clean up
     cleanup
-    
+
     print_message "$BOLD$GREEN" "Thank you for installing Hintify ${LATEST_VERSION}!" "$MAGIC"
-    print_message "$CYAN" "Visit ${WEBSITE_URL} for more information" "$INFO"
 
     if [ "$IS_INTERACTIVE" = true ]; then
         echo ""
-        echo -e "${YELLOW}═══════════════════════════════════════════════════════════${RESET}"
-        echo -e "${CYAN}📦 Installed Version: ${BOLD}${LATEST_VERSION}${RESET}"
-        echo -e "${CYAN}🌐 Website: ${BOLD}${WEBSITE_URL}${RESET}"
-        echo -e "${CYAN}📂 Location: ${BOLD}${FINAL_APP_PATH}${RESET}"
-        echo -e "${YELLOW}═══════════════════════════════════════════════════════════${RESET}"
+        echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════════════════╗${RESET}"
+        echo -e "${GREEN}║${RESET} ${BOLD}${WHITE}Installation Summary${RESET}"
+        echo -e "${GREEN}╠═══════════════════════════════════════════════════════════════════════════╣${RESET}"
+        echo -e "${GREEN}║${RESET} ${BOLD}Application:${RESET}  ${CYAN}${APP_DISPLAY_NAME}${RESET}"
+        echo -e "${GREEN}║${RESET} ${BOLD}Version:${RESET}      ${YELLOW}${LATEST_VERSION}${RESET}"
+        echo -e "${GREEN}║${RESET} ${BOLD}Location:${RESET}     ${BLUE}${FINAL_APP_PATH}${RESET}"
+        echo -e "${GREEN}║${RESET} ${BOLD}Website:${RESET}      ${MAGENTA}${WEBSITE_URL}${RESET}"
+        echo -e "${GREEN}║${RESET} ${BOLD}Repository:${RESET}   ${PURPLE}github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}${RESET}"
+        echo -e "${GREEN}╠═══════════════════════════════════════════════════════════════════════════╣${RESET}"
+        echo -e "${GREEN}║${RESET} ${BOLD}${YELLOW}Next Steps:${RESET}"
+        echo -e "${GREEN}║${RESET}   • The application has been launched automatically"
+        echo -e "${GREEN}║${RESET}   • You can find it in your Applications folder"
+        echo -e "${GREEN}║${RESET}   • Configure your AI provider in Settings"
+        echo -e "${GREEN}║${RESET}   • Visit ${WEBSITE_URL} for documentation"
+        echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════════════════╝${RESET}"
+        echo ""
+    else
+        echo ""
+        echo "========================================="
+        echo "Installation Summary"
+        echo "========================================="
+        echo "Application: ${APP_DISPLAY_NAME}"
+        echo "Version: ${LATEST_VERSION}"
+        echo "Location: ${FINAL_APP_PATH}"
+        echo "Website: ${WEBSITE_URL}"
+        echo "Repository: github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}"
+        echo "========================================="
     fi
 }
 
