@@ -364,8 +364,105 @@ class ClerkAuthService {
   }
 
   /**
+   * Process direct link authentication from website
+   *
+   * This handles authentication when the user clicks "Open in App" from the website.
+   * Unlike the OAuth flow, this doesn't require state validation since the user
+   * is already authenticated on the website and we're just transferring the session.
+   *
+   * Security:
+   * - Still verifies the JWT token signature
+   * - Stores credentials securely in keychain
+   * - Validates token expiration
+   *
+   * @param {Object} params - Direct link parameters
+   * @param {string} params.token - Clerk session token
+   * @param {Object} params.userData - User data from website (optional)
+   * @returns {Object} { success, user, error }
+   */
+  async processDirectLink({ token, userData }) {
+    try {
+      // Step 1: Verify the Clerk session token
+      let tokenPayload;
+      try {
+        tokenPayload = await this.verifyToken(token);
+      } catch (verifyError) {
+        return {
+          success: false,
+          error: `Token verification failed: ${verifyError.message}`
+        };
+      }
+
+      // Step 2: Extract user information from token
+      const userId = tokenPayload.sub; // Subject claim contains user ID
+      const sessionId = tokenPayload.sid; // Session ID
+
+      // Step 3: Store token securely in system keychain
+      await keytar.setPassword(this.SERVICE_NAME, 'clerk_session_token', token);
+      await keytar.setPassword(this.SERVICE_NAME, 'clerk_user_id', userId);
+      await keytar.setPassword(this.SERVICE_NAME, 'clerk_session_id', sessionId);
+
+      console.log('✅ Credentials stored securely in system keychain');
+
+      // Step 4: Use provided user data or fetch from Clerk
+      let finalUserData = userData || {
+        id: userId,
+        sessionId: sessionId
+      };
+
+      // If we have Clerk client and no user data was provided, fetch it
+      if (this.clerkClient && !userData) {
+        try {
+          const user = await this.clerkClient.users.getUser(userId);
+          finalUserData = {
+            id: user.id,
+            email: user.emailAddresses[0]?.emailAddress,
+            name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+            firstName: user.firstName,
+            lastName: user.lastName,
+            imageUrl: user.imageUrl,
+            avatar: user.imageUrl,
+            sessionId: sessionId
+          };
+        } catch (error) {
+          console.warn('⚠️ Could not fetch full user data from Clerk:', error.message);
+        }
+      }
+
+      // Step 5: Establish session
+      this.currentSession = {
+        token,
+        sessionId,
+        userId,
+        expiresAt: new Date(tokenPayload.exp * 1000),
+        createdAt: new Date()
+      };
+
+      this.currentUser = finalUserData;
+
+      console.log('🎉 Direct link authentication completed successfully');
+
+      return {
+        success: true,
+        user: finalUserData
+      };
+
+    } catch (error) {
+      console.error('❌ Error processing direct link authentication:', error);
+
+      // Clear any partial data
+      await this.clearStoredCredentials();
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Get stored credentials from system keychain
-   * 
+   *
    * @returns {Object|null} Stored credentials or null if not found
    */
   async getStoredCredentials() {

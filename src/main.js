@@ -1318,74 +1318,147 @@ async function handleDeepLink(url) {
 
     // ========================================================================
     // CLERK OAUTH CALLBACK: myapp://auth/callback?token=...&state=...
+    // OR DIRECT LINK FROM WEBSITE: hintify://auth/callback?token=...&user=...
     // ========================================================================
     if ((protocol === 'myapp:' && pathname === '//auth/callback') || pathname === '/auth/callback') {
       const searchParams = urlObj.searchParams;
       const token = searchParams.get('token');
       const state = searchParams.get('state');
+      const userDataStr = searchParams.get('user');
 
-      console.log('🔗 Clerk OAuth callback received:', {
+      console.log('🔗 Clerk authentication callback received:', {
         hasToken: !!token,
         hasState: !!state,
+        hasUserData: !!userDataStr,
         tokenLength: token?.length
       });
 
-      if (!token || !state) {
-        console.error('❌ Missing required parameters for Clerk OAuth callback');
+      if (!token) {
+        console.error('❌ Missing token for Clerk authentication');
 
         if (mainWindow) {
           dialog.showErrorBox(
             'Authentication Error',
-            'The authentication link is missing required information. Please try signing in again.'
+            'The authentication link is missing the required token. Please try signing in again.'
           );
         }
         return;
       }
 
-      // Process Clerk authentication callback
-      // This will:
-      // 1. Validate the state parameter (CSRF protection)
-      // 2. Verify the JWT token using Clerk's JWKS endpoint
-      // 3. Store credentials securely in system keychain
-      // 4. Establish the user session
-      const result = await clerkAuthService.processCallback({ token, state });
+      // Two scenarios:
+      // 1. OAuth flow (has state): Validate state and process through ClerkAuthService
+      // 2. Direct link from website (no state): Just verify token and extract user data
 
-      if (result.success) {
-        console.log('🎉 Clerk authentication successful');
+      if (state) {
+        // Scenario 1: OAuth flow with state validation
+        console.log('🔐 Processing OAuth flow with state validation...');
 
-        // Notify renderer of successful authentication
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('auth:clerk-success', {
-            user: result.user,
-            timestamp: new Date().toISOString()
-          });
-        }
+        // Process Clerk authentication callback
+        // This will:
+        // 1. Validate the state parameter (CSRF protection)
+        // 2. Verify the JWT token using Clerk's JWKS endpoint
+        // 3. Store credentials securely in system keychain
+        // 4. Establish the user session
+        const result = await clerkAuthService.processCallback({ token, state });
 
-        // Show and focus main window
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
+        if (result.success) {
+          console.log('🎉 Clerk OAuth authentication successful');
+
+          // Notify renderer of successful authentication
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('auth:clerk-success', {
+              user: result.user,
+              timestamp: new Date().toISOString()
+            });
+          }
+
+          // Show and focus main window
+          if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+          } else {
+            createMainWindow();
+          }
+
         } else {
-          createMainWindow();
-        }
+          console.error('❌ Clerk OAuth authentication failed:', result.error);
 
+          // Show error dialog
+          if (mainWindow) {
+            dialog.showErrorBox(
+              'Authentication Failed',
+              result.error || 'Failed to complete authentication. Please try again.'
+            );
+          }
+
+          // Notify renderer of error
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('auth:clerk-error', {
+              error: result.error,
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
       } else {
-        console.error('❌ Clerk authentication failed:', result.error);
+        // Scenario 2: Direct link from website (no state validation needed)
+        console.log('🔗 Processing direct link from website...');
 
-        // Show error dialog
-        if (mainWindow) {
-          dialog.showErrorBox(
-            'Authentication Failed',
-            result.error || 'Failed to complete authentication. Please try again.'
-          );
+        // Parse user data if provided
+        let userData = null;
+        if (userDataStr) {
+          try {
+            userData = JSON.parse(decodeURIComponent(userDataStr));
+            console.log('👤 User data parsed:', {
+              id: userData.id,
+              email: userData.email,
+              name: userData.name || userData.firstName
+            });
+          } catch (error) {
+            console.warn('⚠️ Failed to parse user data from deep link:', error);
+          }
         }
 
-        // Notify renderer of error
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('auth:clerk-error', {
-            error: result.error,
-            timestamp: new Date().toISOString()
-          });
+        // Process the Clerk token without state validation
+        // This verifies the JWT token and stores it securely
+        const result = await clerkAuthService.processDirectLink({ token, userData });
+
+        if (result.success) {
+          console.log('🎉 Clerk direct link authentication successful');
+
+          // Notify renderer of successful authentication
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('auth:clerk-success', {
+              user: result.user,
+              timestamp: new Date().toISOString()
+            });
+          }
+
+          // Show and focus main window
+          if (mainWindow) {
+            mainWindow.show();
+            mainWindow.focus();
+          } else {
+            createMainWindow();
+          }
+
+        } else {
+          console.error('❌ Clerk direct link authentication failed:', result.error);
+
+          // Show error dialog
+          if (mainWindow) {
+            dialog.showErrorBox(
+              'Authentication Failed',
+              result.error || 'Failed to complete authentication. Please try again.'
+            );
+          }
+
+          // Notify renderer of error
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('auth:clerk-error', {
+              error: result.error,
+              timestamp: new Date().toISOString()
+            });
+          }
         }
       }
 

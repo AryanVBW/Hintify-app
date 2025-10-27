@@ -3596,6 +3596,46 @@ function enableGuestMode() {
   // Update UI to reflect guest mode
   updateAuthUI(false, null, true); // Pass true for guest mode
 
+  // Clear the guest mode prompt and show the default welcome message
+  const hintsDisplay = document.getElementById('hints-display');
+  if (hintsDisplay) {
+    const mod = getModKeyLabel();
+    hintsDisplay.innerHTML = `
+      <div class="welcome-message material-welcome">
+        <div class="welcome-icon">
+          <span class="material-icons" style="font-size: 64px; color: #667eea;">school</span>
+        </div>
+        <h2>Welcome to Hintify - Guest Mode</h2>
+        <p class="subtitle">Get AI-powered hints without spoiling the answer</p>
+        <div class="quick-start">
+          <h3>Quick Start Guide</h3>
+          <div class="feature-grid">
+            <div class="feature-item">
+              <span class="material-icons">screenshot_monitor</span>
+              <h4>Capture Screenshot</h4>
+              <p>Press <kbd>${mod}</kbd> + <kbd>Shift</kbd> + <kbd>H</kbd></p>
+            </div>
+            <div class="feature-item">
+              <span class="material-icons">content_paste</span>
+              <h4>Process Clipboard</h4>
+              <p>Press <kbd>${mod}</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd></p>
+            </div>
+            <div class="feature-item">
+              <span class="material-icons">psychology</span>
+              <h4>Get Hints</h4>
+              <p>AI analyzes and provides helpful hints</p>
+            </div>
+            <div class="feature-item">
+              <span class="material-icons">settings</span>
+              <h4>Configure AI</h4>
+              <p>Choose Ollama or Gemini in settings</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   // Show default welcome message (same as in index.html)
   updateStatus('Ready - Guest Mode');
 }
