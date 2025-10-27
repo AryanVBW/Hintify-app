@@ -580,28 +580,63 @@ extract_app() {
     print_message "$CYAN" "Extracting ${APP_NAME} ${LATEST_VERSION}..." "$INSTALL"
 
     mkdir -p "$EXTRACT_DIR"
-    unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR" &
-    spinner $! "Extracting archive"
 
-    # Find the .app bundle
-    APP_PATH=$(find "$EXTRACT_DIR" -name "*.app" -type d | head -n 1)
-
-    if [ -n "$APP_PATH" ]; then
-        APP_BASENAME=$(basename "$APP_PATH")
-        print_message "$GREEN" "Found application: $APP_BASENAME" "$SUCCESS"
-
-        # Try to extract app version from Info.plist if available
-        local info_plist="$APP_PATH/Contents/Info.plist"
-        if [ -f "$info_plist" ]; then
-            local app_version=$(defaults read "$info_plist" CFBundleShortVersionString 2>/dev/null || echo "")
-            if [ -n "$app_version" ]; then
-                print_message "$BLUE" "App bundle version: $app_version" "$INFO"
-            fi
-        fi
+    # Extract the ZIP file
+    if unzip -q "$ZIP_FILE" -d "$EXTRACT_DIR" 2>/dev/null; then
+        print_message "$GREEN" "Extraction completed successfully" "$SUCCESS"
     else
-        print_message "$RED" "No .app bundle found in the ZIP" "$ERROR"
+        print_message "$RED" "Failed to extract ZIP file" "$ERROR"
         exit 1
     fi
+
+    # Find the .app bundle
+    APP_PATH=$(find "$EXTRACT_DIR" -name "*.app" -type d -maxdepth 3 | head -n 1)
+
+    if [ -z "$APP_PATH" ]; then
+        print_message "$RED" "No .app bundle found in the ZIP" "$ERROR"
+        print_message "$YELLOW" "Contents of extracted archive:" "$INFO"
+        ls -la "$EXTRACT_DIR"
+        exit 1
+    fi
+
+    APP_BASENAME=$(basename "$APP_PATH")
+    print_message "$GREEN" "Found application: $APP_BASENAME" "$SUCCESS"
+
+    # Verify the app bundle structure
+    if [ ! -d "$APP_PATH/Contents" ]; then
+        print_message "$RED" "Invalid app bundle structure (missing Contents directory)" "$ERROR"
+        exit 1
+    fi
+
+    if [ ! -f "$APP_PATH/Contents/Info.plist" ]; then
+        print_message "$RED" "Invalid app bundle structure (missing Info.plist)" "$ERROR"
+        exit 1
+    fi
+
+    # Verify the executable exists
+    local info_plist="$APP_PATH/Contents/Info.plist"
+    local executable_name=$(defaults read "$info_plist" CFBundleExecutable 2>/dev/null || echo "")
+
+    if [ -n "$executable_name" ]; then
+        local executable_path="$APP_PATH/Contents/MacOS/$executable_name"
+        if [ ! -f "$executable_path" ]; then
+            print_message "$RED" "Executable not found: $executable_name" "$ERROR"
+            exit 1
+        fi
+        print_message "$GREEN" "Verified executable: $executable_name" "$CHECK"
+    fi
+
+    # Extract and display app version
+    local app_version=$(defaults read "$info_plist" CFBundleShortVersionString 2>/dev/null || echo "")
+    if [ -n "$app_version" ]; then
+        print_message "$BLUE" "App bundle version: $app_version" "$INFO"
+    fi
+
+    # Remove quarantine attributes from extracted files
+    print_message "$CYAN" "Removing quarantine attributes from extracted files..." "$INFO"
+    xattr -cr "$APP_PATH" 2>/dev/null || true
+
+    print_message "$GREEN" "App bundle validated successfully" "$SUCCESS"
 }
 
 # Move to Applications
@@ -670,18 +705,47 @@ codesign_app() {
     print_message "$CYAN" "Applying ad-hoc signature..." "$INFO"
     wave_animation 1
 
-    # Remove extended attributes
-    xattr -cr "$FINAL_APP_PATH" 2>/dev/null
+    # Remove extended attributes (quarantine flags that can cause issues)
+    print_message "$CYAN" "Removing quarantine attributes..." "$INFO"
+    xattr -cr "$FINAL_APP_PATH" 2>/dev/null || true
 
-    # Ad-hoc sign
-    codesign --force --deep --sign - "$FINAL_APP_PATH" 2>/dev/null &
-    spinner $! "Code signing"
+    # Also remove quarantine from the entire app bundle recursively
+    xattr -dr com.apple.quarantine "$FINAL_APP_PATH" 2>/dev/null || true
+
+    # Ad-hoc sign without --deep flag to avoid ASAR corruption
+    # Sign the main executable and frameworks separately
+    print_message "$CYAN" "Signing application bundle..." "$INFO"
+
+    # Sign frameworks first if they exist
+    if [ -d "$FINAL_APP_PATH/Contents/Frameworks" ]; then
+        find "$FINAL_APP_PATH/Contents/Frameworks" -name "*.framework" -type d 2>/dev/null | while read -r framework; do
+            codesign --force --sign - "$framework" 2>/dev/null || true
+        done
+    fi
+
+    # Sign helper apps if they exist
+    if [ -d "$FINAL_APP_PATH/Contents/Helpers" ]; then
+        find "$FINAL_APP_PATH/Contents/Helpers" -name "*.app" -type d 2>/dev/null | while read -r helper; do
+            codesign --force --sign - "$helper" 2>/dev/null || true
+        done
+    fi
+
+    # Sign the main app bundle (without --deep to preserve ASAR integrity)
+    codesign --force --sign - "$FINAL_APP_PATH" 2>/dev/null
+
+    local codesign_result=$?
+
+    if [ $codesign_result -eq 0 ]; then
+        print_message "$GREEN" "Code signing successful" "$SUCCESS"
+    else
+        print_message "$YELLOW" "Code signing completed with warnings, but app should still work" "$INFO"
+    fi
 
     # Verify signature
     if codesign --verify --verbose "$FINAL_APP_PATH" 2>/dev/null; then
-        print_message "$GREEN" "Code signing successful" "$SUCCESS"
+        print_message "$GREEN" "Signature verification passed" "$CHECK"
     else
-        print_message "$YELLOW" "Code signing may have issues, but continuing..." "$INFO"
+        print_message "$YELLOW" "Signature verification had warnings (this is normal for ad-hoc signing)" "$INFO"
     fi
 
     # Verify installation and display final version info
@@ -729,11 +793,32 @@ show_credits() {
 # Launch app with celebration
 launch_app() {
     step_indicator 8 8 "Launching ${APP_DISPLAY_NAME}"
-    
-    print_message "$CYAN" "Opening ${APP_DISPLAY_NAME}..." "$ROCKET"
-    
-    open "$FINAL_APP_PATH" >/dev/null 2>&1 &
-    
+
+    print_message "$CYAN" "Preparing to launch ${APP_DISPLAY_NAME}..." "$ROCKET"
+
+    # Wait a moment to ensure all file operations are complete
+    sleep 1
+
+    # Final quarantine removal just before launch
+    xattr -cr "$FINAL_APP_PATH" 2>/dev/null || true
+
+    # Launch the app using open with -a flag for more reliable launching
+    # The -a flag treats it as an application rather than a file
+    print_message "$CYAN" "Starting application..." "$INFO"
+
+    # Use open with explicit application flag and wait for it to start
+    if open -a "$FINAL_APP_PATH" 2>/dev/null; then
+        print_message "$GREEN" "Application launched successfully!" "$SUCCESS"
+    else
+        # Fallback: try without -a flag
+        print_message "$YELLOW" "Trying alternative launch method..." "$INFO"
+        if open "$FINAL_APP_PATH" 2>/dev/null; then
+            print_message "$GREEN" "Application launched successfully!" "$SUCCESS"
+        else
+            print_message "$YELLOW" "Launch command completed. If the app doesn't open, you can manually open it from Applications folder." "$INFO"
+        fi
+    fi
+
     if [ "$IS_INTERACTIVE" = true ]; then
         # Celebration animation with ASCII art
         echo -e "\n"
@@ -743,7 +828,7 @@ launch_app() {
             echo -e "${YELLOW}    ${pattern}${RESET}"
             sleep 0.15
         done
-        
+
       echo -e "\n${GREEN}╔════════════════════════════════════════════════════════╗${RESET}"
         echo -e "${GREEN}║                                                        ║${RESET}"
         echo -e "${GREEN}║   ${BOLD}${WHITE}*** Installation Complete! ***${GREEN}║${RESET}"
@@ -752,7 +837,7 @@ launch_app() {
         echo -e "${GREEN}║   ${YELLOW}Version: ${LATEST_VERSION}${GREEN}                          ║${RESET}"
         echo -e "${GREEN}║   ${YELLOW}is now ready to use!${GREEN}                ║${RESET}"
         echo -e "${GREEN}╚════════════════════════════════════════════════════════╝${RESET}"
-        
+
         # Final celebration animation
         echo -e "\n"
         for i in {1..3}; do
