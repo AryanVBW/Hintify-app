@@ -20,7 +20,7 @@ This is the Electron desktop application version of Hintify, a real-time clipboa
 Install Hintify with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify-app/refs/heads/main/install.sh | bash
 ```
 
 This script will:

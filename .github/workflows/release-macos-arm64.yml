@@ -134,7 +134,7 @@ jobs:
           echo "" >> release-notes.md
           echo "**Quick Install (macOS):**" >> release-notes.md
           echo '```bash' >> release-notes.md
-          echo 'curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify/main/install.sh | bash' >> release-notes.md
+          echo 'curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify-app/refs/heads/main/install.sh | bash' >> release-notes.md
           echo '```' >> release-notes.md
           echo "" >> release-notes.md
           echo "**Manual Installation:**" >> release-notes.md
@@ -198,7 +198,7 @@ jobs:
           echo "🌐 Website: https://hintify.nexus-v.tech/"
           echo ""
           echo "📥 Quick Install Command:"
-          echo "   curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify/main/install.sh | bash"
+          echo "   curl -fsSL https://raw.githubusercontent.com/AryanVBW/Hintify-app/refs/heads/main/install.sh | bash"
           echo ""
           echo "📦 Artifacts uploaded:"
           cat artifact-list.txt
