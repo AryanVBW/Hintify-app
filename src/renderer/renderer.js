@@ -8,10 +8,12 @@ const os = require('os');
 const ErrorDisplay = require('./components/ErrorDisplay');
 const A11y = require('./a11y');
 const { getInstance: getClerkAuthHelper } = require('./clerk-auth-helper');
+const NanoBananaService = require('../services/NanoBananaService');
 
 // Initialize store and error display
 const store = new Store();
 const errorDisplay = new ErrorDisplay();
+const nanoBananaService = new NanoBananaService();
 
 // Initialize Clerk authentication helper
 const clerkAuth = getClerkAuthHelper();
@@ -323,7 +325,8 @@ const defaultConfig = {
   gemini_model: 'gemini-2.0-flash',
   theme: 'dark',
   // When enabled, screenshots are sent directly to the AI model (vision) without OCR
-  advanced_mode: true
+  advanced_mode: true,
+  story_mode: false
 };
 
 // Load configuration
@@ -352,7 +355,7 @@ function applyTheme(theme) {
   // Remove all theme classes
   document.body.classList.remove('theme-dark', 'theme-light', 'glassy-mode');
   document.documentElement.classList.remove('theme-glassy');
-  
+
   // Apply the selected theme
   if (theme === 'glass') {
     document.body.classList.add('theme-dark', 'glassy-mode');
@@ -499,13 +502,13 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
 
       if (authBtnText) {
         const displayName = userData.name ||
-                           userData.fullName ||
-                           (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
-                           userData.firstName ||
-                           userData.displayName ||
-                           userData.username ||
-                           userData.email?.split('@')[0] ||
-                           'Account';
+          userData.fullName ||
+          (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
+          userData.firstName ||
+          userData.displayName ||
+          userData.username ||
+          userData.email?.split('@')[0] ||
+          'Account';
         authBtnText.textContent = displayName;
       }
 
@@ -515,13 +518,13 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
     // Update dropdown content
     if (dropdownName) {
       const displayName = userData.name ||
-                         userData.fullName ||
-                         (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
-                         userData.firstName ||
-                         userData.displayName ||
-                         userData.username ||
-                         userData.email ||
-                         'User';
+        userData.fullName ||
+        (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
+        userData.firstName ||
+        userData.displayName ||
+        userData.username ||
+        userData.email ||
+        'User';
       dropdownName.textContent = displayName;
     }
 
@@ -563,13 +566,13 @@ function updateAuthUI(isAuthenticated, userData = null, isGuestMode = false) {
     }
     if (userName) {
       const displayName = userData.name ||
-                         userData.fullName ||
-                         (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
-                         userData.firstName ||
-                         userData.displayName ||
-                         userData.username ||
-                         userData.email ||
-                         'User';
+        userData.fullName ||
+        (userData.first_name && userData.last_name ? `${userData.first_name} ${userData.last_name}` : '') ||
+        userData.firstName ||
+        userData.displayName ||
+        userData.username ||
+        userData.email ||
+        'User';
       userName.textContent = displayName;
     }
     if (accountEmail && userData.email) {
@@ -1234,7 +1237,7 @@ function loadAppImages() {
     const setWithFallback = (img, filename) => {
       if (!img) return;
       img.onerror = () => {
-        try { img.src = `../../assets/${filename}`; } catch {}
+        try { img.src = `../../assets/${filename}`; } catch { }
       };
       img.src = assetUrl(filename);
     };
@@ -1288,7 +1291,7 @@ async function checkAIProviderStatus() {
       await axios.get('http://localhost:11434/api/tags', { timeout: 3000 });
       updateStatus('Ready - Ollama connected');
     } catch (error) {
-  console.warn('Ollama status check failed:', error && (error.message || error));
+      console.warn('Ollama status check failed:', error && (error.message || error));
       updateStatus('Warning: Ollama not running');
       displayHints(`
         <div class="warning-message">
@@ -1358,11 +1361,17 @@ function syncModeToggleUI(cfg) {
   try {
     const input = document.getElementById('mode-toggle');
     const label = document.getElementById('mode-toggle-text');
-    if (!input || !label) return;
-    input.checked = !!cfg.advanced_mode;
-    label.textContent = cfg.advanced_mode ? 'Advanced Mode' : 'Standard Mode';
-    label.title = cfg.advanced_mode ? 'Advanced Mode (Direct Vision): send screenshots to the AI without OCR' : 'Standard Mode (OCR): extract text first, then ask the AI';
-  } catch {}
+    if (input && label) {
+      input.checked = !!cfg.advanced_mode;
+      label.textContent = cfg.advanced_mode ? 'Advanced Mode' : 'Standard Mode';
+      label.title = cfg.advanced_mode ? 'Advanced Mode (Direct Vision): send screenshots to the AI without OCR' : 'Standard Mode (OCR): extract text first, then ask the AI';
+    }
+
+    const storyInput = document.getElementById('story-mode-toggle');
+    if (storyInput) {
+      storyInput.checked = !!cfg.story_mode;
+    }
+  } catch { }
 }
 
 // Update provider text
@@ -1401,13 +1410,13 @@ function displayHints(hintsText) {
     // Show error with beautiful animation
     const errorMessage = hintsText || 'Failed to generate hints. Please try again.';
     let errorType = 'general';
-    
+
     // Determine error type
     if (errorMessage.includes('OCR')) errorType = 'ocr';
     else if (errorMessage.includes('API') || errorMessage.includes('rate limit')) errorType = 'api';
     else if (errorMessage.includes('network') || errorMessage.includes('connection')) errorType = 'network';
     else if (errorMessage.includes('permission')) errorType = 'permission';
-    
+
     errorDisplay.show({
       type: errorType,
       title: 'Error Processing Image',
@@ -1426,7 +1435,7 @@ function displayHints(hintsText) {
           text: 'Close',
           icon: 'close',
           variant: 'btn-secondary',
-          onClick: () => {}
+          onClick: () => { }
         }
       ],
       container: hintsDisplay
@@ -1482,7 +1491,7 @@ function displayHints(hintsText) {
       labelDiv.className = 'hint-label';
       labelDiv.textContent = hintMatch[1];
 
-  const textDiv = document.createElement('div');
+      const textDiv = document.createElement('div');
       textDiv.className = 'hint-text';
       // Keep plain text; KaTeX auto-render will scan and transform $...$ / $$...$$
       textDiv.textContent = hintMatch[2];
@@ -1492,15 +1501,15 @@ function displayHints(hintsText) {
       hintsDisplay.appendChild(hintDiv);
       parsedHints.push({ label: hintMatch[1], text: hintMatch[2] });
     } else if (trimmed.toLowerCase().includes('now try') ||
-               trimmed.toLowerCase().includes('work carefully') ||
-               trimmed.toLowerCase().includes('complete')) {
+      trimmed.toLowerCase().includes('work carefully') ||
+      trimmed.toLowerCase().includes('complete')) {
       // This is encouragement text
       const encDiv = document.createElement('div');
       encDiv.className = 'encouragement fade-in';
 
-  const encText = document.createElement('div');
+      const encText = document.createElement('div');
       encText.className = 'encouragement-text';
-  encText.textContent = trimmed;
+      encText.textContent = trimmed;
 
       encDiv.appendChild(encText);
       hintsDisplay.appendChild(encDiv);
@@ -1576,7 +1585,7 @@ function createHintActions({ hints, questionText }) {
         url = '';
     }
     if (url) {
-      try { require('electron').shell.openExternal(url); } catch {}
+      try { require('electron').shell.openExternal(url); } catch { }
     }
   };
 
@@ -1648,7 +1657,8 @@ function createHintActions({ hints, questionText }) {
               console.warn('TTS failed', ttsErr);
             }
             updateStatus('Speaking all hints...');
-            break; }
+            break;
+          }
           case 'like':
           case 'dislike':
             await logActivity('review', action, { total_hints: hints.length, total_length: flatList.length });
@@ -1684,7 +1694,8 @@ function createHintActions({ hints, questionText }) {
               };
               displayHints(newHints);
             } finally { showLoading(false); }
-            break; }
+            break;
+          }
           case 'share':
             toggleShareMenu(b);
             break;
@@ -1696,14 +1707,14 @@ function createHintActions({ hints, questionText }) {
   };
 
   // Icons: like, dislike, copy, speak, regenerate, share (Lucide)
-  mkBtn('like','Liked the hints','thumbs-up');
-  mkBtn('dislike','Disliked the hints','thumbs-down');
-  mkBtn('copy','Copy all hints','clipboard');
+  mkBtn('like', 'Liked the hints', 'thumbs-up');
+  mkBtn('dislike', 'Disliked the hints', 'thumbs-down');
+  mkBtn('copy', 'Copy all hints', 'clipboard');
   // TTS button: add class for accessibility module to pick up
-  const speakBtn = mkBtn('speak','Speak all hints','volume-2');
+  const speakBtn = mkBtn('speak', 'Speak all hints', 'volume-2');
   speakBtn.classList.add('hint-tts-btn');
-  mkBtn('regen','Regenerate hints','refresh-ccw');
-  mkBtn('share','Share','share-2');
+  mkBtn('regen', 'Regenerate hints', 'refresh-ccw');
+  mkBtn('share', 'Share', 'share-2');
 
   // Render Lucide icons if available
   if (window.lucide && window.lucide.createIcons) {
@@ -1735,6 +1746,25 @@ function detectDifficulty(text) {
 
 // Build prompt for AI
 function buildPrompt(text, qtype, difficulty) {
+  const config = currentConfig;
+
+  if (config.story_mode) {
+    return `You are Hintify, a storyteller who explains complex concepts through engaging physical stories.
+
+The user wants to understand:
+${text}
+
+Your goal:
+- Create a short, engaging story or analogy that explains the core concept.
+- Use physical objects, characters, or scenarios to make it concrete.
+- Keep it educational but fun.
+- After the story, briefly connect it back to the academic concept.
+
+Format:
+**Story:** [Your story here]
+**Concept:** [Brief explanation]`;
+  }
+
   return `You are Hintify, a study buddy for students.
 
 The following text was extracted from a screenshot:
@@ -2189,9 +2219,9 @@ async function extractTextFromImage(imageBuffer) {
     if (tesseractAvailable) {
       return await extractTextWithNativeTesseract(imageBuffer);
     } else {
-  // Use bundled Tesseract.js fallback seamlessly
-  updateStatus('Using built-in OCR (no system Tesseract)...');
-  return await extractTextWithTesseractJS(imageBuffer);
+      // Use bundled Tesseract.js fallback seamlessly
+      updateStatus('Using built-in OCR (no system Tesseract)...');
+      return await extractTextWithTesseractJS(imageBuffer);
     }
 
   } catch (error) {
@@ -2354,7 +2384,7 @@ async function processImage(imageBuffer) {
                   // Persist mode switch
                   currentConfig.advanced_mode = true;
                   saveConfig({ advanced_mode: true });
-                  try { syncModeToggleUI(currentConfig); } catch {}
+                  try { syncModeToggleUI(currentConfig); } catch { }
 
                   // Process image directly with the selected vision model
                   const hints = await generateHintsFromImageDirect(imageBuffer, processingStartTime);
@@ -2405,7 +2435,7 @@ async function processImage(imageBuffer) {
               onClick: async () => {
                 currentConfig.advanced_mode = true;
                 saveConfig({ advanced_mode: true });
-                try { syncModeToggleUI(currentConfig); } catch {}
+                try { syncModeToggleUI(currentConfig); } catch { }
                 processClipboardSmart();
               }
             }
@@ -2487,7 +2517,7 @@ async function registerAppForScreenRecordingOnce() {
     // Check current status
     const status = await getScreenPermissionStatus(true);
     console.log(`[Registration] Current permission status: ${status}`);
-    
+
     // Always attempt registration regardless of status to ensure app appears in list
     const nmd = navigator.mediaDevices;
     if (!nmd || typeof nmd.getDisplayMedia !== 'function') {
@@ -2504,7 +2534,7 @@ async function registerAppForScreenRecordingOnce() {
 
     try {
       const stream = await nmd.getDisplayMedia({
-        video: { 
+        video: {
           displaySurface: 'monitor',
           width: { max: 1 },
           height: { max: 1 }
@@ -2514,7 +2544,7 @@ async function registerAppForScreenRecordingOnce() {
       clearTimeout(timeout);
 
       console.log('[Registration] Successfully obtained display media stream');
-      
+
       // Immediately stop tracks; this is only for registration
       stream.getTracks().forEach(track => {
         console.log(`[Registration] Stopping track: ${track.kind}`);
@@ -2523,11 +2553,11 @@ async function registerAppForScreenRecordingOnce() {
 
       console.log('[Registration] ✅ App registered with macOS Screen Recording');
       permissionLogger.log('info', 'Successfully registered app with macOS Screen Recording via getDisplayMedia');
-      
+
     } catch (e) {
       clearTimeout(timeout);
       console.log(`[Registration] getDisplayMedia failed: ${e.message}`);
-      
+
       // This is expected if permission is denied, but the app should still be listed
       if (e.name === 'NotAllowedError') {
         console.log('[Registration] Permission denied, but app should now be listed in System Settings');
@@ -2577,9 +2607,9 @@ async function getScreenPermissionStatus(forceCheck = false) {
       return 'unknown';
     }
 
-  // Update permission manager with the new status
-  // Do NOT mark as actuallyGranted here; that should only happen after a successful capture
-  permissionManager.updatePermissionStatus(status, false);
+    // Update permission manager with the new status
+    // Do NOT mark as actuallyGranted here; that should only happen after a successful capture
+    permissionManager.updatePermissionStatus(status, false);
 
     return status;
   } catch (e) {
@@ -2607,7 +2637,7 @@ async function openScreenRecordingPreferences() {
     const result = await ipcRenderer.invoke('open-screen-preferences');
     if (result) {
       permissionManager.sessionFlags.screenPrefsPrompted = true;
-      try { store.set('screen_permission_restart_required', true); } catch {}
+      try { store.set('screen_permission_restart_required', true); } catch { }
     }
     return result;
   } catch (e) {
@@ -2629,7 +2659,7 @@ async function validateScreenPermission() {
 async function ensureScreenPermission() {
   if (process.platform !== 'darwin') return { success: true, status: 'granted' };
   const validation = await validateScreenPermission();
-  
+
   try {
     // If permission is granted and validated, clear the restart flag
     if (validation.status === 'granted' && validation.validated) {
@@ -2641,7 +2671,7 @@ async function ensureScreenPermission() {
       }
       return { success: true, status: 'granted', method: validation.method };
     }
-    
+
     // Only show restart dialog if flag is set AND we haven't shown it this session
     if (validation.status === 'granted' && store.get('screen_permission_restart_required', false)) {
       // Check if we've already shown the restart prompt this session
@@ -2651,7 +2681,7 @@ async function ensureScreenPermission() {
         store.set('screen_permission_restart_required', false);
         return { success: true, status: 'granted', method: validation.method };
       }
-      
+
       // Mark that we're showing the restart dialog
       permissionManager.sessionFlags.restartDialogShown = true;
       return { success: false, status: 'granted', needsRestart: true, message: 'Screen Recording permission changed. Restart Hintify to apply it.' };
@@ -2659,7 +2689,7 @@ async function ensureScreenPermission() {
   } catch (e) {
     console.error('[Permission] Error in ensureScreenPermission:', e);
   }
-  
+
   if (validation.status === 'granted') return { success: true, status: 'granted', method: validation.method };
   // Treat not-determined similar to denied for user guidance
   return { success: false, status: validation.status, message: 'Screen Recording permission is required.' };
@@ -2937,7 +2967,7 @@ async function initializeApp() {
       permissionMonitor.setInitialState(initialStatus);
       permissionMonitor.startMonitoring();
       console.log(`[Permission] Started monitoring with initial state: ${initialStatus}`);
-      
+
       // Register app with macOS Screen Recording immediately on startup
       await registerAppForScreenRecordingOnce();
     } catch (e) {
@@ -3030,6 +3060,52 @@ function setupEventListeners() {
     if (modeToggleText) {
       // Clicking the label toggles input automatically; no extra handler needed
     }
+  }
+
+  // Story Mode toggle handler
+  const storyModeToggle = document.getElementById('story-mode-toggle');
+  if (storyModeToggle) {
+    storyModeToggle.addEventListener('change', (e) => {
+      const newCfg = { story_mode: !!e.target.checked };
+      saveConfig(newCfg);
+      updateStatus(e.target.checked ? 'Story Mode enabled' : 'Story Mode disabled');
+    });
+    // Sync initial state
+    storyModeToggle.checked = !!currentConfig.story_mode;
+  }
+
+  // Diagram button handler
+  const diagramBtn = document.getElementById('diagram-btn');
+  if (diagramBtn) {
+    diagramBtn.addEventListener('click', async () => {
+      if (!currentQuestionData) {
+        alert('Please ask a question or capture a screenshot first.');
+        return;
+      }
+
+      const topic = currentQuestionData.questionText || 'educational topic';
+      showLoading(true, 'Generating diagram...');
+      try {
+        const imageUrl = await generateDiagram(topic);
+        if (imageUrl.startsWith('[NanoBanana Error]')) {
+          alert(imageUrl);
+        } else {
+          // Display the generated diagram
+          displayHints(`
+             <div class="generated-diagram">
+                <h3>Generated Diagram</h3>
+                <img src="${imageUrl}" alt="Educational Diagram" style="max-width: 100%; border-radius: 8px; margin-top: 10px;">
+             </div>
+             `);
+          updateStatus('Diagram generated');
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Failed to generate diagram');
+      } finally {
+        showLoading(false);
+      }
+    });
   }
 
   // If main process wants to show sign-in
@@ -3175,7 +3251,7 @@ function setupEventListeners() {
     syncModeToggleUI(currentConfig);
   });
 
-// Listen for authentication updates
+  // Listen for authentication updates
   ipcRenderer.on('auth-status-updated', (event, authData) => {
     console.log('🔄 Auth status updated:', authData);
 
@@ -3203,9 +3279,9 @@ function setupEventListeners() {
 
       // Show welcome message
       const userName = authData.user.name || authData.user.firstName || authData.user.email || 'User';
-  displayHints(`✅ <strong>Welcome, ${userName}!</strong><br><br>You're now signed in with Supabase and ready to use Hintify. You can start capturing screenshots or processing clipboard images.`);
-  // No math here, but if templates change later, keep renderer ready
-  try { if (window.renderMathInElement) window.renderMathInElement(document.getElementById('hints-display'), { delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}] }); } catch {}
+      displayHints(`✅ <strong>Welcome, ${userName}!</strong><br><br>You're now signed in with Supabase and ready to use Hintify. You can start capturing screenshots or processing clipboard images.`);
+      // No math here, but if templates change later, keep renderer ready
+      try { if (window.renderMathInElement) window.renderMathInElement(document.getElementById('hints-display'), { delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }] }); } catch { }
 
       console.log('🎨 UI updated for authenticated user:', {
         displayName: authData.user.name || authData.user.firstName || authData.user.email,
@@ -3442,11 +3518,11 @@ function setupModals() {
 // Open Settings in separate window
 function openEmbeddedSettings() {
   console.log('🔧 Opening settings in separate window...');
-  
+
   // Get current theme from the actual body class (more reliable)
   const bodyClasses = document.body.className;
   let currentTheme = 'theme-dark'; // default
-  
+
   if (bodyClasses.includes('theme-pastel')) {
     currentTheme = 'theme-pastel';
   } else if (bodyClasses.includes('theme-light')) {
@@ -3454,11 +3530,11 @@ function openEmbeddedSettings() {
   } else if (bodyClasses.includes('theme-dark')) {
     currentTheme = 'theme-dark';
   }
-  
+
   console.log('🎨 Current body classes:', bodyClasses);
   console.log('🎨 Detected current theme:', currentTheme);
   console.log('🎨 Sending theme to settings:', currentTheme);
-  
+
   ipcRenderer.send('open-settings', { theme: currentTheme });
 }
 
@@ -3507,7 +3583,7 @@ async function handleClearLocalData() {
     showLoading(true, 'Clearing local data...');
 
     // Sign out user (which clears data)
-  ipcRenderer.send('user-logged-out');
+    ipcRenderer.send('user-logged-out');
 
     showLoading(false);
 
@@ -3677,36 +3753,36 @@ function initializeThemeToggle() {
     'theme-light': 'Light'
   };
   let currentThemeIndex = 0;
-  
+
   const applyThemeClass = (themeClass) => {
     const themeClasses = ['theme-dark', 'theme-pastel', 'theme-light'];
     document.body.classList.remove(...themeClasses);
     document.body.classList.add(themeClass);
     document.body.classList.add('material-ui');
   };
-  
+
   // Load saved theme
   const savedTheme = store.get('app-theme', 'theme-dark');
   currentThemeIndex = themes.indexOf(savedTheme);
   if (currentThemeIndex === -1) currentThemeIndex = 0;
-  
+
   // Apply saved theme
   applyThemeClass(themes[currentThemeIndex]);
-  
+
   // Theme toggle button click handler
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener('click', () => {
       // Cycle to next theme
       currentThemeIndex = (currentThemeIndex + 1) % themes.length;
       const newTheme = themes[currentThemeIndex];
-      
+
       // Apply theme with animation
       document.body.style.transition = 'background 0.3s ease, color 0.3s ease';
       applyThemeClass(newTheme);
-      
+
       // Save theme preference
       store.set('app-theme', newTheme);
-      
+
       // Show theme name briefly
       const themeName = themeNames[newTheme] || 'Unknown';
       updateStatus(`Theme: ${themeName}`);
@@ -3735,6 +3811,44 @@ document.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('focus', () => {
   updateStatus('Ready');
 });
+
+// Query Nano Banana
+async function queryNanoBanana(prompt, model) {
+  try {
+    const result = await nanoBananaService.generateImage(prompt, model);
+    if (result.success) {
+      return result.imageUrl;
+    } else {
+      return `[NanoBanana Error] ${result.error}`;
+    }
+  } catch (error) {
+    return `[NanoBanana Error] ${error.message}`;
+  }
+}
+
+// Fetch related URLs using Gemini
+async function fetchRelatedUrls(topic) {
+  const apiKey = store.get('gemini_api_key') || process.env.GEMINI_API_KEY;
+  if (!apiKey) return [];
+
+  const prompt = `Find 3 high-quality, educational URLs related to: "${topic}".
+  Return ONLY the URLs, one per line. No descriptions.`;
+
+  try {
+    const response = await queryGemini(prompt, 'gemini-2.0-flash', apiKey);
+    if (response.includes('[LLM Error]')) return [];
+    return response.split('\n').filter(url => url.startsWith('http'));
+  } catch (e) {
+    console.error('Error fetching URLs:', e);
+    return [];
+  }
+}
+
+// Generate Diagram
+async function generateDiagram(topic) {
+  const prompt = `Educational diagram explaining: ${topic}`;
+  return await queryNanoBanana(prompt, 'nano-banana-pro');
+}
 
 // Export functions for potential use
 module.exports = {

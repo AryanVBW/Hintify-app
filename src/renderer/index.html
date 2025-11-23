@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hintify</title>
-    
+
     <!-- Material-UI Fonts and Icons -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
-    
+
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="glassy-theme.css">
     <link rel="stylesheet" href="a11y.css">
@@ -20,6 +21,7 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 
 </head>
+
 <body class="theme-dark material-ui">
     <div class="main-container">
         <!-- Top bar with logo and controls -->
@@ -31,13 +33,20 @@
 
 
             <div class="action-buttons">
-                <button id="theme-toggle-btn" class="btn btn-secondary material-btn" title="Change Theme" aria-label="Change Theme">
+                <button id="theme-toggle-btn" class="btn btn-secondary material-btn" title="Change Theme"
+                    aria-label="Change Theme">
                     <span class="material-icons">palette</span>
                 </button>
 
-                <button id="capture-btn" class="btn btn-primary material-btn" title="Capture Screenshot" aria-label="Capture Screenshot">
+                <button id="capture-btn" class="btn btn-primary material-btn" title="Capture Screenshot"
+                    aria-label="Capture Screenshot">
                     <span class="material-icons">screenshot</span>
                     <span class="btn-text">Capture</span>
+                </button>
+
+                <button id="diagram-btn" class="btn btn-secondary material-btn" title="Generate Diagram"
+                    aria-label="Generate Diagram">
+                    <span class="material-icons">image</span>
                 </button>
 
                 <!-- Sign In / Account Button -->
@@ -56,7 +65,8 @@
         <div id="account-dropdown" class="account-dropdown hidden">
             <div class="account-dropdown-header">
                 <img id="account-dropdown-avatar" src="" alt="User Avatar" class="account-dropdown-avatar hidden">
-                <span id="account-dropdown-avatar-icon" class="material-icons account-dropdown-avatar-icon">account_circle</span>
+                <span id="account-dropdown-avatar-icon"
+                    class="material-icons account-dropdown-avatar-icon">account_circle</span>
                 <div class="account-dropdown-info">
                     <div id="account-dropdown-name" class="account-dropdown-name">User Name</div>
                     <div id="account-dropdown-email" class="account-dropdown-email">user@example.com</div>
@@ -89,7 +99,9 @@
                 <button id="dismiss-update-btn" class="btn btn-secondary">Later</button>
             </div>
             <div id="update-progress" class="update-progress hidden">
-                <div class="progress-bar"><div id="update-progress-fill" class="progress-fill" style="width:0%"></div></div>
+                <div class="progress-bar">
+                    <div id="update-progress-fill" class="progress-fill" style="width:0%"></div>
+                </div>
                 <span id="update-progress-text" class="progress-text">Preparing...</span>
             </div>
         </div>
@@ -107,7 +119,8 @@
                         <p class="subtitle">Your AI-powered study companion for instant hints and guidance</p>
                         <div class="instructions material-instructions">
                             <h3>
-                                <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">rocket_launch</span>
+                                <span class="material-icons"
+                                    style="vertical-align: middle; margin-right: 8px;">rocket_launch</span>
                                 Quick Start
                             </h3>
                             <div class="instruction-grid">
@@ -136,7 +149,8 @@
                                 <span class="material-icons">info</span>
                                 <div>
                                     <strong>First time?</strong>
-                                    <p>Make sure you've completed the setup process. If you skipped it, go to the app menu and select <strong>"Run Setup Again"</strong>.</p>
+                                    <p>Make sure you've completed the setup process. If you skipped it, go to the app
+                                        menu and select <strong>"Run Setup Again"</strong>.</p>
                                 </div>
                             </div>
                         </div>
@@ -150,17 +164,28 @@
             <div class="status-section">
                 <span id="status-text">Ready</span>
             </div>
-                <div class="status-section" style="margin-left:auto; display:flex; align-items:center; gap:8px;">
-                <label for="mode-toggle" class="mode-toggle-label" title="Toggle between Standard (OCR) and Advanced (Direct Vision) modes" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                    <input type="checkbox" id="mode-toggle" style="accent-color: var(--accent, #6ea8fe); cursor:pointer;">
+            <div class="status-section" style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+                <label for="mode-toggle" class="mode-toggle-label"
+                    title="Toggle between Standard (OCR) and Advanced (Direct Vision) modes"
+                    style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="mode-toggle"
+                        style="accent-color: var(--accent, #6ea8fe); cursor:pointer;">
                     <span id="mode-toggle-text">Advanced Mode</span>
+                </label>
+                <label for="story-mode-toggle" class="mode-toggle-label" title="Explain concepts with stories"
+                    style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-left: 16px;">
+                    <input type="checkbox" id="story-mode-toggle"
+                        style="accent-color: var(--accent, #6ea8fe); cursor:pointer;">
+                    <span id="story-mode-toggle-text">Story Mode</span>
                 </label>
                 <!-- Accessibility controls -->
                 <div id="accessibility-controls" style="display:flex; gap:8px; align-items:center; margin-left:8px;">
-                    <button id="tts-toggle" class="btn btn-secondary" aria-pressed="false" aria-label="Toggle text to speech">TTS</button>
+                    <button id="tts-toggle" class="btn btn-secondary" aria-pressed="false"
+                        aria-label="Toggle text to speech">TTS</button>
                     <button id="font-decrease" class="btn btn-secondary" aria-label="Decrease font size">A-</button>
                     <button id="font-increase" class="btn btn-secondary" aria-label="Increase font size">A+</button>
-                    <button id="high-contrast" class="btn btn-secondary" aria-pressed="false" aria-label="Toggle high contrast">Contrast</button>
+                    <button id="high-contrast" class="btn btn-secondary" aria-pressed="false"
+                        aria-label="Toggle high contrast">Contrast</button>
                 </div>
             </div>
         </div>
@@ -275,7 +300,8 @@
                             </div>
                         </div>
                         <div class="setting-item">
-                            <label class="setting-label" for="personal-data-toggle">Include personal data in exports:</label>
+                            <label class="setting-label" for="personal-data-toggle">Include personal data in
+                                exports:</label>
                             <div class="setting-control">
                                 <input type="checkbox" id="personal-data-toggle" checked>
                                 <span class="toggle-slider"></span>
@@ -305,4 +331,5 @@
 
     <script src="renderer.js"></script>
 </body>
+
 </html>
