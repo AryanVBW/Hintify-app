@@ -28,8 +28,26 @@ class NanoBananaService {
   }
 
   async generateDiagram(topic, style = 'educational') {
-      const prompt = `Create an educational diagram explaining: ${topic}. Style: ${style}`;
-      return this.generateImage(prompt, 'nano-banana-pro');
+    const prompt = `
+      Create a highly detailed and accurate educational diagram explaining: "${topic}".
+      
+      Context & Intent:
+      - The goal is to visually explain this concept to a student.
+      - The image should be clear, uncluttered, and focus on the key mechanism or relationship.
+      - Emotion/Vibe: Professional, clear, engaging, and scientifically accurate.
+      
+      Visual Elements:
+      - Use clear labels and arrows to show flow or parts.
+      - Use a clean color palette (educational style).
+      - Ensure text is legible if included.
+      
+      Style: ${style}
+      
+      Output Requirement:
+      - Generate a single, high-quality image that perfectly matches this description.
+    `.trim();
+
+    return this.generateImage(prompt, 'nano-banana-pro');
   }
 }
 

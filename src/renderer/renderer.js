@@ -1443,6 +1443,12 @@ function displayHints(hintsText) {
     return;
   }
 
+  // Check if the text is a generated diagram HTML block
+  if (hintsText && hintsText.trim().startsWith('<div class="generated-diagram">')) {
+    hintsDisplay.innerHTML = hintsText;
+    return;
+  }
+
   // Merge multi-line $$...$$ math blocks so they stay within a single element
   const mergeMathBlocks = (text) => {
     const src = String(text || '');
