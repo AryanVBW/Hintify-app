@@ -146,6 +146,7 @@ body.theme-glass {
         opacity: 0;
         transform: translateY(-20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -157,6 +158,7 @@ body.theme-glass {
         opacity: 0;
         transform: rotate(-180deg) scale(0.5);
     }
+
     to {
         opacity: 1;
         transform: rotate(0) scale(1);
@@ -170,6 +172,7 @@ body.theme-glass {
     background-color: color-mix(in srgb, var(--panel-bg) 85%, transparent);
     border-color: color-mix(in srgb, var(--border) 60%, transparent);
 }
+
 .theme-glass .settings-content {
     backdrop-filter: saturate(110%) blur(10px);
 }
@@ -230,18 +233,20 @@ body.theme-glass {
     color: var(--accent);
 }
 
-.user-meta .user-name{
-    font-weight:600;
-    font-size:14px;
+.user-meta .user-name {
+    font-weight: 600;
+    font-size: 14px;
     color: var(--label-color);
 }
-.user-meta .user-email{
-    font-size:12px;
-    opacity:.7;
+
+.user-meta .user-email {
+    font-size: 12px;
+    opacity: .7;
 }
-.user-actions{
-    display:flex;
-    gap:8px;
+
+.user-actions {
+    display: flex;
+    gap: 8px;
 }
 
 .settings-header h1 {
@@ -263,6 +268,7 @@ body.theme-glass {
     padding: 24px;
     overflow-y: auto;
 }
+
 /* Cards and grid layout */
 .card {
     border: 1px solid var(--border);
@@ -304,19 +310,23 @@ body.theme-glass {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
     }
 }
+
 .grid-2 {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
 }
+
 .span-2 {
     grid-column: 1 / -1;
 }
+
 @media (max-width: 760px) {
     .grid-2 {
         grid-template-columns: 1fr;
@@ -345,29 +355,29 @@ body.theme-glass {
 
 .setting-group input,
 .setting-group select {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid var(--input-border);
-  border-radius: 6px;
-  background-color: var(--input-bg);
-  color: var(--fg-text);
-  font-family: var(--font-family);
-  font-size: 14px;
-  transition: all 0.2s ease;
-  outline: none;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background-color: var(--input-bg);
+    color: var(--fg-text);
+    font-family: var(--font-family);
+    font-size: 14px;
+    transition: all 0.2s ease;
+    outline: none;
 }
 
 .setting-group input:hover,
 .setting-group select:hover {
-  border-color: var(--accent);
-  background-color: var(--hover-bg);
+    border-color: var(--accent);
+    background-color: var(--hover-bg);
 }
 
 .setting-group input:focus,
 .setting-group select:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
-  transform: translateY(-1px);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+    transform: translateY(-1px);
 }
 
 .setting-group input[type="password"] {
@@ -477,10 +487,13 @@ body.theme-glass {
 }
 
 @keyframes pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         transform: scale(1);
         opacity: 1;
     }
+
     50% {
         transform: scale(1.1);
         opacity: 0.8;
@@ -523,9 +536,9 @@ body.theme-glass {
 }
 
 .api-key-group button {
-  padding: 12px;
-  min-width: 48px;
-  flex-shrink: 0;
+    padding: 12px;
+    min-width: 48px;
+    flex-shrink: 0;
 }
 
 .shortcuts-info {
@@ -595,84 +608,85 @@ body.theme-glass {
 }
 
 .btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-family: var(--font-family);
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  min-width: 80px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: var(--font-family);
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    min-width: 80px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
 
 .btn .material-icons {
-  font-size: 20px;
+    font-size: 20px;
 }
 
 .btn-primary {
-  background-color: var(--accent);
-  color: var(--accent-text);
-  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+    background-color: var(--accent);
+    color: var(--accent-text);
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
 }
 
 .btn-primary:hover {
-  filter: brightness(1.1);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+    filter: brightness(1.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
 }
 
 .btn-primary:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 4px rgba(34, 197, 94, 0.3);
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(34, 197, 94, 0.3);
 }
 
 .btn-secondary {
-  background-color: var(--button-bg);
-  color: var(--fg-text);
-  border: 1px solid var(--border);
+    background-color: var(--button-bg);
+    color: var(--fg-text);
+    border: 1px solid var(--border);
 }
 
 .btn-secondary:hover {
-  background-color: var(--button-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background-color: var(--button-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .btn-secondary:active {
-  transform: translateY(0);
-  box-shadow: none;
+    transform: translateY(0);
+    box-shadow: none;
 }
 
 .btn-icon-only {
-  padding: 12px;
-  min-width: auto;
-  width: 48px;
-  height: 48px;
+    padding: 12px;
+    min-width: auto;
+    width: 48px;
+    height: 48px;
 }
 
 .btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none !important;
-  box-shadow: none !important;
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 .btn.loading .material-icons {
-  animation: spin 1s linear infinite;
+    animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .status-message {
@@ -710,27 +724,49 @@ body.theme-glass {
 }
 
 /* Updates card alignment */
-.updates-card { text-align:center; }
-.updates-card .setting-group { display:flex; flex-direction:column; align-items:center; }
-.updates-card #current-version { font-weight:600; margin-top:4px; }
-.updates-card #latest-version-text { margin-top:6px; }
-.updates-card #check-update-btn { min-width: 180px; }
+.updates-card {
+    text-align: center;
+}
+
 .updates-card .setting-group {
     display: flex;
     flex-direction: column;
     align-items: center;
 }
+
 .updates-card #current-version {
     font-weight: 600;
     margin-top: 4px;
 }
+
 .updates-card #latest-version-text {
     margin-top: 6px;
 }
+
+.updates-card #check-update-btn {
+    min-width: 180px;
+}
+
+.updates-card .setting-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.updates-card #current-version {
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+.updates-card #latest-version-text {
+    margin-top: 6px;
+}
+
 .updates-card #check-update-btn {
     min-width: 180px;
     font-weight: 600;
 }
+
 .updates-card #update-progress small {
     opacity: 0.8;
 }
@@ -744,6 +780,7 @@ body.theme-glass {
         opacity: 0;
         transform: translateX(-50%) translateY(10px);
     }
+
     to {
         opacity: 1;
         transform: translateX(-50%) translateY(0);
@@ -752,28 +789,29 @@ body.theme-glass {
 
 /* Loading state for buttons */
 .btn.loading {
-  position: relative;
-  color: transparent;
+    position: relative;
+    color: transparent;
 }
 
 .btn.loading::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
-  border: 2px solid transparent;
-  border-top: 2px solid currentColor;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
     0% {
         transform: rotate(0deg);
     }
+
     100% {
         transform: rotate(360deg);
     }
