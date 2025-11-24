@@ -45,12 +45,12 @@ try {
   // Create mock services to prevent crashes
   authService = {
     processAuthentication: async () => ({ user: null, session: null }),
-    logActivity: async () => {},
+    logActivity: async () => { },
     saveQuestionAnswer: async () => ({ questionId: null, answerId: null }),
     transferDataToPortal: async () => ({ success: false, error: 'Database not available' }),
     exportUserData: async () => ({ success: false, error: 'Database not available' }),
     getUserHistory: async () => [],
-    signOut: async () => {},
+    signOut: async () => { },
     requestPasswordReset: async () => ({ success: false, error: 'Service unavailable' }),
     resetPassword: async () => ({ success: false, error: 'Service unavailable' }),
     enableMFA: async () => ({ success: false, error: 'Service unavailable' }),
@@ -68,7 +68,7 @@ try {
     startLogin: async () => ({ state: null, authUrl: null }),
     processCallback: async () => ({ success: false, error: 'Service unavailable' }),
     restoreSession: async () => null,
-    signOut: async () => {},
+    signOut: async () => { },
     getAuthStatus: () => ({ authenticated: false, user: null }),
     isAuthenticated: () => false,
     getCurrentUser: () => null
@@ -118,13 +118,13 @@ async function clearDevCachesIfDev() {
       if (s) {
         // Clear all storage data types that can retain state between runs
         await s.clearStorageData({
-          storages: ['appcache','cookies','filesystem','indexdb','localstorage','serviceworkers','shadercache','websql','cachestorage','sessions'],
-          quotas: ['temporary','persistent','syncable']
+          storages: ['appcache', 'cookies', 'filesystem', 'indexdb', 'localstorage', 'serviceworkers', 'shadercache', 'websql', 'cachestorage', 'sessions'],
+          quotas: ['temporary', 'persistent', 'syncable']
         });
         console.log('🧹 Cleared session storage data');
 
         // Clear HTTP cache
-        try { await s.clearCache(); console.log('🧹 Cleared HTTP cache'); } catch {}
+        try { await s.clearCache(); console.log('🧹 Cleared HTTP cache'); } catch { }
       }
     } catch (e) {
       console.warn('⚠️ Failed to clear session storage/cache:', e?.message || e);
@@ -356,89 +356,89 @@ function registerIpcHandlers() {
 
   // Auth-related IPC handlers with enhanced error handling and validation
   ipcMain.on('auth-completed', async (event, userInfo) => {
-  try {
-    console.log('🔐 Processing Supabase authentication in main process...');
-    console.log('📊 User info received:', {
-      hasId: !!userInfo?.id,
-      hasEmail: !!userInfo?.email,
-      hasName: !!userInfo?.name,
-      provider: userInfo?.provider
-    });
-
-    // Validate user info before processing
-    if (!userInfo || (!userInfo.email && !userInfo.id)) {
-      throw new Error('Invalid user data received from renderer process');
-    }
-
-    let authResult;
     try {
-      // Process authentication through AuthService to create DB user/session
-      authResult = await authService.processAuthentication(userInfo);
-      console.log('✅ Authentication processed successfully:', {
-        userId: authResult.user.id,
-        sessionId: authResult.session.id
+      console.log('🔐 Processing Supabase authentication in main process...');
+      console.log('📊 User info received:', {
+        hasId: !!userInfo?.id,
+        hasEmail: !!userInfo?.email,
+        hasName: !!userInfo?.name,
+        provider: userInfo?.provider
       });
 
-      // Merge normalized user info back to store
-      const finalUserInfo = { ...userInfo, id: authResult.user.id };
-      store.set('user_authenticated', true);
-      store.set('user_info', finalUserInfo);
-      store.set('last_auth_time', new Date().toISOString());
+      // Validate user info before processing
+      if (!userInfo || (!userInfo.email && !userInfo.id)) {
+        throw new Error('Invalid user data received from renderer process');
+      }
 
-    } catch (dbError) {
-      console.error('❌ Failed to persist auth in database:', dbError?.message || dbError);
+      let authResult;
+      try {
+        // Process authentication through AuthService to create DB user/session
+        authResult = await authService.processAuthentication(userInfo);
+        console.log('✅ Authentication processed successfully:', {
+          userId: authResult.user.id,
+          sessionId: authResult.session.id
+        });
 
-      // Still persist minimal local state so app can proceed
-      // This ensures the app works even if database is unavailable
-      store.set('user_authenticated', true);
-      store.set('user_info', userInfo);
-      store.set('last_auth_time', new Date().toISOString());
+        // Merge normalized user info back to store
+        const finalUserInfo = { ...userInfo, id: authResult.user.id };
+        store.set('user_authenticated', true);
+        store.set('user_info', finalUserInfo);
+        store.set('last_auth_time', new Date().toISOString());
 
-      // Log the database error for debugging
-      console.warn('⚠️ App will continue with local authentication only');
+      } catch (dbError) {
+        console.error('❌ Failed to persist auth in database:', dbError?.message || dbError);
+
+        // Still persist minimal local state so app can proceed
+        // This ensures the app works even if database is unavailable
+        store.set('user_authenticated', true);
+        store.set('user_info', userInfo);
+        store.set('last_auth_time', new Date().toISOString());
+
+        // Log the database error for debugging
+        console.warn('⚠️ App will continue with local authentication only');
+      }
+
+      // Auth window no longer used - authentication now handled via browser
+
+      // Notify main window of auth status change
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const finalUserInfo = store.get('user_info');
+        console.log('📡 Notifying main window of authentication success...');
+
+        mainWindow.webContents.send('auth-status-updated', {
+          authenticated: true,
+          user: finalUserInfo,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Show main window
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+        console.log('🖥️ Main window focused');
+      }
+
+      console.log('🎉 Authentication completed successfully via Supabase');
+
+    } catch (error) {
+      console.error('❌ Authentication processing failed:', error);
+
+      // Send error notification to main window
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('auth-status-updated', {
+          authenticated: false,
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Clear any partial authentication data
+      store.set('user_authenticated', false);
+      store.delete('user_info');
+      store.delete('last_auth_time');
     }
-
-    // Auth window no longer used - authentication now handled via browser
-
-    // Notify main window of auth status change
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      const finalUserInfo = store.get('user_info');
-      console.log('📡 Notifying main window of authentication success...');
-
-      mainWindow.webContents.send('auth-status-updated', {
-        authenticated: true,
-        user: finalUserInfo,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Show main window
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
-      console.log('🖥️ Main window focused');
-    }
-
-    console.log('🎉 Authentication completed successfully via Supabase');
-
-  } catch (error) {
-    console.error('❌ Authentication processing failed:', error);
-
-    // Send error notification to main window
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('auth-status-updated', {
-        authenticated: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Clear any partial authentication data
-    store.set('user_authenticated', false);
-    store.delete('user_info');
-    store.delete('last_auth_time');
-  }
-});
+  });
 
   // Auth window handler removed - now using direct browser authentication
 
@@ -471,101 +471,101 @@ function registerIpcHandlers() {
 
   // Handle password reset request
   ipcMain.handle('request-password-reset', async (event, email) => {
-  try {
-    const result = await authService.requestPasswordReset(email);
-    return result;
-  } catch (error) {
-    console.error('Password reset request failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.requestPasswordReset(email);
+      return result;
+    } catch (error) {
+      console.error('Password reset request failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Handle password reset
   ipcMain.handle('reset-password', async (event, email, code, newPassword) => {
-  try {
-    const result = await authService.resetPassword(email, code, newPassword);
-    return result;
-  } catch (error) {
-    console.error('Password reset failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.resetPassword(email, code, newPassword);
+      return result;
+    } catch (error) {
+      console.error('Password reset failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Handle MFA enable request
   ipcMain.handle('enable-mfa', async () => {
-  try {
-    const result = await authService.enableMFA();
-    return result;
-  } catch (error) {
-    console.error('MFA enable failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.enableMFA();
+      return result;
+    } catch (error) {
+      console.error('MFA enable failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Handle MFA verification
   ipcMain.handle('verify-mfa-setup', async (event, code) => {
-  try {
-    const result = await authService.verifyMFASetup(code);
-    return result;
-  } catch (error) {
-    console.error('MFA verification failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.verifyMFASetup(code);
+      return result;
+    } catch (error) {
+      console.error('MFA verification failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Handle MFA disable request
   ipcMain.handle('disable-mfa', async () => {
-  try {
-    const result = await authService.disableMFA();
-    return result;
-  } catch (error) {
-    console.error('MFA disable failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.disableMFA();
+      return result;
+    } catch (error) {
+      console.error('MFA disable failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   ipcMain.on('user-logged-out', async () => {
-  console.log('🚪 User logged out');
+    console.log('🚪 User logged out');
 
-  try {
-    // Sign out through AuthService
-    await authService.signOut();
+    try {
+      // Sign out through AuthService
+      await authService.signOut();
 
-    // Clear stored auth data
-    store.set('user_authenticated', false);
-    store.delete('user_info');
-    store.delete('last_auth_time');
+      // Clear stored auth data
+      store.set('user_authenticated', false);
+      store.delete('user_info');
+      store.delete('last_auth_time');
 
-    console.log('✅ User signed out and session ended');
-  } catch (error) {
-    console.error('❌ Sign out error:', error);
-  }
-});
+      console.log('✅ User signed out and session ended');
+    } catch (error) {
+      console.error('❌ Sign out error:', error);
+    }
+  });
 
   // Get authentication status
   ipcMain.handle('get-auth-status', async () => {
-  try {
-    const authStatus = authService.getAuthStatus();
-    const storedAuth = store.get('user_authenticated', false);
-    const userInfo = store.get('user_info', null);
+    try {
+      const authStatus = authService.getAuthStatus();
+      const storedAuth = store.get('user_authenticated', false);
+      const userInfo = store.get('user_info', null);
 
-    return {
-      success: true,
-      authenticated: authStatus.authenticated && storedAuth,
-      user: userInfo,
-      session: authStatus.session,
-      lastActivity: authStatus.lastActivity,
-      sessionValid: authStatus.sessionValid
-    };
-  } catch (error) {
-    console.error('Failed to get auth status:', error);
-    return {
-      success: false,
-      error: error.message,
-      authenticated: false
-    };
-  }
-});
+      return {
+        success: true,
+        authenticated: authStatus.authenticated && storedAuth,
+        user: userInfo,
+        session: authStatus.session,
+        lastActivity: authStatus.lastActivity,
+        sessionValid: authStatus.sessionValid
+      };
+    } catch (error) {
+      console.error('Failed to get auth status:', error);
+      return {
+        success: false,
+        error: error.message,
+        authenticated: false
+      };
+    }
+  });
 
   // ============================================================================
   // CLERK OAUTH AUTHENTICATION HANDLERS
@@ -696,21 +696,21 @@ function registerIpcHandlers() {
 
   // Validate current session
   ipcMain.handle('validate-session', async () => {
-  try {
-    const isValid = await authService.validateSession();
-    return {
-      success: true,
-      valid: isValid
-    };
-  } catch (error) {
-    console.error('Session validation failed:', error);
-    return {
-      success: false,
-      error: error.message,
-      valid: false
-    };
-  }
-});
+    try {
+      const isValid = await authService.validateSession();
+      return {
+        success: true,
+        valid: isValid
+      };
+    } catch (error) {
+      console.error('Session validation failed:', error);
+      return {
+        success: false,
+        error: error.message,
+        valid: false
+      };
+    }
+  });
 
   ipcMain.on('close-app', () => {
     app.quit();
@@ -743,68 +743,68 @@ function registerIpcHandlers() {
 
   // Question and Answer handling
   ipcMain.handle('save-question-answer', async (event, data) => {
-  try {
-    const result = await authService.saveQuestionAnswer(
-      data.questionText,
-      data.answerText,
-      data.questionType || 'text',
-      data.aiProvider || 'gemini',
-      data.aiModel || 'gemini-2.0-flash',
-      data.imageData,
-      data.metadata,
-      data.processingTime
-    );
+    try {
+      const result = await authService.saveQuestionAnswer(
+        data.questionText,
+        data.answerText,
+        data.questionType || 'text',
+        data.aiProvider || 'gemini',
+        data.aiModel || 'gemini-2.0-flash',
+        data.imageData,
+        data.metadata,
+        data.processingTime
+      );
 
-    return { success: true, ...result };
-  } catch (error) {
-    console.error('Failed to save question/answer:', error);
-    return { success: false, error: error.message };
-  }
-});
+      return { success: true, ...result };
+    } catch (error) {
+      console.error('Failed to save question/answer:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Data transfer to Portal
   ipcMain.handle('transfer-data-to-portal', async () => {
-  try {
-    const result = await authService.transferDataToPortal();
-    return result;
-  } catch (error) {
-    console.error('Failed to transfer data to Portal:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.transferDataToPortal();
+      return result;
+    } catch (error) {
+      console.error('Failed to transfer data to Portal:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Export user data
   ipcMain.handle('export-user-data', async (event, format = 'json') => {
-  try {
-    const result = await authService.exportUserData(format);
-    return result;
-  } catch (error) {
-    console.error('Failed to export user data:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.exportUserData(format);
+      return result;
+    } catch (error) {
+      console.error('Failed to export user data:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Get user history
   ipcMain.handle('get-user-history', async (event, limit = 50) => {
-  try {
-    const history = await authService.getUserHistory(limit);
-    return { success: true, history };
-  } catch (error) {
-    console.error('Failed to get user history:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const history = await authService.getUserHistory(limit);
+      return { success: true, history };
+    } catch (error) {
+      console.error('Failed to get user history:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Sync account data
   ipcMain.handle('sync-account-data', async () => {
-  try {
-    const result = await authService.syncAccountData();
-    return { success: true, result };
-  } catch (error) {
-    console.error('Failed to sync account data:', error);
-    return { success: false, error: error.message };
-  }
-});
+    try {
+      const result = await authService.syncAccountData();
+      return { success: true, result };
+    } catch (error) {
+      console.error('Failed to sync account data:', error);
+      return { success: false, error: error.message };
+    }
+  });
 
   // Log activity
 
@@ -882,7 +882,7 @@ function registerIpcHandlers() {
 
   // Allow renderer to temporarily dismiss update prompts
   ipcMain.on('dismiss-update', (_e, ms) => {
-    try { store.set('update_dismissed_until', Date.now() + (Number(ms) || 0)); } catch {}
+    try { store.set('update_dismissed_until', Date.now() + (Number(ms) || 0)); } catch { }
   });
 
 
@@ -938,10 +938,10 @@ function createMainWindow() {
       contextIsolation: false,
       enableRemoteModule: true,
       webSecurity: true
-  },
-  icon: resolveAsset('logo_m.png'),
+    },
+    icon: resolveAsset('logo_m.png'),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-  title: 'Hintify',
+    title: 'Hintify',
     show: false // Don't show until ready
   });
 
@@ -953,7 +953,7 @@ function createMainWindow() {
     if (mainWindow.setVisibleOnAllWorkspaces) {
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     }
-  } catch {}
+  } catch { }
 
 
   // Load the main HTML file
@@ -966,7 +966,7 @@ function createMainWindow() {
       try {
         const dockImg = nativeImage.createFromPath(resolveAsset('logo_m.png'));
         if (!dockImg.isEmpty()) app.dock.setIcon(dockImg);
-      } catch {}
+      } catch { }
     }
     mainWindow.show();
 
@@ -1106,7 +1106,7 @@ function createMenuTemplate() {
           label: `Sign Out (${authStatus.user?.name || authStatus.user?.email || 'User'})`,
           click: () => {
             // End backend session
-            Promise.resolve().then(() => authService.signOut()).catch(() => {});
+            Promise.resolve().then(() => authService.signOut()).catch(() => { });
 
             // Clear auth data
             store.set('user_authenticated', false);
@@ -1329,7 +1329,14 @@ async function handleDeepLink(url) {
     // CLERK OAUTH CALLBACK: myapp://auth/callback?token=...&state=...
     // OR DIRECT LINK FROM WEBSITE: hintify://auth/callback?token=...&user=...
     // ========================================================================
-    if ((protocol === 'myapp:' && pathname === '//auth/callback') || pathname === '/auth/callback') {
+    // Fix: When using hintify://auth/callback, the URL parser might see 'auth' as the host
+    // and '/callback' as the pathname. We need to handle both cases.
+    const isClerkCallback =
+      (protocol === 'myapp:' && pathname === '//auth/callback') ||
+      pathname === '/auth/callback' ||
+      (urlObj.host === 'auth' && pathname === '/callback');
+
+    if (isClerkCallback) {
       const searchParams = urlObj.searchParams;
       const token = searchParams.get('token');
       const state = searchParams.get('state');
@@ -1477,7 +1484,13 @@ async function handleDeepLink(url) {
     // ========================================================================
     // SUPABASE OAUTH (LEGACY): hintify://auth?token=...&refresh_token=...
     // ========================================================================
-    if (pathname === '//auth' || pathname === '/auth') {
+    // Fix: When using hintify://auth, the URL parser might see 'auth' as the host
+    const isSupabaseCallback =
+      pathname === '//auth' ||
+      pathname === '/auth' ||
+      (urlObj.host === 'auth' && (pathname === '/' || pathname === ''));
+
+    if (isSupabaseCallback) {
       const searchParams = urlObj.searchParams;
       const accessToken = searchParams.get('token') || searchParams.get('access_token');
       const refreshToken = searchParams.get('refresh_token');
@@ -1697,14 +1710,14 @@ function setupAutoUpdater() {
       // Small delay to allow UI to update, then install
       setTimeout(() => {
         console.log('🔄 Installing update...');
-        try { autoUpdater.quitAndInstall(false, true); } catch {}
+        try { autoUpdater.quitAndInstall(false, true); } catch { }
       }, 1200);
     });
 
     // Periodic checks (every 6 hours) for public repository
     setInterval(() => {
       console.log('🔄 Periodic update check...');
-      try { autoUpdater.checkForUpdates(); } catch {}
+      try { autoUpdater.checkForUpdates(); } catch { }
     }, 6 * 60 * 60 * 1000);
 
     console.log('✅ Auto-updater event listeners configured');
@@ -1868,7 +1881,7 @@ app.whenReady().then(async () => {
   // About panel with author credit
   if (app.setAboutPanelOptions) {
     app.setAboutPanelOptions({
-  applicationName: 'Hintify',
+      applicationName: 'Hintify',
       applicationVersion: app.getVersion(),
       authors: ['AryanVBW'],
       website: 'https://github.com/AryanVBW/Hintify',
@@ -1916,7 +1929,7 @@ app.whenReady().then(async () => {
       performMigrations(lastVersion, currentVersion);
     }
     store.set('last_run_version', currentVersion);
-  } catch {}
+  } catch { }
 
   // Initialize auto-updater and perform an initial check (if not dismissed recently)
   // Only in production mode
@@ -1929,7 +1942,7 @@ app.whenReady().then(async () => {
           autoUpdater.checkForUpdates();
         }
       }
-    } catch {}
+    } catch { }
   }
 
 
