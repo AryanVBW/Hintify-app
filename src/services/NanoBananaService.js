@@ -10,21 +10,81 @@ class NanoBananaService {
     this.apiKey = key;
   }
 
-  async generateImage(prompt, model = 'nano-banana-v1') {
-    // Placeholder implementation
-    // In a real scenario, this would make an API call
+  async generateImage(prompt, model = 'gemini-2.0-flash-exp') {
+    if (!this.apiKey) {
+      console.warn('[NanoBanana] No API key provided');
+      return {
+        success: false,
+        error: 'API Key missing. Please configure your Gemini API key in settings.'
+      };
+    }
+
     console.log(`[NanoBanana] Generating image with model ${model} for prompt: ${prompt}`);
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // Official Gemini Image Generation Endpoint
+      // Docs: https://ai.google.dev/gemini-api/docs/image-generation
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
 
-    // Return a mock image URL or base64
-    // For now, returning a placeholder image URL
-    return {
-      success: true,
-      imageUrl: 'https://via.placeholder.com/512x512.png?text=Nano+Banana+Image',
-      model: model
-    };
+      const response = await axios.post(url, {
+        contents: [
+          {
+            parts: [
+              { text: prompt }
+            ]
+          }
+        ],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+          // Optional: Add imageConfig if needed, e.g., aspectRatio: "1:1"
+        }
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data &&
+        response.data.candidates &&
+        response.data.candidates.length > 0 &&
+        response.data.candidates[0].content &&
+        response.data.candidates[0].content.parts &&
+        response.data.candidates[0].content.parts.length > 0) {
+
+        // Find the part with inlineData (the image)
+        const imagePart = response.data.candidates[0].content.parts.find(p => p.inlineData);
+
+        if (imagePart && imagePart.inlineData) {
+          const base64Image = imagePart.inlineData.data;
+          const mimeType = imagePart.inlineData.mimeType || 'image/png';
+
+          return {
+            success: true,
+            imageUrl: `data:${mimeType};base64,${base64Image}`,
+            model: model
+          };
+        }
+      }
+
+      console.error('[NanoBanana] Unexpected API response:', JSON.stringify(response.data, null, 2));
+      return {
+        success: false,
+        error: 'Failed to generate image. No image data found in response.'
+      };
+
+    } catch (error) {
+      console.error('[NanoBanana] API Error:', error.response ? error.response.data : error.message);
+
+      let errorMessage = error.message;
+      if (error.response && error.response.data && error.response.data.error) {
+        errorMessage = error.response.data.error.message || JSON.stringify(error.response.data.error);
+      }
+
+      return {
+        success: false,
+        error: `Image generation failed: ${errorMessage}`
+      };
+    }
   }
 
   async generateDiagram(topic, style = 'educational') {
@@ -47,7 +107,7 @@ class NanoBananaService {
       - Generate a single, high-quality image that perfectly matches this description.
     `.trim();
 
-    return this.generateImage(prompt, 'nano-banana-pro');
+    return this.generateImage(prompt, 'gemini-2.0-flash-exp');
   }
 }
 

@@ -42,13 +42,13 @@ try {
     if (typeof ipcRenderer === 'undefined') {
         globalThis.ipcRenderer = {
             invoke: () => Promise.resolve({}),
-            send: () => {},
-            on: () => {}
+            send: () => { },
+            on: () => { }
         };
     }
     Store = class FallbackStore {
         get(_key, defaultValue) { return defaultValue; }
-        set(_key, _value) {}
+        set(_key, _value) { }
     };
     axios = {
         get: () => Promise.reject(new Error('axios not available')),
@@ -72,6 +72,7 @@ const AppState = {
         provider: 'gemini',
         ollama_model: 'granite3.2-vision:2b',
         gemini_model: 'gemini-2.0-flash',
+        gemini_image_model: 'gemini-2.0-flash-exp',
         theme: 'dark',
         advanced_mode: true
     },
@@ -107,8 +108,8 @@ try {
     console.error('[Settings] ✗ Store initialization failed:', error);
     store = {
         get: (_key, defaultValue) => defaultValue,
-        set: (_key, _value) => {},
-        delete: (_key) => {}
+        set: (_key, _value) => { },
+        delete: (_key) => { }
     };
 }
 
@@ -128,6 +129,7 @@ const ConfigManager = {
         provider: 'gemini',
         ollama_model: 'granite3.2-vision:2b',
         gemini_model: 'gemini-2.0-flash',
+        gemini_image_model: 'gemini-2.0-flash-exp',
         theme: 'dark',
         advanced_mode: true
     },
@@ -199,7 +201,7 @@ const ConfigManager = {
             errors
         };
     }
-,
+    ,
 
     /**
      * Get current configuration from form
@@ -212,6 +214,7 @@ const ConfigManager = {
             provider: elements.providerSelect?.value || 'gemini',
             ollama_model: elements.ollamaModel?.value || '',
             gemini_model: elements.geminiModel?.value || 'gemini-2.0-flash',
+            gemini_image_model: elements.geminiImageModel?.value || 'gemini-2.0-flash-exp',
             theme: store.get('theme', 'dark'), // Theme is not user-configurable in settings
             advanced_mode: elements.advancedModeToggle?.checked !== false
         };
@@ -238,6 +241,11 @@ const ConfigManager = {
         // Gemini model
         if (elements.geminiModel) {
             elements.geminiModel.value = config.gemini_model || 'gemini-2.0-flash';
+        }
+
+        // Gemini image model
+        if (elements.geminiImageModel) {
+            elements.geminiImageModel.value = config.gemini_image_model || 'gemini-2.0-flash-exp';
         }
 
         // Gemini API key
@@ -296,6 +304,7 @@ const DOMManager = {
             refreshOllamaBtn: document.getElementById('refresh-ollama-btn'),
             ollamaStatus: document.getElementById('ollama-status'),
             geminiModel: document.getElementById('gemini-model'),
+            geminiImageModel: document.getElementById('gemini-image-model'),
             geminiApiKey: document.getElementById('gemini-api-key'),
             pasteKeyBtn: document.getElementById('paste-key-btn'),
             toggleKeyVisibility: document.getElementById('toggle-key-visibility'),

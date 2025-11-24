@@ -3821,6 +3821,10 @@ window.addEventListener('focus', () => {
 // Query Nano Banana
 async function queryNanoBanana(prompt, model) {
   try {
+    const apiKey = store.get('gemini_api_key') || process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      nanoBananaService.setApiKey(apiKey);
+    }
     const result = await nanoBananaService.generateImage(prompt, model);
     if (result.success) {
       return result.imageUrl;
@@ -3853,7 +3857,8 @@ async function fetchRelatedUrls(topic) {
 // Generate Diagram
 async function generateDiagram(topic) {
   const prompt = `Educational diagram explaining: ${topic}`;
-  return await queryNanoBanana(prompt, 'nano-banana-pro');
+  const imageModel = store.get('gemini_image_model') || 'gemini-2.0-flash-exp';
+  return await queryNanoBanana(prompt, imageModel);
 }
 
 // Export functions for potential use
