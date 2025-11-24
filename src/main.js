@@ -67,6 +67,7 @@ try {
   clerkAuthService = {
     startLogin: async () => ({ state: null, authUrl: null }),
     processCallback: async () => ({ success: false, error: 'Service unavailable' }),
+    processDirectLink: async () => ({ success: false, error: 'Service unavailable' }),
     restoreSession: async () => null,
     signOut: async () => { },
     getAuthStatus: () => ({ authenticated: false, user: null }),
@@ -1562,7 +1563,7 @@ async function handleDeepLink(url) {
     if (mainWindow) {
       dialog.showErrorBox(
         'Deep Link Error',
-        'There was an error processing the authentication link. Please try again.'
+        `There was an error processing the authentication link: ${error.message || String(error)}\n\nPlease try again.`
       );
     }
   }
