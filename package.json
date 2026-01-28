@@ -44,7 +44,7 @@
   "devDependencies": {
     "@electron/notarize": "^2.3.0",
     "electron": "^38.1.2",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^26.6.0"
   },
   "dependencies": {
     "@clerk/backend": "^2.19.0",
