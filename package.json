@@ -54,7 +54,7 @@
     "@mui/material": "^7.3.2",
     "@neondatabase/serverless": "^1.0.1",
     "@supabase/supabase-js": "^2.57.4",
-    "axios": "^1.6.2",
+    "axios": "^1.13.5",
     "dotenv": "^17.2.2",
     "electron-log": "^5.4.3",
     "electron-store": "^8.1.0",
